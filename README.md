@@ -12,20 +12,20 @@ Foundry VTT macro to import Lancer NPCs from Comp/Con.
 
 **Import from JSON files:**
 - Click "Import from JSON File(s)"
-- Select your .json files exported from Comp/Con
+- Choose custom tier scaling mode (Scaled or Flat)
+- Select your .json files
 
 **Import from Comp/Con Cloud:**
 - Login to Comp/Con in Foundry (Settings → System Settings → COMP/CON Login)
 - Click "Import from Comp/Con"
-- Select NPCs to import
+- Choose scaling mode and select NPCs
 
 ## Features
 
-- Import from JSON files or directly from Comp/Con
-- Update existing NPCs (keeps tokens and images)
+- Import from JSON files or Comp/Con cloud
+- Update existing NPCs (preserves tokens/images)
 - Search and filter NPCs
-- Warnings for missing items
-
-## Note
-
-Custom tier NPCs are not supported (defaults to Tier 1).
+- **Custom tier support:**
+  - **Scaled**: Maintains tier increments (e.g., 0/2/4 from base 10/12/14)
+  - **Flat**: Same stats all tiers (e.g., 0/0/0)
+  - Automatically adds "CUSTOM" to class name

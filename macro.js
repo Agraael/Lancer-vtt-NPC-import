@@ -23,7 +23,7 @@
  * @license MIT
  */
 
-async function ImportNPC() {
+export async function ImportNPC() {
     // Créer et afficher la dialog de sélection
     new NPCImportDialog().render(true);
 }
@@ -49,7 +49,7 @@ class NPCImportDialog extends Dialog {
 
                     <div class="import-info">
                         <i class="fas fa-info-circle"></i>
-                        <span><strong>Note:</strong> Custom tier NPCs are not supported yet (will default to Tier 1)</span>
+                        <span><strong>Note:</strong> Custom tier NPCs will have their class modified with custom stats. Choose scaling mode when importing.</span>
                     </div>
                 </form>
                 <style>
@@ -134,10 +134,52 @@ class NPCImportDialog extends Dialog {
 
 // Import depuis fichiers JSON locaux
 async function importFromFiles() {
+    // D'abord, demander le mode de scaling pour les custom tiers
+    const scalingDialog = new Dialog({
+        title: "Custom Tier Scaling Mode",
+        content: `
+            <form style="padding: 10px;">
+                <div style="margin-bottom: 15px; color: #000000;">
+                    <p style="margin-bottom: 10px;">Choose how to apply custom tier stats:</p>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="scaling-mode" value="scaled" checked style="margin-right: 8px;">
+                        <span style="color: #000000;"><strong>Scaled</strong> - Keep tier increments (0/2/4 if base was 10/12/14)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="scaling-mode" value="flat" style="margin-right: 8px;">
+                        <span style="color: #000000;"><strong>Flat</strong> - Same stats for all tiers (0/0/0)</span>
+                    </label>
+                </div>
+            </form>
+        `,
+        buttons: {
+            import: {
+                icon: '<i class="fas fa-file-upload"></i>',
+                label: "Select Files",
+                callback: async (html) => {
+                    const customTierMode = html.find('input[name="scaling-mode"]:checked').val();
+                    await selectAndImportFiles(customTierMode);
+                }
+            },
+            cancel: {
+                icon: '<i class="fas fa-times"></i>',
+                label: "Cancel"
+            }
+        },
+        default: "import"
+    });
+
+    scalingDialog.render(true);
+}
+
+// Sélectionner et importer les fichiers avec le mode choisi
+async function selectAndImportFiles(customTierMode) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    input.multiple = true; // Permettre la sélection multiple
+    input.multiple = true;
 
     input.onchange = async (e) => {
         const files = Array.from(e.target.files);
@@ -160,7 +202,7 @@ async function importFromFiles() {
                 }
 
                 ui.notifications.info(`Importing: ${npcData.name}`);
-                await importNPCFromCompCon(npcData, false); // Pas d'update pour les fichiers
+                await importNPCFromCompCon(npcData, false, customTierMode); // Pas d'update pour les fichiers
                 successCount++;
             } catch (error) {
                 console.error(`Error importing ${file.name}:`, error);
@@ -296,7 +338,7 @@ async function importFromCompCon() {
         const loaded = await tryImportModules(lancerPath);
 
         if (!loaded || !Auth || !Storage || !awsConfig) {
-            throw new Error("Could not load AWS modules. The Lancer system version may not be compatible. Please check that the required AWS module files exist in your Lancer system folder.");
+            throw new Error("Could not load AWS modules.");
         }
 
         // Configurer AWS
@@ -380,6 +422,18 @@ class NPCSelectionDialog extends Dialog {
                         <input type="checkbox" id="update-existing" checked>
                         <span>Update existing NPCs (keep token image & settings)</span>
                     </label>
+
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                        <div style="margin-bottom: 8px; color: #000000; font-weight: 600;">Custom Tier Scaling:</div>
+                        <label class="import-option-label radio-label">
+                            <input type="radio" name="custom-tier-mode" value="scaled" checked>
+                            <span>Scaled (keep tier increments: 0/2/4 if base was 10/12/14)</span>
+                        </label>
+                        <label class="import-option-label radio-label">
+                            <input type="radio" name="custom-tier-mode" value="flat">
+                            <span>Flat (same stats for all tiers: 0/0/0)</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="npc-list-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -432,7 +486,8 @@ class NPCSelectionDialog extends Dialog {
                     color: #000000;
                     font-weight: 600;
                 }
-                .import-option-label input[type="checkbox"] {
+                .import-option-label input[type="checkbox"],
+                .import-option-label input[type="radio"] {
                     margin-right: 8px;
                     width: 18px;
                     height: 18px;
@@ -440,6 +495,10 @@ class NPCSelectionDialog extends Dialog {
                 }
                 .import-option-label span {
                     user-select: none;
+                }
+                .radio-label {
+                    margin-left: 10px;
+                    font-weight: 400;
                 }
                 .npc-list-container {
                     max-height: 500px;
@@ -565,8 +624,9 @@ class NPCSelectionDialog extends Dialog {
                         }
 
                         const updateExisting = html.find('#update-existing').is(':checked');
+                        const customTierMode = html.find('input[name="custom-tier-mode"]:checked').val();
                         const selectedNPCs = selectedIndices.map(i => npcs[i]);
-                        await importSelectedNPCs(selectedNPCs, updateExisting);
+                        await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode);
                     }
                 },
                 cancel: {
@@ -645,7 +705,7 @@ class NPCSelectionDialog extends Dialog {
 }
 
 // Importer les NPCs sélectionnés
-async function importSelectedNPCs(npcs, updateExisting = true) {
+async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled') {
     ui.notifications.info(`Importing ${npcs.length} NPC(s)...`);
 
     let successCount = 0;
@@ -655,7 +715,7 @@ async function importSelectedNPCs(npcs, updateExisting = true) {
     for (const npc of npcs) {
         try {
             ui.notifications.info(`Importing: ${npc.name}`);
-            const result = await importNPCFromCompCon(npc.json, updateExisting);
+            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode);
 
             if (result.updated) {
                 updateCount++;
@@ -680,11 +740,87 @@ async function importSelectedNPCs(npcs, updateExisting = true) {
 }
 
 
-async function importNPCFromCompCon(npcData, updateExisting = true) {
-    // Avertissement pour tier custom
-    if (npcData.tier === 'custom') {
-        ui.notifications.warn(`⚠ NPC "${npcData.name}": Custom tier not supported, defaulting to Tier 1`);
+// Applique les stats custom aux tiers de la classe NPC dans l'acteur
+async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
+    try {
+        // Trouver la classe NPC dans les items de l'acteur
+        const npcClass = actor.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
+
+        if (!npcClass) {
+            console.warn(`Could not find NPC class ${npcData.class} in actor items`);
+            return;
+        }
+
+        // Récupérer les stats de base de Comp/Con (sans les bonuses des templates)
+        const customStats = npcData.stats || {};
+        const originalStats = npcClass.system.base_stats;
+
+        // Fonction pour calculer une stat selon le mode
+        const calculateStat = (statName, ccKey, tierIndex) => {
+            const customValue = customStats[ccKey];
+            const originalValue = originalStats[tierIndex][statName];
+
+            // Si pas de valeur custom définie, garder l'original
+            if (customValue === undefined) {
+                return originalValue;
+            }
+
+            // Mode flat: même valeur pour tous les tiers
+            if (mode === 'flat') {
+                return customValue;
+            }
+
+            // Mode scaled: garder les incréments entre tiers
+            if (mode === 'scaled') {
+                const tier1Original = originalStats[0][statName];
+                const increment = originalValue - tier1Original;
+                return customValue + increment;
+            }
+
+            return customValue;
+        };
+
+        // Construire les stats pour les 3 tiers
+        const newBaseStats = [0, 1, 2].map(tierIndex => ({
+            activations: calculateStat('activations', 'activations', tierIndex),
+            armor: calculateStat('armor', 'armor', tierIndex),
+            hp: calculateStat('hp', 'hp', tierIndex),
+            evasion: calculateStat('evasion', 'evade', tierIndex),
+            edef: calculateStat('edef', 'edef', tierIndex),
+            heatcap: calculateStat('heatcap', 'heatcap', tierIndex),
+            speed: calculateStat('speed', 'speed', tierIndex),
+            sensor: calculateStat('sensor', 'sensor', tierIndex),
+            save: calculateStat('save', 'save', tierIndex),
+            hull: calculateStat('hull', 'hull', tierIndex),
+            agi: calculateStat('agi', 'agility', tierIndex),
+            sys: calculateStat('sys', 'systems', tierIndex),
+            eng: calculateStat('eng', 'engineering', tierIndex),
+            size: calculateStat('size', 'size', tierIndex),
+            structure: calculateStat('structure', 'structure', tierIndex),
+            stress: calculateStat('stress', 'stress', tierIndex)
+        }));
+
+        // Renommer la classe avec "CUSTOM"
+        const newName = npcClass.name.includes('CUSTOM')
+            ? npcClass.name
+            : `${npcClass.name} CUSTOM`;
+
+        // Mettre à jour la classe NPC avec les nouvelles stats et le nouveau nom
+        await npcClass.update({
+            'name': newName,
+            'system.base_stats': newBaseStats
+        });
+
+        console.log(`Applied custom tier stats (${mode}) to ${newName} for ${actor.name}`);
+        ui.notifications.info(`✓ Applied custom tier stats (${mode}) to "${actor.name}"`);
+    } catch (error) {
+        console.error(`Error applying custom tier stats:`, error);
+        ui.notifications.warn(`⚠ Could not apply custom tier stats to "${actor.name}"`);
     }
+}
+
+async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled') {
+    const isCustomTier = npcData.tier === 'custom';
 
     // Chercher si le NPC existe déjà (par lid)
     let existingActor = null;
@@ -779,6 +915,11 @@ async function importNPCFromCompCon(npcData, updateExisting = true) {
     }
 
     await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Si custom tier, appliquer les stats custom aux tiers de la classe
+    if (isCustomTier && npcData.class) {
+        await applyCustomTierStats(actor, npcData, customTierMode);
+    }
 
     const allFeatures = actor.items.filter(i => i.type === 'npc_feature');
     if (allFeatures.length > 0) {
