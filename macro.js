@@ -449,7 +449,9 @@ class NPCSelectionDialog extends Dialog {
                         <i class="fas fa-search search-icon"></i>
                     </div>
                     <div class="npc-list">
-                        ${npcs.map((npc, index) => `
+                        ${npcs.map((npc, index) => {
+                            const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
+                            return `
                             <label class="npc-item" data-npc-name="${npc.name.toLowerCase()}" data-npc-class="${npc.class.toLowerCase()}" data-npc-tier="${npc.tier}" data-npc-tag="${(npc.tag || '').toLowerCase()}">
                                 <input type="checkbox" class="npc-checkbox" data-index="${index}">
                                 <div class="npc-info">
@@ -458,8 +460,9 @@ class NPCSelectionDialog extends Dialog {
                                         ${npc.class} - Tier ${npc.tier}${npc.tag ? ` - ${npc.tag}` : ''}
                                     </div>
                                 </div>
+                                ${imageUrl ? `<img src="${imageUrl}" class="npc-portrait" alt="${npc.name}">` : ''}
                             </label>
-                        `).join('')}
+                        `}).join('')}
                     </div>
                 </div>
                 <div class="npc-actions">
@@ -541,9 +544,9 @@ class NPCSelectionDialog extends Dialog {
                     display: none;
                 }
                 .npc-list {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
                     max-height: 400px;
                     overflow-y: auto;
                 }
@@ -578,6 +581,15 @@ class NPCSelectionDialog extends Dialog {
                 .npc-details {
                     font-size: 0.9em;
                     color: #333333;
+                }
+                .npc-portrait {
+                    width: 48px;
+                    height: 48px;
+                    object-fit: cover;
+                    border-radius: 3px;
+                    margin-left: 10px;
+                    flex-shrink: 0;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
                 }
                 .npc-actions {
                     margin-top: 15px;
@@ -1020,6 +1032,8 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
         await actor.createEmbeddedDocuments('Item', featuresToAdd);
     }
 
+
+
     // Appliquer les customisations des features (tier override, custom names, etc.)
     await applyFeatureCustomizations(actor, npcData);
 
@@ -1061,7 +1075,6 @@ function parseTier(tier) {
     }
     return 1;
 }
-
 
 // ============================================================================
 // EXECUTE MACRO
