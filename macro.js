@@ -23,7 +23,7 @@
  * @license MIT
  */
 
-export async function ImportNPC() {
+async function ImportNPC() {
     // Créer et afficher la dialog de sélection
     new NPCImportDialog().render(true);
 }
@@ -740,6 +740,76 @@ async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 
 }
 
 
+// Applique les customisations des features (tier override, custom name, etc.)
+async function applyFeatureCustomizations(actor, npcData) {
+    try {
+        if (!npcData.items || npcData.items.length === 0) {
+            return;
+        }
+
+        const updates = [];
+        const tierOverrides = [];
+
+        for (const ccItem of npcData.items) {
+            // Trouver la feature dans l'acteur par son LID
+            const feature = actor.items.find(i =>
+                i.type === 'npc_feature' &&
+                i.system.lid === ccItem.itemID
+            );
+
+            if (!feature) {
+                continue;
+            }
+
+            const updateData = { _id: feature.id };
+            let hasChanges = false;
+
+            // Appliquer le custom name si fourni
+            if (ccItem.flavorName) {
+                updateData['name'] = ccItem.flavorName;
+                updateData['system.custom_name'] = ccItem.flavorName;
+                hasChanges = true;
+            }
+
+            // Appliquer la custom description si fournie
+            if (ccItem.description) {
+                updateData['system.custom_description'] = ccItem.description;
+                hasChanges = true;
+            }
+
+            // Vérifier si un tier override est nécessaire
+            if (ccItem.tier !== undefined && ccItem.tier !== npcData.tier) {
+                tierOverrides.push({
+                    name: ccItem.flavorName || feature.name,
+                    tier: ccItem.tier
+                });
+            }
+
+            if (hasChanges) {
+                updates.push(updateData);
+            }
+        }
+
+        if (updates.length > 0) {
+            await actor.updateEmbeddedDocuments('Item', updates);
+            console.log(`Applied ${updates.length} feature customization(s) for ${actor.name}`);
+        }
+
+        // Avertir si des features ont des tiers différents
+        if (tierOverrides.length > 0) {
+            const featureList = tierOverrides.map(f => `${f.name} (T${f.tier})`).join(', ');
+            ui.notifications.warn(
+                `⚠ NPC "${actor.name}": ${tierOverrides.length} feature(s) with different tiers not applied: ${featureList}`,
+                { permanent: false }
+            );
+            console.warn(`Features with tier overrides for ${actor.name}:`, tierOverrides);
+        }
+    } catch (error) {
+        console.error(`Error applying feature customizations:`, error);
+        ui.notifications.warn(`⚠ Could not apply feature customizations to "${actor.name}"`);
+    }
+}
+
 // Applique les stats custom aux tiers de la classe NPC dans l'acteur
 async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
     try {
@@ -914,7 +984,7 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
         await actor.createEmbeddedDocuments('Item', classAndTemplates);
     }
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 250));
 
     // Si custom tier, appliquer les stats custom aux tiers de la classe
     if (isCustomTier && npcData.class) {
@@ -949,6 +1019,12 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
     if (featuresToAdd.length > 0) {
         await actor.createEmbeddedDocuments('Item', featuresToAdd);
     }
+
+    // Attendre un peu pour que les features soient bien créées
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Appliquer les customisations des features (tier override, custom names, etc.)
+    await applyFeatureCustomizations(actor, npcData);
 
     // Afficher un résumé des features manquantes
     if (missingFeatures.length > 0) {
