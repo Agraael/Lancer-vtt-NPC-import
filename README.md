@@ -29,3 +29,5 @@ Foundry VTT macro to import Lancer NPCs from Comp/Con.
   - **Scaled**: Maintains tier increments (e.g., 0/2/4 from base 10/12/14)
   - **Flat**: Same stats all tiers (e.g., 0/0/0)
   - Automatically adds "CUSTOM" to class name
+
+ ![Options](Screenshot.png)
