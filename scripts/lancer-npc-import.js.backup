@@ -548,88 +548,91 @@ class NPCSelectionDialog extends Dialog {
                     color: #ffffff;
                     opacity: 0.95;
                 }
+                .npc-import-options
+                    <label class="import-option-label">
+                        <input type="checkbox" id="update-existing" checked>
+                        <span>Update existing NPCs (keep token image & settings)</span>
+                    </label>
+
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                        <div style="margin-bottom: 8px; color: #000000; font-weight: 600;">Custom Tier Scaling:</div>
+                        <label class="import-option-label radio-label">
+                            <input type="radio" name="custom-tier-mode" value="scaled" checked>
+                            <span>Scaled (keep tier increments: 0/2/4 if base was 10/12/14)</span>
+                        </label>
+                        <label class="import-option-label radio-label">
+                            <input type="radio" name="custom-tier-mode" value="flat">
+                            <span>Flat (same stats for all tiers: 0/0/0)</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="npc-list-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <p style="margin: 0; color: #000000; font-weight: 600;">
+                            Select NPCs to import (${npcs.length} available)
+                        </p>
+                        <p style="margin: 0; color: #ff4141; font-weight: 600;">
+                            <span id="selected-count">0</span> selected
+                        </p>
+                    </div>
+                    <div class="npc-search-container">
+                        <input type="text" id="npc-search" placeholder="Search NPCs by name, class, or tier..." autocomplete="off">
+                        <i class="fas fa-search search-icon"></i>
+                    </div>
+                    <div class="npc-list">
+                        ${npcs.map((npc, index) => {
+                            const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
+                            return `
+                            <label class="npc-item" data-npc-name="${npc.name.toLowerCase()}" data-npc-class="${npc.class.toLowerCase()}" data-npc-tier="${npc.tier}" data-npc-tag="${(npc.tag || '').toLowerCase()}">
+                                <input type="checkbox" class="npc-checkbox" data-index="${index}">
+                                <div class="npc-info">
+                                    <div class="npc-name">${npc.name}</div>
+                                    <div class="npc-details">
+                                        ${npc.class} - Tier ${npc.tier}${npc.tag ? ` - ${npc.tag}` : ''}
+                                    </div>
+                                </div>
+                                ${imageUrl ? `<img src="${imageUrl}" class="npc-portrait" alt="${npc.name}">` : ''}
+                            </label>
+                        `}).join('')}
+                    </div>
+                </div>
+                <div class="npc-actions">
+                    <button type="button" id="select-all" class="npc-action-btn">
+                        <i class="fas fa-check-square"></i> Select All
+                    </button>
+                    <button type="button" id="deselect-all" class="npc-action-btn">
+                        <i class="fas fa-square"></i> Deselect All
+                    </button>
+                </div>
+            </form>
+            <style>
                 .npc-import-options {
                     margin-bottom: 15px;
+                    padding: 10px;
+                    background: rgba(255, 65, 65, 0.1);
+                    border: 1px solid rgba(255, 65, 65, 0.3);
+                    border-radius: 3px;
                 }
-                .npc-selection-dialog .toggle-card {
-                    border: 3px solid #555;
-                    border-radius: 6px;
-                    padding: 12px 14px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    background: #f5f5f5;
+                .import-option-label {
                     display: flex;
                     align-items: center;
-                    gap: 10px;
-                    margin-bottom: 12px;
-                }
-                .npc-selection-dialog .toggle-card:hover {
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                }
-                .npc-selection-dialog .toggle-card.active {
-                    border-color: #991e2a;
-                    background: #ffe0e0;
-                    box-shadow: 0 0 12px rgba(153, 30, 42, 0.4);
-                }
-                .npc-selection-dialog .toggle-card-icon {
-                    font-size: 18px;
-                    color: #991e2a;
-                    width: 20px;
-                    text-align: center;
-                    flex-shrink: 0;
-                }
-                .npc-selection-dialog .toggle-card-text {
-                    flex: 1;
+                    cursor: pointer;
+                    color: #000000;
                     font-weight: 600;
-                    color: #000;
+                }
+                .import-option-label input[type="checkbox"],
+                .import-option-label input[type="radio"] {
+                    margin-right: 8px;
+                    width: 18px;
+                    height: 18px;
+                    cursor: pointer;
+                }
+                .import-option-label span {
                     user-select: none;
                 }
-                .npc-selection-dialog .scaling-section-title {
-                    font-weight: 600;
-                    color: #000;
-                    margin-bottom: 10px;
-                    font-size: 13px;
-                }
-                .npc-selection-dialog .scaling-cards {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 10px;
-                }
-                .npc-selection-dialog .scaling-card {
-                    border: 3px solid #555;
-                    border-radius: 6px;
-                    padding: 8px 10px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    background: #f5f5f5;
-                    text-align: center;
-                }
-                .npc-selection-dialog .scaling-card:hover {
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    transform: translateY(-2px);
-                }
-                .npc-selection-dialog .scaling-card.selected {
-                    border-color: #991e2a;
-                    background: #ffe0e0;
-                    box-shadow: 0 0 12px rgba(153, 30, 42, 0.4);
-                }
-                .npc-selection-dialog .scaling-card-icon {
-                    font-size: 20px;
-                    color: #991e2a;
-                    margin-bottom: 4px;
-                }
-                .npc-selection-dialog .scaling-card-name {
-                    font-weight: bold;
-                    font-size: 12px;
-                    color: #000;
-                    margin-bottom: 2px;
-                }
-                .npc-selection-dialog .scaling-card-desc {
-                    font-size: 9px;
-                    color: #444;
-                    line-height: 1.2;
+                .radio-label {
+                    margin-left: 10px;
+                    font-weight: 400;
                 }
                 .npc-list-container {
                     max-height: 500px;
@@ -645,32 +648,27 @@ class NPCSelectionDialog extends Dialog {
                 }
                 .npc-search-container input {
                     width: 100%;
-                    padding: 10px 40px 10px 35px;
-                    background: #f5f5f5;
-                    border: 2px solid #999;
-                    border-radius: 6px;
-                    color: #000;
+                    padding: 8px 35px 8px 10px;
+                    background: rgba(0, 0, 0, 0.3);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border-radius: 3px;
+                    color: #ffffff;
                     font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s ease;
                 }
                 .npc-search-container input::placeholder {
-                    color: #666;
-                    font-weight: 400;
+                    color: #999999;
                 }
                 .npc-search-container input:focus {
                     outline: none;
-                    border-color: #991e2a;
-                    box-shadow: 0 0 8px rgba(153, 30, 42, 0.3);
-                    background: #fff;
+                    border-color: rgba(255, 65, 65, 0.6);
+                    box-shadow: 0 0 5px rgba(255, 65, 65, 0.3);
                 }
                 .search-icon {
                     position: absolute;
-                    left: 12px;
+                    right: 10px;
                     top: 50%;
                     transform: translateY(-50%);
-                    color: #991e2a;
-                    font-size: 16px;
+                    color: #999999;
                     pointer-events: none;
                 }
                 .npc-item.hidden {
@@ -687,21 +685,15 @@ class NPCSelectionDialog extends Dialog {
                     display: flex;
                     align-items: center;
                     padding: 10px;
-                    background: #f5f5f5;
-                    border: 2px solid #999;
-                    border-radius: 4px;
+                    background: rgba(0, 0, 0, 0.3);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 3px;
                     cursor: pointer;
-                    transition: all 0.2s ease;
+                    transition: all 0.2s;
                 }
                 .npc-item:hover {
-                    background: #ffe0e0;
-                    border-color: #991e2a;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-                }
-                .npc-item.selected {
-                    background: #ffe0e0;
-                    border-color: #991e2a;
-                    box-shadow: 0 0 12px rgba(153, 30, 42, 0.4);
+                    background: rgba(255, 65, 65, 0.15);
+                    border-color: rgba(255, 65, 65, 0.4);
                 }
                 .npc-checkbox {
                     margin: 0 10px 0 0;
@@ -732,95 +724,28 @@ class NPCSelectionDialog extends Dialog {
                 }
                 .npc-actions {
                     margin-top: 15px;
-                    margin-bottom: 15px;
                     display: flex;
                     gap: 10px;
                 }
                 .npc-action-btn {
-                    padding: 10px 16px;
-                    background: #f5f5f5;
-                    border: 3px solid #555;
-                    border-radius: 6px;
+                    padding: 8px 16px;
+                    background: rgba(255, 255, 255, 0.9);
+                    border: 1px solid rgba(0, 0, 0, 0.2);
+                    border-radius: 3px;
                     cursor: pointer;
                     color: #000000;
                     font-weight: 600;
-                    transition: all 0.2s ease;
-                    flex: 1;
+                    transition: all 0.2s;
                 }
                 .npc-action-btn:hover {
-                    background: #ffe0e0;
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    transform: translateY(-2px);
+                    background: rgba(255, 65, 65, 0.9);
+                    border-color: rgba(255, 65, 65, 1);
+                    color: #ffffff;
                 }
                 .npc-action-btn i {
                     margin-right: 5px;
-                    color: #991e2a;
                 }
             </style>
-            <div class="npc-selection-dialog">
-                <div class="dialog-header">
-                    <div class="dialog-title">COMP/CON IMPORT // NPC SELECTION</div>
-                    <div class="dialog-subtitle">Select NPCs to import from your Comp/Con roster (${npcs.length} available)</div>
-                </div>
-                <div class="npc-import-options">
-                    <div class="toggle-card active" data-setting="update-existing">
-                        <div class="toggle-card-icon"><i class="fas fa-check"></i></div>
-                        <div class="toggle-card-text">Update existing NPCs (keep token image & settings)</div>
-                        <input type="hidden" id="update-existing" value="true">
-                    </div>
-                    <div class="scaling-section-title">Custom Tier Scaling Mode:</div>
-                    <div class="scaling-cards">
-                        <div class="scaling-card selected" data-mode="scaled">
-                            <div class="scaling-card-icon"><i class="cci cci-accuracy"></i></div>
-                            <div class="scaling-card-name">Scaled</div>
-                            <div class="scaling-card-desc">Keep tier increments</div>
-                        </div>
-                        <div class="scaling-card" data-mode="flat">
-                            <div class="scaling-card-icon"><i class="cci cci-difficulty"></i></div>
-                            <div class="scaling-card-name">Flat</div>
-                            <div class="scaling-card-desc">Same stats all tiers</div>
-                        </div>
-                    </div>
-                    <input type="hidden" id="custom-tier-mode" value="scaled">
-                </div>
-                <div class="npc-list-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <p style="margin: 0; color: #000000; font-weight: 600;">Select NPCs</p>
-                        <p style="margin: 0; color: #991e2a; font-weight: 600;">
-                            <span id="selected-count">0</span> selected
-                        </p>
-                    </div>
-                    <div class="npc-search-container">
-                        <i class="fas fa-search search-icon"></i>
-                        <input type="text" id="npc-search" placeholder="Search NPCs by name" autocomplete="off">
-                    </div>
-                    <div class="npc-list">
-                        ${npcs.map((npc, index) => {
-                            const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
-                            return `
-                            <label class="npc-item" data-npc-name="${npc.name.toLowerCase()}" data-npc-class="${npc.class.toLowerCase()}" data-npc-tier="${npc.tier}" data-npc-tag="${(npc.tag || '').toLowerCase()}">
-                                <input type="checkbox" class="npc-checkbox" data-index="${index}">
-                                <div class="npc-info">
-                                    <div class="npc-name">${npc.name}</div>
-                                    <div class="npc-details">
-                                        ${npc.class} - Tier ${npc.tier}${npc.tag ? ` - ${npc.tag}` : ''}
-                                    </div>
-                                </div>
-                                ${imageUrl ? `<img src="${imageUrl}" class="npc-portrait" alt="${npc.name}">` : ''}
-                            </label>
-                        `}).join('')}
-                    </div>
-                </div>
-                <div class="npc-actions">
-                    <button type="button" id="select-all" class="npc-action-btn">
-                        <i class="fas fa-check-square"></i> Select All
-                    </button>
-                    <button type="button" id="deselect-all" class="npc-action-btn">
-                        <i class="fas fa-square"></i> Deselect All
-                    </button>
-                </div>
-            </div>
         `;
 
         super({
@@ -841,8 +766,8 @@ class NPCSelectionDialog extends Dialog {
                             return;
                         }
 
-                        const updateExisting = html.find('#update-existing').val() === 'true';
-                        const customTierMode = html.find('#custom-tier-mode').val();
+                        const updateExisting = html.find('#update-existing').is(':checked');
+                        const customTierMode = html.find('input[name="custom-tier-mode"]:checked').val();
                         const selectedNPCs = selectedIndices.map(i => npcs[i]);
                         await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode);
                     }
@@ -854,7 +779,7 @@ class NPCSelectionDialog extends Dialog {
             },
             default: "import"
         }, {
-            width: "auto",
+            width: 600,
             height: "auto",
             classes: ["npc-import-dialog"]
         });
@@ -878,44 +803,14 @@ class NPCSelectionDialog extends Dialog {
             'padding': '8px 16px'
         });
 
-        // Gestion de la toggle-card "Update existing"
-        html.find('.toggle-card').click(function() {
-            const isActive = $(this).hasClass('active');
-            $(this).toggleClass('active');
-
-            // Mettre à jour l'icône et la valeur cachée
-            const icon = $(this).find('.toggle-card-icon i');
-            const hiddenInput = $(this).find('input[type="hidden"]');
-
-            if (isActive) {
-                icon.removeClass('fa-check').addClass('fa-times');
-                hiddenInput.val('false');
-            } else {
-                icon.removeClass('fa-times').addClass('fa-check');
-                hiddenInput.val('true');
-            }
-        });
-
-        // Gestion des scaling-cards
-        html.find('.scaling-card').click(function() {
-            html.find('.scaling-card').removeClass('selected');
-            $(this).addClass('selected');
-            const mode = $(this).data('mode');
-            html.find('#custom-tier-mode').val(mode);
-        });
-
         // Function to update selection count
         const updateCount = () => {
             const count = html.find('.npc-checkbox:checked').length;
             html.find('#selected-count').text(count);
         };
 
-        // Update count and visual state when checkboxes change
-        html.find('.npc-checkbox').on('change', function() {
-            const $item = $(this).closest('.npc-item');
-            $item.toggleClass('selected', $(this).prop('checked'));
-            updateCount();
-        });
+        // Update count when checkboxes change
+        html.find('.npc-checkbox').on('change', updateCount);
 
         // Search functionality
         html.find('#npc-search').on('input', function() {
@@ -940,19 +835,13 @@ class NPCSelectionDialog extends Dialog {
 
         // Select All button (only visible NPCs)
         html.find('#select-all').click(() => {
-            html.find('.npc-item:not(.hidden)').each(function() {
-                $(this).find('.npc-checkbox').prop('checked', true);
-                $(this).addClass('selected');
-            });
+            html.find('.npc-item:not(.hidden) .npc-checkbox').prop('checked', true);
             updateCount();
         });
 
         // Deselect All button (only visible NPCs)
         html.find('#deselect-all').click(() => {
-            html.find('.npc-item:not(.hidden)').each(function() {
-                $(this).find('.npc-checkbox').prop('checked', false);
-                $(this).removeClass('selected');
-            });
+            html.find('.npc-item:not(.hidden) .npc-checkbox').prop('checked', false);
             updateCount();
         });
     }
