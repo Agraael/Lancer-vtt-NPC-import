@@ -15,6 +15,9 @@
   "esmodules": [
     "scripts/lancer-npc-import.js"
   ],
+  "styles": [
+    "styles/lancer-dialogs.css"
+  ],
   "systems": [
     "lancer"
   ],

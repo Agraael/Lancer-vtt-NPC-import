@@ -24,6 +24,15 @@ Click the **Import NPCs** button in the Actors sidebar.
 2. Select "Import from JSON File(s)"
 3. Choose scaling mode and select files
 
+## Id link
+NPCs created this way contain their ID from Comp/Con
+this allow me to find them for update.
+When importing from Comp/Con each NPC will have an indicator whether:
+- The NPC does not exist yet
+- At least one Actor with similar same exist but is not linked
+- the NPC and Actor are synced
+- The linked NPC and Actor have different in Stats/Systems etc ...
+
 ## Custom Tier Support
 
 For NPCs with custom tiers, choose a scaling mode:
@@ -37,5 +46,7 @@ The module automatically modifies the NPC class and adds "CUSTOM" to the class n
 - ✅ Import from Comp/Con cloud or JSON files
 - ✅ Update existing NPCs
 - ✅ Custom tier stat scaling
+- ✅ Replace existing Actor and link them
+- ✅ Check stats and systems between Comp/Con and VTT Npc
 
 ![Import Dialog](Screenshot.png)

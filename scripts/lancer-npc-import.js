@@ -1,125 +1,42 @@
 export async function ImportNPC() {
-    // Créer et afficher la dialog de sélection
     new NPCImportDialog().render(true);
 }
 
-// Dialog pour choisir la méthode d'import
 class NPCImportDialog extends Dialog {
     constructor() {
         super({
             title: "NPC Import",
             content: `
                 <style>
-                    .npc-import-main {
-                        font-family: var(--font-primary);
-                    }
-                    .npc-import-main .dialog-header {
-                        background: #991e2a;
-                        color: #ffffff;
-                        padding: 12px 16px;
-                        margin: -8px -8px 16px -8px;
-                        border-radius: 4px 4px 0 0;
-                    }
-                    .npc-import-main .dialog-title {
-                        font-size: 16px;
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        letter-spacing: 1px;
-                        margin: 0 0 4px 0;
-                        color: #ffffff;
-                    }
-                    .npc-import-main .dialog-subtitle {
-                        font-size: 12px;
-                        margin: 0;
-                        color: #ffffff;
-                        opacity: 0.95;
-                    }
-                    .npc-import-main .items-grid {
-                        display: grid;
-                        grid-template-columns: 1fr;
-                        gap: 12px;
-                        padding: 4px;
-                    }
-                    .npc-import-main .item-card {
-                        border: 3px solid #555;
-                        border-radius: 6px;
-                        padding: 16px;
-                        cursor: pointer;
-                        transition: all 0.2s ease;
-                        background: #f5f5f5;
-                        min-height: 70px;
-                        display: flex;
-                        align-items: center;
-                        gap: 12px;
-                    }
-                    .npc-import-main .item-card:hover {
-                        border-color: #991e2a;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                        transform: translateY(-2px);
-                    }
-                    .npc-import-main .item-icon {
+                    .lancer-item-icon {
                         font-size: 32px;
-                        color: #991e2a;
-                        flex-shrink: 0;
                     }
-                    .npc-import-main .item-content {
-                        flex: 1;
-                    }
-                    .npc-import-main .item-name {
-                        font-weight: bold;
+                    .lancer-item-name {
                         font-size: 15px;
-                        color: #000;
-                        margin-bottom: 4px;
-                    }
-                    .npc-import-main .item-details {
-                        font-size: 11px;
-                        color: #444;
-                        line-height: 1.4;
-                    }
-                    .npc-import-main .info-box {
-                        margin-top: 12px;
-                        padding: 10px;
-                        background: rgba(100, 150, 255, 0.15);
-                        border: 2px solid rgba(100, 150, 255, 0.4);
-                        border-radius: 4px;
-                        display: flex;
-                        align-items: flex-start;
-                        gap: 10px;
-                    }
-                    .npc-import-main .info-box i {
-                        color: #6496ff;
-                        font-size: 16px;
-                        flex-shrink: 0;
-                        margin-top: 1px;
-                    }
-                    .npc-import-main .info-box span {
-                        font-size: 12px;
-                        color: #000;
-                        line-height: 1.4;
                     }
                 </style>
-                <div class="npc-import-main">
-                    <div class="dialog-header">
-                        <div class="dialog-title">NPC IMPORT // SOURCE SELECTION</div>
-                        <div class="dialog-subtitle">Choose your import method</div>
+                <div class="lancer-dialog-base">
+                    <div class="lancer-dialog-header">
+                        <div class="lancer-dialog-title">NPC IMPORT // SOURCE SELECTION</div>
+                        <div class="lancer-dialog-subtitle">Choose your import method</div>
                     </div>
-                    <div class="items-grid">
-                        <div class="item-card" data-action="files">
-                            <div class="item-icon"><i class="fas fa-file-upload"></i></div>
-                            <div class="item-content">
-                                <div class="item-name">Import from JSON File(s)</div>
-                                <div class="item-details">Always creates new NPCs</div>
+                    <div class="lancer-items-grid">
+                        <div class="lancer-item-card" data-action="files">
+                            <div class="lancer-item-icon"><i class="fas fa-file-upload"></i></div>
+                            <div class="lancer-item-content">
+                                <div class="lancer-item-name">Import from JSON File(s)</div>
+                                <div class="lancer-item-details">Always creates new NPCs</div>
                             </div>
                         </div>
-                        <div class="item-card" data-action="compcon">
-                            <div class="item-icon"><i class="fas fa-cloud-download-alt"></i></div>
-                            <div class="item-content">
-                                <div class="item-name">Import from Comp/Con</div>
-                                <div class="item-details">Can update existing NPCs</div>
+                        <div class="lancer-item-card" data-action="compcon">
+                            <div class="lancer-item-icon"><i class="fas fa-cloud-download-alt"></i></div>
+                            <div class="lancer-item-content">
+                                <div class="lancer-item-name">Import from Comp/Con</div>
+                                <div class="lancer-item-details">Can update existing NPCs</div>
                             </div>
                         </div>
                     </div>
-                    <div class="info-box">
+                    <div class="lancer-info-box">
                         <i class="fas fa-info-circle"></i>
                         <span><strong>Note:</strong> Custom tier NPCs will have their class modified with custom stats. Choose scaling mode when importing.</span>
                     </div>
@@ -137,8 +54,7 @@ class NPCImportDialog extends Dialog {
     activateListeners(html) {
         super.activateListeners(html);
 
-        // Event listeners pour les cartes cliquables
-        html.find('.item-card').click(async (event) => {
+        html.find('.lancer-item-card').click(async (event) => {
             const action = $(event.currentTarget).data('action');
             this.close();
 
@@ -151,115 +67,268 @@ class NPCImportDialog extends Dialog {
     }
 }
 
-// Import depuis fichiers JSON locaux
-async function importFromFiles() {
-    // D'abord, demander le mode de scaling pour les custom tiers
-    let selectedMode = 'scaled';
+class ImportProgressDialog {
+    constructor(totalCount) {
+        this.totalCount = totalCount;
+        this.currentCount = 0;
+        this.logs = [];
+        this.dialog = null;
+        this.closeButton = null;
+    }
 
-    const scalingDialog = new Dialog({
-        title: "Custom Tier Scaling",
-        content: `
+    render(force = false) {
+        const progress = Math.round((this.currentCount / this.totalCount) * 100);
+
+        const content = `
             <style>
-                .scaling-mode-dialog {
-                    font-family: var(--font-primary);
+                .import-progress-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    height: 100%;       /* Prend toute la hauteur du parent (.dialog-content) */
+                    overflow: hidden;   /* Empêche le scroll sur le conteneur global */
                 }
-                .scaling-mode-dialog .dialog-header {
-                    background: #991e2a;
-                    color: #ffffff;
-                    padding: 12px 16px;
-                    margin: -8px -8px 16px -8px;
-                    border-radius: 4px 4px 0 0;
+                .import-progress-bar-container {
+                    width: 100%;
+                    background: #1a1a1a;
+                    border: 2px solid #991e2a;
+                    border-radius: 5px;
+                    overflow: hidden;
+                    height: 35px;
+                    min-height: 35px;   /* Fixe la hauteur */
+                    position: relative;
+                    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+                    flex-shrink: 0;     /* Ne jamais rétrécir la barre */
                 }
-                .scaling-mode-dialog .dialog-title {
-                    font-size: 16px;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    letter-spacing: 1px;
-                    margin: 0 0 4px 0;
-                    color: #ffffff;
+                .import-progress-bar {
+                    height: 100%;
+                    background: linear-gradient(90deg, #991e2a, #d32f2f);
+                    transition: width 0.3s ease;
+                    box-shadow: 0 0 10px rgba(153, 30, 42, 0.5);
                 }
-                .scaling-mode-dialog .dialog-subtitle {
-                    font-size: 12px;
-                    margin: 0;
-                    color: #ffffff;
-                    opacity: 0.95;
-                }
-                .scaling-mode-dialog .items-grid {
-                    display: grid;
-                    grid-template-columns: 1fr;
-                    gap: 12px;
-                    padding: 4px;
-                }
-                .scaling-mode-dialog .item-card {
-                    border: 3px solid #555;
-                    border-radius: 6px;
-                    padding: 14px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    background: #f5f5f5;
+                .import-progress-text {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
                     display: flex;
                     align-items: center;
-                    gap: 12px;
-                }
-                .scaling-mode-dialog .item-card:hover {
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    transform: translateY(-2px);
-                }
-                .scaling-mode-dialog .item-card.selected {
-                    border-color: #991e2a;
-                    background: #ffe0e0;
-                    box-shadow: 0 0 16px rgba(153, 30, 42, 0.5);
-                }
-                .scaling-mode-dialog .item-icon {
-                    font-size: 28px;
-                    color: #991e2a;
-                    flex-shrink: 0;
-                }
-                .scaling-mode-dialog .item-content {
-                    flex: 1;
-                }
-                .scaling-mode-dialog .item-name {
+                    justify-content: center;
                     font-weight: bold;
                     font-size: 14px;
-                    color: #000;
-                    margin-bottom: 4px;
+                    color: #fff;
+                    text-shadow: 0 0 8px rgba(0,0,0,1), 1px 1px 2px rgba(0,0,0,1);
+                    z-index: 1;
                 }
-                .scaling-mode-dialog .item-details {
-                    font-size: 11px;
-                    color: #444;
-                    line-height: 1.4;
+                .import-log-container {
+                    background: #1a1a1a;
+                    border: 1px solid #444;
+                    border-radius: 3px;
+                    padding: 10px;
+                    overflow-y: auto;       /* Scroll uniquement ici */
+                    overflow-x: hidden;
+                    font-family: 'Courier New', monospace;
+                    font-size: 13px;
+                    line-height: 1.5;
+                    flex: 1;                /* C'EST LA CLÉ : prend tout l'espace restant */
+                    min-height: 0;          /* Nécessaire pour que le scroll fonctionne dans un flex */
+                }
+                .import-log-entry {
+                    padding: 4px 0;
+                    border-bottom: 1px solid #2a2a2a;
+                }
+                .import-log-entry:last-child {
+                    border-bottom: none;
+                }
+                .import-log-entry.info { color: #e0e0e0; }
+                .import-log-entry.success { color: #66bb6a; font-weight: 500; }
+                .import-log-entry.warning { color: #ffa726; }
+                .import-log-entry.error { color: #ef5350; font-weight: 500; }
+                .import-log-timestamp {
+                    color: #888;
+                    margin-right: 10px;
+                    font-weight: normal;
                 }
             </style>
-            <div class="scaling-mode-dialog">
-                <div class="dialog-header">
-                    <div class="dialog-title">CUSTOM TIER // SCALING MODE</div>
-                    <div class="dialog-subtitle">Choose how to apply custom tier stats</div>
+            <div class="import-progress-container">
+                <div class="import-progress-bar-container">
+                    <div class="import-progress-bar" style="width: ${progress}%"></div>
+                    <div class="import-progress-text">${this.currentCount} / ${this.totalCount} NPCs (${progress}%)</div>
                 </div>
-                <div class="items-grid">
-                    <div class="item-card selected" data-mode="scaled">
-                        <div class="item-icon"><i class="cci cci-accuracy"></i></div>
-                        <div class="item-content">
-                            <div class="item-name">Scaled</div>
-                            <div class="item-details">Keep tier increments (e.g., 0/2/4 if base was 10/12/14)</div>
+                <div class="import-log-container" id="import-log">
+                    ${this.logs.map(log => `
+                        <div class="import-log-entry ${log.type}">
+                            <span class="import-log-timestamp">[${log.time}]</span>
+                            <span>${log.message}</span>
                         </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        const buttons = this.currentCount >= this.totalCount ? {
+            close: {
+                icon: '<i class="fas fa-check"></i>',
+                label: "Close",
+                callback: () => this.close()
+            }
+        } : {};
+
+        if (!this.dialog) {
+            this.dialog = new Dialog({
+                title: "NPC Import Progress",
+                content: content,
+                buttons: buttons,
+                close: () => { this.dialog = null; }
+            }, {
+                width: 600,
+                height: 500, // Hauteur fixe
+                resizable: true,
+                classes: ["lancer-import-progress-dialog"]
+            });
+            this.dialog.render(true);
+
+            // Corrige le "vide gris" avec flexbox
+            setTimeout(() => {
+                if (this.dialog.element) {
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        /* Force la fenêtre à utiliser Flexbox vertical */
+                        .lancer-import-progress-dialog .window-content {
+                            display: flex !important;
+                            flex-direction: column !important;
+                            height: 100% !important;
+                            overflow: hidden !important;
+                            padding: 0 !important;
+                        }
+                        
+                        /* Force le contenu de la dialog à s'étendre */
+                        .lancer-import-progress-dialog .dialog-content {
+                            flex: 1 !important; /* Prend tout l'espace disponible */
+                            display: flex !important;
+                            flex-direction: column !important;
+                            min-height: 0 !important; /* Important pour le scroll interne */
+                            padding: 12px !important;
+                            overflow: hidden !important; /* Laisse le scroll à .import-log-container */
+                        }
+                        
+                        /* Garde les boutons en bas sans qu'ils ne s'étirent */
+                        .lancer-import-progress-dialog .dialog-buttons {
+                            flex: 0 0 auto !important;
+                            background: rgba(0,0,0,0.1);
+                            border-top: 1px solid #333;
+                            padding: 10px !important;
+                            z-index: 10;
+                        }
+                    `;
+                    this.dialog.element[0].appendChild(style);
+                }
+            }, 10);
+        } else {
+            if (this.dialog.element) {
+                const contentDiv = this.dialog.element.find('.dialog-content')[0];
+                if (contentDiv) {
+                    const logContainer = this.dialog.element.find('#import-log')[0];
+                    const wasAtBottom = logContainer ? (logContainer.scrollHeight - logContainer.scrollTop === logContainer.clientHeight) : true;
+                    
+                    contentDiv.innerHTML = content;
+
+                    if (wasAtBottom) {
+                        setTimeout(() => {
+                            const newLogContainer = this.dialog.element.find('#import-log')[0];
+                            if (newLogContainer) {
+                                newLogContainer.scrollTop = newLogContainer.scrollHeight;
+                            }
+                        }, 0);
+                    }
+                }
+
+                if (this.currentCount >= this.totalCount && !this.closeButton) {
+                    const buttonDiv = this.dialog.element.find('.dialog-buttons')[0];
+                    if (buttonDiv) {
+                        buttonDiv.innerHTML = `
+                            <button class="dialog-button" data-button="close">
+                                <i class="fas fa-check"></i> Close
+                            </button>
+                        `;
+                        this.dialog.element.find('button[data-button="close"]').click(() => this.close());
+                        this.closeButton = true;
+                    }
+                }
+            }
+        }
+    }
+
+    addLog(message, type = 'info') {
+        const now = new Date();
+        const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        this.logs.push({ message, type, time });
+        this.render(false);
+    }
+
+    incrementProgress() {
+        this.currentCount++;
+        this.render(false);
+    }
+
+    close() {
+        if (this.dialog) {
+            this.dialog.close();
+            this.dialog = null;
+        }
+    }
+}
+
+async function importFromFiles() {
+    let updateExisting = true;
+    let manualReplace = false;
+
+    const scalingDialog = new Dialog({
+        title: "Import Options",
+        content: `
+            <div class="lancer-dialog-base">
+                <div class="lancer-dialog-header">
+                    <div class="lancer-dialog-title">FILE IMPORT // OPTIONS</div>
+                    <div class="lancer-dialog-subtitle">Choose import and scaling options</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div class="lancer-toggle-card active" data-setting="update-existing" id="update-existing-card">
+                        <div class="lancer-toggle-card-icon"><i class="fas fa-check"></i></div>
+                        <div class="lancer-toggle-card-text">Update existing NPCs (keep token image & settings)</div>
+                        <input type="hidden" id="update-existing-files" value="true">
                     </div>
-                    <div class="item-card" data-mode="flat">
-                        <div class="item-icon"><i class="cci cci-difficulty"></i></div>
-                        <div class="item-content">
-                            <div class="item-name">Flat</div>
-                            <div class="item-details">Same stats for all tiers (e.g., 0/0/0)</div>
-                        </div>
+                    <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card">
+                        <div class="lancer-toggle-card-icon"><i class="fas fa-times"></i></div>
+                        <div class="lancer-toggle-card-text">Manual replace mode (choose target actor for each NPC)</div>
+                        <input type="hidden" id="manual-replace-files" value="false">
                     </div>
                 </div>
+                <div class="lancer-section-title">Custom Tier Scaling Mode:</div>
+                <div class="lancer-scaling-cards" style="margin-bottom: 20px;">
+                    <div class="lancer-scaling-card selected" data-mode="scaled">
+                        <div class="lancer-scaling-card-icon"><i class="cci cci-accuracy"></i></div>
+                        <div class="lancer-scaling-card-name">Scaled</div>
+                        <div class="lancer-scaling-card-desc">Keep tier increments</div>
+                    </div>
+                    <div class="lancer-scaling-card" data-mode="flat">
+                        <div class="lancer-scaling-card-icon"><i class="cci cci-difficulty"></i></div>
+                        <div class="lancer-scaling-card-name">Flat</div>
+                        <div class="lancer-scaling-card-desc">Same stats all tiers</div>
+                    </div>
+                </div>
+                <input type="hidden" id="custom-tier-mode" value="scaled">
             </div>
         `,
         buttons: {
             import: {
                 icon: '<i class="fas fa-file-upload"></i>',
                 label: "Select Files",
-                callback: async () => {
-                    await selectAndImportFiles(selectedMode);
+                callback: async (html) => {
+                    updateExisting = html.find('#update-existing-files').val() === 'true';
+                    manualReplace = html.find('#manual-replace-files').val() === 'true';
+                    const customTierMode = html.find('#custom-tier-mode').val();
+                    await selectAndImportFiles(customTierMode, updateExisting, manualReplace);
                 }
             },
             cancel: {
@@ -269,11 +338,49 @@ async function importFromFiles() {
         },
         default: "import",
         render: (html) => {
-            // Gestion de la sélection des cartes
-            html.find('.item-card').click(function() {
-                html.find('.item-card').removeClass('selected');
+            const dialogElem = html.closest('.dialog');
+            const buttons = dialogElem.find('.dialog-buttons');
+            buttons.css({
+                'height': 'auto',
+                'min-height': '50px',
+                'flex': '0 0 auto'
+            });
+            buttons.find('button').css({
+                'height': 'auto',
+                'padding': '8px 16px',
+                'line-height': 'normal'
+            });
+
+            html.find('.lancer-toggle-card').click(function() {
+                const setting = $(this).data('setting');
+                const isActive = $(this).hasClass('active');
+
+                if (setting === 'update-existing' || setting === 'manual-replace') {
+                    const otherCard = setting === 'update-existing' ? '#manual-replace-card' : '#update-existing-card';
+
+                    $(this).toggleClass('active');
+                    const icon = $(this).find('.lancer-toggle-card-icon i');
+                    const hiddenInput = $(this).find('input[type="hidden"]');
+
+                    if (isActive) {
+                        icon.removeClass('fa-check').addClass('fa-times');
+                        hiddenInput.val('false');
+                    } else {
+                        icon.removeClass('fa-times').addClass('fa-check');
+                        hiddenInput.val('true');
+
+                        html.find(otherCard).removeClass('active');
+                        html.find(otherCard).find('.lancer-toggle-card-icon i').removeClass('fa-check').addClass('fa-times');
+                        html.find(otherCard).find('input[type="hidden"]').val('false');
+                    }
+                }
+            });
+
+            html.find('.lancer-scaling-card').click(function() {
+                html.find('.lancer-scaling-card').removeClass('selected');
                 $(this).addClass('selected');
-                selectedMode = $(this).data('mode');
+                const mode = $(this).data('mode');
+                html.find('#custom-tier-mode').val(mode);
             });
         }
     });
@@ -281,8 +388,216 @@ async function importFromFiles() {
     scalingDialog.render(true);
 }
 
-// Sélectionner et importer les fichiers avec le mode choisi
-async function selectAndImportFiles(customTierMode) {
+// Dialog pour mapper manuellement les NPCs à des acteurs existants
+async function selectActorMappings(npcsToImport) {
+    return new Promise((resolve) => {
+        const allActors = game.actors.filter(a => a.type === 'npc');
+
+        const actorOptions = `<option value="new">── Create New ──</option>
+            ${allActors.map(actor => `<option value="${actor.id}">${actor.name}  (${actor.system.class.name ? actor.system.class.name : 'Unknown'})-(${actor.system.tier ? 'T' + actor.system.tier : 'Unknown'})</option>`).join('')}`;
+
+        const content = `
+            <style>
+                .lancer-dialog-base {
+                    display: flex;
+                    flex-direction: column;
+                    height: 100%;
+                    overflow: hidden;
+                }
+                
+                .lancer-dialog-header {
+                    flex: 0 0 auto;
+                    margin-bottom: 10px;
+                    padding-right: 5px;
+                }
+
+                .mapping-list {
+                    flex: 1;
+                    overflow-y: auto;
+                    overflow-x: hidden;
+                    padding-right: 5px;
+                    padding-bottom: 5px;
+                    scrollbar-width: thin;
+                    scrollbar-color: #991e2a #1a1a1a;
+                }
+                
+                .mapping-list::-webkit-scrollbar { width: 8px; }
+                .mapping-list::-webkit-scrollbar-track { background: #1a1a1a; }
+                .mapping-list::-webkit-scrollbar-thumb { background-color: #991e2a; border-radius: 4px; }
+
+                .mapping-item {
+                    padding: 12px;
+                    margin-bottom: 10px;
+                    background: rgba(0,0,0,0.2);
+                    border-radius: 3px;
+                    border-left: 3px solid #991e2a;
+                }
+                .mapping-item-header {
+                    font-weight: bold;
+                    margin-bottom: 8px;
+                    color: #fff;
+                    font-size: 14px;
+                }
+                .mapping-item-controls {
+                    display: grid;
+                    gap: 8px;
+                }
+                .mapping-item select {
+                    width: 100%;
+                    padding: 6px;
+                    font-size: 13px;
+                    background: #f0f0f0;
+                    color: #000;
+                    border: 1px solid #ccc;
+                    border-radius: 3px;
+                }
+                .mapping-item select option {
+                    color: #000;
+                    background: #fff;
+                }
+                .mapping-item .keep-name-toggle {
+                    display: none;
+                    padding: 6px 10px;
+                    background: rgba(0,0,0,0.2);
+                    border-radius: 3px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: #fff;
+                }
+                .mapping-item .keep-name-toggle.visible {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .mapping-item .keep-name-toggle.active {
+                    background: rgba(153, 30, 42, 0.3);
+                    border-color: #991e2a;
+                }
+            </style>
+            <div class="lancer-dialog-base">
+                <div class="lancer-dialog-header">
+                    <div class="lancer-dialog-title">MANUAL REPLACE // TARGET MAPPING</div>
+                    <div class="lancer-dialog-subtitle">Choose target actors for ${npcsToImport.length} NPC(s)</div>
+                </div>
+                <div class="mapping-list">
+                    ${npcsToImport.map((npc, index) => `
+                        <div class="mapping-item" data-index="${index}">
+                            <div class="mapping-item-header">${npc.name}</div>
+                            <div class="mapping-item-controls">
+                                <select class="target-select" data-index="${index}">
+                                    ${actorOptions}
+                                </select>
+                                <div class="keep-name-toggle" data-index="${index}">
+                                    <i class="fas fa-times"></i>
+                                    <span>Keep existing actor name</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        const dialog = new Dialog({
+            title: "Map Target Actors",
+            content: content,
+            buttons: {
+                import: {
+                    icon: '<i class="fas fa-download"></i>',
+                    label: "Import All",
+                    callback: (html) => {
+                        const mappings = [];
+                        npcsToImport.forEach((npc, index) => {
+                            const selectedValue = html.find(`.target-select[data-index="${index}"]`).val();
+                            const keepName = html.find(`.keep-name-toggle[data-index="${index}"]`).hasClass('active');
+
+                            if (selectedValue === 'new') {
+                                mappings.push({ npc, targetActor: null, keepName: false });
+                            } else {
+                                const targetActor = game.actors.get(selectedValue);
+                                mappings.push({ npc, targetActor, keepName });
+                            }
+                        });
+                        resolve(mappings);
+                    }
+                },
+                cancel: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: "Cancel",
+                    callback: () => resolve(null)
+                }
+            },
+            default: "import",
+            render: (html) => {
+                const win = html.closest('.window-app');
+                
+                win.find('.window-content').css({
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    height: '100%',
+                    padding: '0'
+                });
+
+                win.find('.dialog-content').css({
+                    flex: '1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    minHeight: '0',
+                    padding: '10px'
+                });
+
+                win.find('.dialog-buttons').css({
+                    flex: '0 0 auto',
+                    zIndex: '10',
+                    background: 'rgba(0,0,0,0.2)'
+                });
+
+                const buttons = win.find('.dialog-buttons');
+                buttons.css({
+                    height: 'auto',
+                    minHeight: '50px'
+                });
+
+                html.find('.target-select').on('change', function() {
+                    const index = $(this).data('index');
+                    const selectedValue = $(this).val();
+                    const keepNameToggle = html.find(`.keep-name-toggle[data-index="${index}"]`);
+
+                    if (selectedValue === 'new') {
+                        keepNameToggle.removeClass('visible active');
+                        keepNameToggle.find('i').removeClass('fa-check').addClass('fa-times');
+                    } else {
+                        keepNameToggle.addClass('visible');
+                    }
+                });
+
+                html.find('.keep-name-toggle').click(function() {
+                    const isActive = $(this).hasClass('active');
+                    $(this).toggleClass('active');
+
+                    const icon = $(this).find('i');
+                    if (isActive) {
+                        icon.removeClass('fa-check').addClass('fa-times');
+                    } else {
+                        icon.removeClass('fa-times').addClass('fa-check');
+                    }
+                });
+            }
+        }, {
+            width: 600,
+            height: 600,
+            classes: ["mapping-dialog"],
+            resizable: true
+        });
+
+        dialog.render(true);
+    });
+}
+
+async function selectAndImportFiles(customTierMode, updateExisting = true, manualReplace = false) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -292,11 +607,7 @@ async function selectAndImportFiles(customTierMode) {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        ui.notifications.info(`Importing ${files.length} NPC(s)...`);
-
-        let successCount = 0;
-        let errorCount = 0;
-
+        const npcsToImport = [];
         for (const file of files) {
             try {
                 const text = await file.text();
@@ -304,51 +615,109 @@ async function selectAndImportFiles(customTierMode) {
 
                 if (!npcData.class || !npcData.name) {
                     ui.notifications.error(`Invalid NPC JSON: ${file.name} - missing required fields`);
-                    errorCount++;
                     continue;
                 }
 
-                ui.notifications.info(`Importing: ${npcData.name}`);
-                await importNPCFromCompCon(npcData, false, customTierMode); // Pas d'update pour les fichiers
-                successCount++;
+                npcsToImport.push(npcData);
             } catch (error) {
-                console.error(`Error importing ${file.name}:`, error);
-                ui.notifications.error(`Failed to import ${file.name}: ${error.message}`);
-                errorCount++;
+                console.error(`Error parsing ${file.name}:`, error);
+                ui.notifications.error(`Failed to parse ${file.name}: ${error.message}`);
             }
         }
 
+        if (npcsToImport.length === 0) {
+            ui.notifications.warn("No valid NPCs to import");
+            return;
+        }
+
+        let mappings = null;
+        if (manualReplace) {
+            mappings = await selectActorMappings(npcsToImport);
+
+            if (mappings === null) {
+                ui.notifications.info("Import cancelled");
+                return;
+            }
+        }
+
+        const progressDialog = new ImportProgressDialog(npcsToImport.length);
+        progressDialog.render(true);
+        progressDialog.addLog(`Starting import of ${npcsToImport.length} NPC(s)...`, 'info');
+
+        let successCount = 0;
+        let errorCount = 0;
+        let updateCount = 0;
+        let replaceCount = 0;
+
+        for (let i = 0; i < npcsToImport.length; i++) {
+            const npcData = npcsToImport[i];
+            let targetActor = null;
+            let keepName = false;
+
+            if (mappings && mappings[i]) {
+                targetActor = mappings[i].targetActor;
+                keepName = mappings[i].keepName;
+            }
+
+            try {
+                progressDialog.addLog(`Importing: ${npcData.name}...`, 'info');
+                const result = await importNPCFromCompCon(npcData, updateExisting, customTierMode, targetActor, keepName, progressDialog);
+
+                if (result.updated) {
+                    updateCount++;
+                    progressDialog.addLog(`✓ Updated: ${npcData.name}`, 'success');
+                } else if (result.replaced) {
+                    replaceCount++;
+                    progressDialog.addLog(`✓ Replaced: ${npcData.name}`, 'success');
+                } else {
+                    progressDialog.addLog(`✓ Created: ${npcData.name}`, 'success');
+                }
+                successCount++;
+            } catch (error) {
+                console.error(`Error importing ${npcData.name}:`, error);
+                progressDialog.addLog(`✗ Failed: ${npcData.name} - ${error.message}`, 'error');
+                errorCount++;
+            }
+
+            progressDialog.incrementProgress();
+        }
+
+        let summaryParts = [];
+        const created = successCount - replaceCount - updateCount;
+        if (created > 0) summaryParts.push(`${created} created`);
+        if (updateCount > 0) summaryParts.push(`${updateCount} updated`);
+        if (replaceCount > 0) summaryParts.push(`${replaceCount} replaced`);
+        if (errorCount > 0) summaryParts.push(`${errorCount} failed`);
+
+        const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
+        progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
+
         if (successCount > 0) {
-            ui.notifications.info(`✓ Successfully imported ${successCount} NPC(s)`);
+            ui.notifications.info(`✓ Imported ${successCount} NPC(s)`);
         }
         if (errorCount > 0) {
-            ui.notifications.warn(`✗ Failed to import ${errorCount} NPC(s)`);
+            ui.notifications.warn(`✗ ${errorCount} NPC(s) failed to import`);
         }
     };
 
     input.click();
 }
 
-// Import depuis CompCon
 async function importFromCompCon() {
     try {
         ui.notifications.info("Connecting to Comp/Con...");
 
-        // Charger les modules AWS dynamiquement
         let Auth, Storage, awsConfig;
 
-        // Trouver les fichiers AWS dans le système Lancer
         const lancerPath = game.system.id === "lancer" ? "systems/lancer" : null;
         if (!lancerPath) {
             throw new Error("Lancer system not found");
         }
 
-        // Détecter automatiquement les fichiers AWS en parsant lancer.mjs
         const tryImportModules = async (basePath) => {
             try {
                 console.log("Auto-detecting AWS module files...");
 
-                // Étape 1: Fetch lancer.mjs pour trouver lancer-HASH.mjs
                 const lancerResponse = await fetch(`/${basePath}/lancer.mjs`);
                 if (!lancerResponse.ok) {
                     throw new Error("Could not fetch lancer.mjs");
@@ -356,8 +725,6 @@ async function importFromCompCon() {
 
                 const lancerContent = await lancerResponse.text();
 
-                // Extraire le nom du fichier lancer-HASH.mjs
-                // Chercher: import "./lancer-XXXXX.mjs"
                 const lancerHashMatch = lancerContent.match(/import\s+["']\.\/lancer-([a-f0-9]+)\.mjs["']/);
                 if (!lancerHashMatch) {
                     throw new Error("Could not find lancer-HASH.mjs reference in lancer.mjs");
@@ -366,18 +733,12 @@ async function importFromCompCon() {
                 const lancerHashFile = `lancer-${lancerHashMatch[1]}.mjs`;
                 console.log(`Found main file: ${lancerHashFile}`);
 
-                // Étape 2: Fetch lancer-HASH.mjs pour trouver les fichiers AWS
                 const lancerHashResponse = await fetch(`/${basePath}/${lancerHashFile}`);
                 if (!lancerHashResponse.ok) {
                     throw new Error(`Could not fetch ${lancerHashFile}`);
                 }
 
                 const lancerHashContent = await lancerHashResponse.text();
-
-                // Parser pour extraire les noms de fichiers AWS
-                // Chercher: (await import("./aws-exports-XXXXX.mjs"))
-                // Chercher: { Auth } = await import("./index-XXXXX.mjs")
-                // Chercher: { Storage } = await import("./index-YYYYY.mjs")
 
                 const awsConfigMatch = lancerHashContent.match(/await import\(["']\.\/aws-exports-([a-f0-9]+)\.mjs["']\)/);
                 const authMatch = lancerHashContent.match(/\{\s*Auth\s*\}\s*=\s*await import\(["']\.\/index-([a-f0-9]+)\.mjs["']\)/);
@@ -393,7 +754,6 @@ async function importFromCompCon() {
 
                 console.log(`Detected AWS files: ${authFile}, ${storageFile}, ${configFile}`);
 
-                // Étape 3: Importer les modules détectés
                 const [authModule, storageModule, configModule] = await Promise.all([
                     import(`/${basePath}/${authFile}`),
                     import(`/${basePath}/${storageFile}`),
@@ -412,7 +772,6 @@ async function importFromCompCon() {
             } catch (e) {
                 console.warn("Could not auto-detect AWS modules, trying fallback...", e);
 
-                // Fallback : essayer avec des hash connus
                 const possibleHashes = [
                     { auth: "index-5139827c.mjs", storage: "index-66abcef7.mjs", config: "aws-exports-1e808d22.mjs" },
                 ];
@@ -448,11 +807,9 @@ async function importFromCompCon() {
             throw new Error("Could not load AWS modules.");
         }
 
-        // Configurer AWS
         Auth.configure(awsConfig);
         Storage.configure(awsConfig);
 
-        // Vérifier la session
         try {
             await Auth.currentSession();
         } catch (e) {
@@ -462,10 +819,10 @@ async function importFromCompCon() {
 
         ui.notifications.info("Fetching NPCs from Comp/Con...");
 
-        // Récupérer les NPCs
         const res = await Storage.list("npc", {
             level: "protected",
-            cacheControl: "no-cache"
+            cacheControl: "no-cache",
+            pageSize: 1000
         });
 
         const active = res.results.filter(x => x.key?.endsWith("--active"));
@@ -475,7 +832,6 @@ async function importFromCompCon() {
             return;
         }
 
-        // Récupérer tous les NPCs
         const allNPCs = await Promise.all(
             active.map(async (item) => {
                 try {
@@ -510,7 +866,6 @@ async function importFromCompCon() {
             return;
         }
 
-        // Afficher la dialog de sélection des NPCs
         new NPCSelectionDialog(validNPCs).render(true);
 
     } catch (error) {
@@ -519,117 +874,12 @@ async function importFromCompCon() {
     }
 }
 
-// Dialog pour sélectionner les NPCs à importer depuis CompCon
 class NPCSelectionDialog extends Dialog {
     constructor(npcs) {
         const content = `
             <style>
-                .npc-selection-dialog {
-                    font-family: var(--font-primary);
-                }
-                .npc-selection-dialog .dialog-header {
-                    background: #991e2a;
-                    color: #ffffff;
-                    padding: 12px 16px;
-                    margin: -8px -8px 16px -8px;
-                    border-radius: 4px 4px 0 0;
-                }
-                .npc-selection-dialog .dialog-title {
-                    font-size: 16px;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    letter-spacing: 1px;
-                    margin: 0 0 4px 0;
-                    color: #ffffff;
-                }
-                .npc-selection-dialog .dialog-subtitle {
-                    font-size: 12px;
-                    margin: 0;
-                    color: #ffffff;
-                    opacity: 0.95;
-                }
                 .npc-import-options {
                     margin-bottom: 15px;
-                }
-                .npc-selection-dialog .toggle-card {
-                    border: 3px solid #555;
-                    border-radius: 6px;
-                    padding: 12px 14px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    background: #f5f5f5;
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    margin-bottom: 12px;
-                }
-                .npc-selection-dialog .toggle-card:hover {
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                }
-                .npc-selection-dialog .toggle-card.active {
-                    border-color: #991e2a;
-                    background: #ffe0e0;
-                    box-shadow: 0 0 12px rgba(153, 30, 42, 0.4);
-                }
-                .npc-selection-dialog .toggle-card-icon {
-                    font-size: 18px;
-                    color: #991e2a;
-                    width: 20px;
-                    text-align: center;
-                    flex-shrink: 0;
-                }
-                .npc-selection-dialog .toggle-card-text {
-                    flex: 1;
-                    font-weight: 600;
-                    color: #000;
-                    user-select: none;
-                }
-                .npc-selection-dialog .scaling-section-title {
-                    font-weight: 600;
-                    color: #000;
-                    margin-bottom: 10px;
-                    font-size: 13px;
-                }
-                .npc-selection-dialog .scaling-cards {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 10px;
-                }
-                .npc-selection-dialog .scaling-card {
-                    border: 3px solid #555;
-                    border-radius: 6px;
-                    padding: 8px 10px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    background: #f5f5f5;
-                    text-align: center;
-                }
-                .npc-selection-dialog .scaling-card:hover {
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    transform: translateY(-2px);
-                }
-                .npc-selection-dialog .scaling-card.selected {
-                    border-color: #991e2a;
-                    background: #ffe0e0;
-                    box-shadow: 0 0 12px rgba(153, 30, 42, 0.4);
-                }
-                .npc-selection-dialog .scaling-card-icon {
-                    font-size: 20px;
-                    color: #991e2a;
-                    margin-bottom: 4px;
-                }
-                .npc-selection-dialog .scaling-card-name {
-                    font-weight: bold;
-                    font-size: 12px;
-                    color: #000;
-                    margin-bottom: 2px;
-                }
-                .npc-selection-dialog .scaling-card-desc {
-                    font-size: 9px;
-                    color: #444;
-                    line-height: 1.2;
                 }
                 .npc-list-container {
                     max-height: 500px;
@@ -638,70 +888,6 @@ class NPCSelectionDialog extends Dialog {
                 .npc-list-container p {
                     color: #000000;
                     font-weight: 600;
-                }
-                .npc-search-container {
-                    position: relative;
-                    margin-bottom: 10px;
-                }
-                .npc-search-container input {
-                    width: 100%;
-                    padding: 10px 40px 10px 35px;
-                    background: #f5f5f5;
-                    border: 2px solid #999;
-                    border-radius: 6px;
-                    color: #000;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s ease;
-                }
-                .npc-search-container input::placeholder {
-                    color: #666;
-                    font-weight: 400;
-                }
-                .npc-search-container input:focus {
-                    outline: none;
-                    border-color: #991e2a;
-                    box-shadow: 0 0 8px rgba(153, 30, 42, 0.3);
-                    background: #fff;
-                }
-                .search-icon {
-                    position: absolute;
-                    left: 12px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    color: #991e2a;
-                    font-size: 16px;
-                    pointer-events: none;
-                }
-                .npc-item.hidden {
-                    display: none;
-                }
-                .npc-list {
-                    display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 8px;
-                    max-height: 400px;
-                    overflow-y: auto;
-                }
-                .npc-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 10px;
-                    background: #f5f5f5;
-                    border: 2px solid #999;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                }
-                .npc-item:hover {
-                    background: #ffe0e0;
-                    border-color: #991e2a;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-                }
-                .npc-item.selected {
-                    background: #ffe0e0;
-                    border-color: #991e2a;
-                    box-shadow: 0 0 12px rgba(153, 30, 42, 0.4);
                 }
                 .npc-checkbox {
                     margin: 0 10px 0 0;
@@ -730,56 +916,78 @@ class NPCSelectionDialog extends Dialog {
                     flex-shrink: 0;
                     border: 1px solid rgba(255, 255, 255, 0.2);
                 }
-                .npc-actions {
-                    margin-top: 15px;
-                    margin-bottom: 15px;
-                    display: flex;
-                    gap: 10px;
+                .lancer-list-item {
+                    position: relative;
                 }
-                .npc-action-btn {
-                    padding: 10px 16px;
-                    background: #f5f5f5;
-                    border: 3px solid #555;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    color: #000000;
-                    font-weight: 600;
-                    transition: all 0.2s ease;
-                    flex: 1;
+                .npc-status-badge {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    padding: 2px 5px;
+                    border-radius: 10px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    letter-spacing: 0px;
+                    z-index: 10;
+                    cursor: help;
                 }
-                .npc-action-btn:hover {
-                    background: #ffe0e0;
-                    border-color: #991e2a;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    transform: translateY(-2px);
+                .npc-status-badge.synced {
+                    background: rgba(76, 175, 80, 0.9);
+                    color: #fff;
                 }
-                .npc-action-btn i {
-                    margin-right: 5px;
-                    color: #991e2a;
+                .npc-status-badge.modified {
+                    background: rgba(255, 152, 0, 0.9);
+                    color: #fff;
+                }
+                .npc-status-badge.new {
+                    background: rgba(33, 150, 243, 0.9);
+                    color: #fff;
+                }
+                .npc-status-badge.unlinked {
+                    background: rgba(156, 39, 176, 0.9);
+                    color: #fff;
+                }
+                .lancer-list-item[data-status="synced"] {
+                    border-left: 3px solid #4CAF50;
+                }
+                .lancer-list-item[data-status="modified"] {
+                    border-left: 3px solid #FF9800;
+                }
+                .lancer-list-item[data-status="new"] {
+                    border-left: 3px solid #2196F3;
+                }
+                .lancer-list-item[data-status="unlinked"] {
+                    border-left: 3px solid #9C27B0;
                 }
             </style>
-            <div class="npc-selection-dialog">
-                <div class="dialog-header">
-                    <div class="dialog-title">COMP/CON IMPORT // NPC SELECTION</div>
-                    <div class="dialog-subtitle">Select NPCs to import from your Comp/Con roster (${npcs.length} available)</div>
+            <div class="lancer-dialog-base">
+                <div class="lancer-dialog-header">
+                    <div class="lancer-dialog-title">COMP/CON IMPORT // NPC SELECTION</div>
+                    <div class="lancer-dialog-subtitle">Select NPCs to import from your Comp/Con roster (${npcs.length} available)</div>
                 </div>
                 <div class="npc-import-options">
-                    <div class="toggle-card active" data-setting="update-existing">
-                        <div class="toggle-card-icon"><i class="fas fa-check"></i></div>
-                        <div class="toggle-card-text">Update existing NPCs (keep token image & settings)</div>
+                    <div class="lancer-toggle-card active" data-setting="update-existing" id="update-existing-card-cc">
+                        <div class="lancer-toggle-card-icon"><i class="fas fa-check"></i></div>
+                        <div class="lancer-toggle-card-text">Update existing NPCs (keep token image & settings)</div>
                         <input type="hidden" id="update-existing" value="true">
                     </div>
-                    <div class="scaling-section-title">Custom Tier Scaling Mode:</div>
-                    <div class="scaling-cards">
-                        <div class="scaling-card selected" data-mode="scaled">
-                            <div class="scaling-card-icon"><i class="cci cci-accuracy"></i></div>
-                            <div class="scaling-card-name">Scaled</div>
-                            <div class="scaling-card-desc">Keep tier increments</div>
+                    <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card-cc">
+                        <div class="lancer-toggle-card-icon"><i class="fas fa-times"></i></div>
+                        <div class="lancer-toggle-card-text">Manual replace mode (choose target actor for each NPC)</div>
+                        <input type="hidden" id="manual-replace" value="false">
+                    </div>
+                    <div class="lancer-section-title">Custom Tier Scaling Mode:</div>
+                    <div class="lancer-scaling-cards">
+                        <div class="lancer-scaling-card selected" data-mode="scaled">
+                            <div class="lancer-scaling-card-icon"><i class="cci cci-accuracy"></i></div>
+                            <div class="lancer-scaling-card-name">Scaled</div>
+                            <div class="lancer-scaling-card-desc">Keep tier increments</div>
                         </div>
-                        <div class="scaling-card" data-mode="flat">
-                            <div class="scaling-card-icon"><i class="cci cci-difficulty"></i></div>
-                            <div class="scaling-card-name">Flat</div>
-                            <div class="scaling-card-desc">Same stats all tiers</div>
+                        <div class="lancer-scaling-card" data-mode="flat">
+                            <div class="lancer-scaling-card-icon"><i class="cci cci-difficulty"></i></div>
+                            <div class="lancer-scaling-card-name">Flat</div>
+                            <div class="lancer-scaling-card-desc">Same stats all tiers</div>
                         </div>
                     </div>
                     <input type="hidden" id="custom-tier-mode" value="scaled">
@@ -791,15 +999,64 @@ class NPCSelectionDialog extends Dialog {
                             <span id="selected-count">0</span> selected
                         </p>
                     </div>
-                    <div class="npc-search-container">
-                        <i class="fas fa-search search-icon"></i>
+                    <div class="lancer-search-container">
+                        <i class="fas fa-search lancer-search-icon"></i>
                         <input type="text" id="npc-search" placeholder="Search NPCs by name" autocomplete="off">
                     </div>
-                    <div class="npc-list">
+                    <div class="lancer-list">
                         ${npcs.map((npc, index) => {
                             const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
+
+                            const existingActors = findExistingNPCsByLID(npc.json);
+                            const comparison = compareNPCWithActor(npc.json, existingActors);
+                            const status = comparison.status;
+                            const count = comparison.count;
+
+                            // Récupérer la liste des acteurs (par LID ou par nom)
+                            let actorsList = [];
+                            if (existingActors.length > 0) {
+                                actorsList = existingActors;
+                            } else if (status === 'unlinked' && npc.json.name) {
+                                const nameLower = npc.json.name.toLowerCase();
+                                actorsList = game.actors.filter(a =>
+                                    a.type === 'npc' && a.name.toLowerCase() === nameLower
+                                );
+                            }
+
+                            let badgeText = '';
+                            let badgeTooltip = '';
+
+                            if (status === 'synced') {
+                                badgeText = count > 1 ? `✓ (×${count})` : '✓';
+                                badgeTooltip = count > 1
+                                    ? `NPC is up to date (${count} copies in world)`
+                                    : 'NPC is up to date';
+                            } else if (status === 'modified') {
+                                badgeText = count > 1 ? `⚠ (×${count})` : '⚠';
+                                badgeTooltip = count > 1
+                                    ? `NPC has changes (${count} copies in world)`
+                                    : 'NPC has changes';
+                            } else if (status === 'new') {
+                                badgeText = '+';
+                                badgeTooltip = 'NPC does not exist in world';
+                            } else if (status === 'unlinked') {
+                                badgeText = count > 1 ? `? (×${count})` : '?';
+                                badgeTooltip = count > 1
+                                    ? `NPC with same name exists but not linked (${count} found)`
+                                    : 'NPC with same name exists but not linked (no LID)';
+                            }
+
+                            // Ajouter la liste des acteurs au tooltip
+                            if (actorsList.length > 0) {
+                                const actorNames = actorsList.map(a => "- " + a.name).join('\n');
+                                badgeTooltip += '\nActors:\n' + actorNames;
+                            }
+
+                            const badgeHTML = badgeText ? `<div class="npc-status-badge ${status}" title="${badgeTooltip}">${badgeText}</div>` : '';
+
                             return `
-                            <label class="npc-item" data-npc-name="${npc.name.toLowerCase()}" data-npc-class="${npc.class.toLowerCase()}" data-npc-tier="${npc.tier}" data-npc-tag="${(npc.tag || '').toLowerCase()}">
+                            <label class="lancer-list-item" data-npc-name="${npc.name.toLowerCase()}" data-npc-class="${npc.class.toLowerCase()}" data-npc-tier="${npc.tier}" data-npc-tag="${(npc.tag || '').toLowerCase()}" data-status="${status}">
+                                ${badgeHTML}
                                 <input type="checkbox" class="npc-checkbox" data-index="${index}">
                                 <div class="npc-info">
                                     <div class="npc-name">${npc.name}</div>
@@ -809,15 +1066,18 @@ class NPCSelectionDialog extends Dialog {
                                 </div>
                                 ${imageUrl ? `<img src="${imageUrl}" class="npc-portrait" alt="${npc.name}">` : ''}
                             </label>
-                        `}).join('')}
+                        `;}).join('')}
                     </div>
                 </div>
-                <div class="npc-actions">
-                    <button type="button" id="select-all" class="npc-action-btn">
+                <div class="lancer-action-buttons">
+                    <button type="button" id="select-all" class="lancer-action-btn">
                         <i class="fas fa-check-square"></i> Select All
                     </button>
-                    <button type="button" id="deselect-all" class="npc-action-btn">
+                    <button type="button" id="deselect-all" class="lancer-action-btn">
                         <i class="fas fa-square"></i> Deselect All
+                    </button>
+                    <button type="button" id="link-actors" class="lancer-action-btn">
+                        <i class="fas fa-link"></i> Link Actors
                     </button>
                 </div>
             </div>
@@ -842,9 +1102,10 @@ class NPCSelectionDialog extends Dialog {
                         }
 
                         const updateExisting = html.find('#update-existing').val() === 'true';
+                        const manualReplace = html.find('#manual-replace').val() === 'true';
                         const customTierMode = html.find('#custom-tier-mode').val();
                         const selectedNPCs = selectedIndices.map(i => npcs[i]);
-                        await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode);
+                        await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode, manualReplace);
                     }
                 },
                 cancel: {
@@ -865,7 +1126,6 @@ class NPCSelectionDialog extends Dialog {
     activateListeners(html) {
         super.activateListeners(html);
 
-        // Fix button heights
         const dialog = html.closest('.dialog');
         const buttons = dialog.find('.dialog-buttons');
         buttons.css({
@@ -878,50 +1138,53 @@ class NPCSelectionDialog extends Dialog {
             'padding': '8px 16px'
         });
 
-        // Gestion de la toggle-card "Update existing"
-        html.find('.toggle-card').click(function() {
+        html.find('.lancer-toggle-card').click(function() {
+            const setting = $(this).data('setting');
             const isActive = $(this).hasClass('active');
-            $(this).toggleClass('active');
 
-            // Mettre à jour l'icône et la valeur cachée
-            const icon = $(this).find('.toggle-card-icon i');
-            const hiddenInput = $(this).find('input[type="hidden"]');
+            if (setting === 'update-existing' || setting === 'manual-replace') {
+                const otherCard = setting === 'update-existing' ? '#manual-replace-card-cc' : '#update-existing-card-cc';
 
-            if (isActive) {
-                icon.removeClass('fa-check').addClass('fa-times');
-                hiddenInput.val('false');
-            } else {
-                icon.removeClass('fa-times').addClass('fa-check');
-                hiddenInput.val('true');
+                $(this).toggleClass('active');
+                const icon = $(this).find('.lancer-toggle-card-icon i');
+                const hiddenInput = $(this).find('input[type="hidden"]');
+
+                if (isActive) {
+                    icon.removeClass('fa-check').addClass('fa-times');
+                    hiddenInput.val('false');
+                } else {
+                    icon.removeClass('fa-times').addClass('fa-check');
+                    hiddenInput.val('true');
+
+                    html.find(otherCard).removeClass('active');
+                    html.find(otherCard).find('.lancer-toggle-card-icon i').removeClass('fa-check').addClass('fa-times');
+                    html.find(otherCard).find('input[type="hidden"]').val('false');
+                }
             }
         });
 
-        // Gestion des scaling-cards
-        html.find('.scaling-card').click(function() {
-            html.find('.scaling-card').removeClass('selected');
+        html.find('.lancer-scaling-card').click(function() {
+            html.find('.lancer-scaling-card').removeClass('selected');
             $(this).addClass('selected');
             const mode = $(this).data('mode');
             html.find('#custom-tier-mode').val(mode);
         });
 
-        // Function to update selection count
         const updateCount = () => {
             const count = html.find('.npc-checkbox:checked').length;
             html.find('#selected-count').text(count);
         };
 
-        // Update count and visual state when checkboxes change
         html.find('.npc-checkbox').on('change', function() {
-            const $item = $(this).closest('.npc-item');
+            const $item = $(this).closest('.lancer-list-item');
             $item.toggleClass('selected', $(this).prop('checked'));
             updateCount();
         });
 
-        // Search functionality
         html.find('#npc-search').on('input', function() {
             const searchTerm = $(this).val().toLowerCase().trim();
 
-            html.find('.npc-item').each(function() {
+            html.find('.lancer-list-item').each(function() {
                 const $item = $(this);
                 const name = $item.data('npc-name') || '';
                 const npcClass = $item.data('npc-class') || '';
@@ -934,68 +1197,146 @@ class NPCSelectionDialog extends Dialog {
                     tier.includes(searchTerm) ||
                     tag.includes(searchTerm);
 
-                $item.toggleClass('hidden', !matches);
+                $item.toggleClass('lancer-hidden', !matches);
             });
         });
 
-        // Select All button (only visible NPCs)
         html.find('#select-all').click(() => {
-            html.find('.npc-item:not(.hidden)').each(function() {
+            html.find('.lancer-list-item:not(.lancer-hidden)').each(function() {
                 $(this).find('.npc-checkbox').prop('checked', true);
                 $(this).addClass('selected');
             });
             updateCount();
         });
 
-        // Deselect All button (only visible NPCs)
         html.find('#deselect-all').click(() => {
-            html.find('.npc-item:not(.hidden)').each(function() {
+            html.find('.lancer-list-item:not(.lancer-hidden)').each(function() {
                 $(this).find('.npc-checkbox').prop('checked', false);
                 $(this).removeClass('selected');
             });
             updateCount();
         });
+
+        html.find('#link-actors').click(async () => {
+            const selectedIndices = [];
+            html.find('.npc-checkbox:checked').each(function() {
+                selectedIndices.push(parseInt($(this).data('index')));
+            });
+
+            if (selectedIndices.length === 0) {
+                ui.notifications.warn("No NPCs selected");
+                return;
+            }
+
+            const selectedNPCs = selectedIndices.map(i => this.npcs[i]);
+            const unlinkedNPCs = selectedNPCs.filter(npc => {
+                const existingActors = findExistingNPCsByLID(npc.json);
+                const comparison = compareNPCWithActor(npc.json, existingActors);
+                return comparison.status === 'unlinked';
+            });
+
+            if (unlinkedNPCs.length === 0) {
+                ui.notifications.info("No unlinked NPCs selected");
+                return;
+            }
+
+            let linkedCount = 0;
+            for (const npc of unlinkedNPCs) {
+                const nameLower = npc.json.name.toLowerCase();
+                const actorsByName = game.actors.filter(a =>
+                    a.type === 'npc' && a.name.toLowerCase() === nameLower
+                );
+
+                for (const actor of actorsByName) {
+                    await actor.update({ 'system.lid': npc.json.id });
+                    linkedCount++;
+                }
+            }
+
+            ui.notifications.info(`✓ Linked ${linkedCount} actor(s)`);
+
+            // Rafraîchir la dialog pour mettre à jour les badges
+            this.close();
+            new NPCSelectionDialog(this.npcs).render(true);
+        });
     }
 }
 
-// Importer les NPCs sélectionnés
-async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled') {
-    ui.notifications.info(`Importing ${npcs.length} NPC(s)...`);
+// Importer les NPCs sélectionnés depuis Comp/Con
+async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled', manualReplace = false) {
+    let mappings = null;
+    if (manualReplace) {
+        const npcsForMapping = npcs.map(npc => ({ name: npc.name }));
+        mappings = await selectActorMappings(npcsForMapping);
+
+        if (mappings === null) {
+            ui.notifications.info("Import cancelled");
+            return;
+        }
+    }
+
+    const progressDialog = new ImportProgressDialog(npcs.length);
+    progressDialog.render(true);
+    progressDialog.addLog(`Starting import of ${npcs.length} NPC(s) from Comp/Con...`, 'info');
 
     let successCount = 0;
     let errorCount = 0;
     let updateCount = 0;
+    let replaceCount = 0;
 
-    for (const npc of npcs) {
+    for (let i = 0; i < npcs.length; i++) {
+        const npc = npcs[i];
+        let targetActor = null;
+        let keepName = false;
+
+        if (mappings && mappings[i]) {
+            targetActor = mappings[i].targetActor;
+            keepName = mappings[i].keepName;
+        }
+
         try {
-            ui.notifications.info(`Importing: ${npc.name}`);
-            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode);
+            progressDialog.addLog(`Importing: ${npc.name}...`, 'info');
+            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode, targetActor, keepName, progressDialog);
 
             if (result.updated) {
                 updateCount++;
+                progressDialog.addLog(`✓ Updated: ${npc.name}`, 'success');
+            } else if (result.replaced) {
+                replaceCount++;
+                progressDialog.addLog(`✓ Replaced: ${npc.name}`, 'success');
+            } else {
+                progressDialog.addLog(`✓ Created: ${npc.name}`, 'success');
             }
             successCount++;
         } catch (error) {
             console.error(`Error importing ${npc.name}:`, error);
-            ui.notifications.error(`Failed to import ${npc.name}: ${error.message}`);
+            progressDialog.addLog(`✗ Failed: ${npc.name} - ${error.message}`, 'error');
             errorCount++;
         }
+
+        progressDialog.incrementProgress();
     }
 
+    let summaryParts = [];
+    const created = successCount - replaceCount - updateCount;
+    if (created > 0) summaryParts.push(`${created} created`);
+    if (updateCount > 0) summaryParts.push(`${updateCount} updated`);
+    if (replaceCount > 0) summaryParts.push(`${replaceCount} replaced`);
+    if (errorCount > 0) summaryParts.push(`${errorCount} failed`);
+
+    const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
+    progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
+
     if (successCount > 0) {
-        const message = updateCount > 0
-            ? `✓ Successfully imported ${successCount} NPC(s) (${updateCount} updated, ${successCount - updateCount} created)`
-            : `✓ Successfully imported ${successCount} NPC(s)`;
-        ui.notifications.info(message);
+        ui.notifications.info(`✓ Imported ${successCount} NPC(s)`);
     }
     if (errorCount > 0) {
-        ui.notifications.warn(`✗ Failed to import ${errorCount} NPC(s)`);
+        ui.notifications.warn(`✗ ${errorCount} NPC(s) failed to import`);
     }
 }
 
-
-// Applique les customisations des features (tier override, custom name, etc.)
-async function applyFeatureCustomizations(actor, npcData) {
+// Appliquer les customisations des features (tier override, custom name, description)
+async function applyFeatureCustomizations(actor, npcData, progressDialog = null) {
     try {
         if (!npcData.items || npcData.items.length === 0) {
             return;
@@ -1003,10 +1344,9 @@ async function applyFeatureCustomizations(actor, npcData) {
 
         const updates = [];
         const tierOverrides = [];
-        const npcTierParsed = parseTier(npcData.tier); // Convertir le tier du NPC en nombre
+        const npcTierParsed = parseTier(npcData.tier);
 
         for (const ccItem of npcData.items) {
-            // Trouver la feature dans l'acteur par son LID
             const feature = actor.items.find(i =>
                 i.type === 'npc_feature' &&
                 i.system.lid === ccItem.itemID
@@ -1019,20 +1359,17 @@ async function applyFeatureCustomizations(actor, npcData) {
             const updateData = { _id: feature.id };
             let hasChanges = false;
 
-            // Appliquer le custom name si fourni
             if (ccItem.flavorName) {
                 updateData['name'] = ccItem.flavorName;
                 updateData['system.custom_name'] = ccItem.flavorName;
                 hasChanges = true;
             }
 
-            // Appliquer la custom description si fournie
             if (ccItem.description) {
                 updateData['system.custom_description'] = ccItem.description;
                 hasChanges = true;
             }
 
-            // Vérifier si un tier override est nécessaire (comparer avec le tier parsé)
             if (ccItem.tier !== undefined && ccItem.tier !== npcTierParsed) {
                 tierOverrides.push({
                     name: ccItem.flavorName || feature.name,
@@ -1050,25 +1387,24 @@ async function applyFeatureCustomizations(actor, npcData) {
             console.log(`Applied ${updates.length} feature customization(s) for ${actor.name}`);
         }
 
-        // Avertir si des features ont des tiers différents
         if (tierOverrides.length > 0) {
             const featureList = tierOverrides.map(f => `${f.name} (T${f.tier})`).join(', ');
-            ui.notifications.warn(
-                `⚠ NPC "${actor.name}": ${tierOverrides.length} feature(s) with different tiers not applied: ${featureList}`,
-                { permanent: false }
-            );
+            if (progressDialog) {
+                progressDialog.addLog(`  ⚠ ${tierOverrides.length} feature(s) with different tiers not applied: ${featureList}`, 'warning');
+            }
             console.warn(`Features with tier overrides for ${actor.name}:`, tierOverrides);
         }
     } catch (error) {
         console.error(`Error applying feature customizations:`, error);
-        ui.notifications.warn(`⚠ Could not apply feature customizations to "${actor.name}"`);
+        if (progressDialog) {
+            progressDialog.addLog(`  ⚠ Could not apply feature customizations`, 'warning');
+        }
     }
 }
 
-// Applique les stats custom aux tiers de la classe NPC dans l'acteur
-async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
+// Appliquer les stats custom aux tiers de la classe NPC (flat ou scaled)
+async function applyCustomTierStats(actor, npcData, mode = 'scaled', progressDialog = null) {
     try {
-        // Trouver la classe NPC dans les items de l'acteur
         const npcClass = actor.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
 
         if (!npcClass) {
@@ -1076,26 +1412,21 @@ async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
             return;
         }
 
-        // Récupérer les stats de base de Comp/Con (sans les bonuses des templates)
         const customStats = npcData.stats || {};
         const originalStats = npcClass.system.base_stats;
 
-        // Fonction pour calculer une stat selon le mode
         const calculateStat = (statName, ccKey, tierIndex) => {
             const customValue = customStats[ccKey];
             const originalValue = originalStats[tierIndex][statName];
 
-            // Si pas de valeur custom définie, garder l'original
             if (customValue === undefined) {
                 return originalValue;
             }
 
-            // Mode flat: même valeur pour tous les tiers
             if (mode === 'flat') {
                 return customValue;
             }
 
-            // Mode scaled: garder les incréments entre tiers
             if (mode === 'scaled') {
                 const tier1Original = originalStats[0][statName];
                 const increment = originalValue - tier1Original;
@@ -1105,7 +1436,6 @@ async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
             return customValue;
         };
 
-        // Construire les stats pour les 3 tiers
         const newBaseStats = [0, 1, 2].map(tierIndex => ({
             activations: calculateStat('activations', 'activations', tierIndex),
             armor: calculateStat('armor', 'armor', tierIndex),
@@ -1114,7 +1444,7 @@ async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
             edef: calculateStat('edef', 'edef', tierIndex),
             heatcap: calculateStat('heatcap', 'heatcap', tierIndex),
             speed: calculateStat('speed', 'speed', tierIndex),
-            sensor: calculateStat('sensor', 'sensor', tierIndex),
+            sensor_range: calculateStat('sensor_range', 'sensor', tierIndex),
             save: calculateStat('save', 'save', tierIndex),
             hull: calculateStat('hull', 'hull', tierIndex),
             agi: calculateStat('agi', 'agility', tierIndex),
@@ -1125,32 +1455,143 @@ async function applyCustomTierStats(actor, npcData, mode = 'scaled') {
             stress: calculateStat('stress', 'stress', tierIndex)
         }));
 
-        // Renommer la classe avec "CUSTOM"
         const newName = npcClass.name.includes('CUSTOM')
             ? npcClass.name
             : `${npcClass.name} CUSTOM`;
 
-        // Mettre à jour la classe NPC avec les nouvelles stats et le nouveau nom
         await npcClass.update({
             'name': newName,
             'system.base_stats': newBaseStats
         });
 
         console.log(`Applied custom tier stats (${mode}) to ${newName} for ${actor.name}`);
-        ui.notifications.info(`✓ Applied custom tier stats (${mode}) to "${actor.name}"`);
+        if (progressDialog) {
+            progressDialog.addLog(`  ✓ Applied custom tier stats (${mode})`, 'info');
+        }
     } catch (error) {
         console.error(`Error applying custom tier stats:`, error);
-        ui.notifications.warn(`⚠ Could not apply custom tier stats to "${actor.name}"`);
+        if (progressDialog) {
+            progressDialog.addLog(`  ⚠ Could not apply custom tier stats`, 'warning');
+        }
     }
 }
 
-async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled') {
+// Chercher tous les NPCs existants par LID
+function findExistingNPCsByLID(npcData) {
+    const found = [];
+
+    if (npcData.id) {
+        const actorsByLid = game.actors.filter(a => a.type === 'npc' && a.system.lid === npcData.id);
+        found.push(...actorsByLid);
+    }
+
+    return found;
+}
+
+// Comparer un NPC de Comp/Con avec un acteur existant
+// Retourne: { status: 'new'|'unlinked'|'synced'|'modified', count: nombre }
+function compareNPCWithActor(npcData, actors) {
+    // Aucun acteur trouvé par LID
+    if (!actors || actors.length === 0) {
+        // Vérifier si un NPC avec le même nom existe (sans LID correspondant)
+        if (npcData.name) {
+            const nameLower = npcData.name.toLowerCase();
+            const actorsByName = game.actors.filter(a =>
+                a.type === 'npc' && a.name.toLowerCase() === nameLower
+            );
+            if (actorsByName.length > 0) {
+                return { status: 'unlinked', count: actorsByName.length };
+            }
+        }
+        return { status: 'new', count: 0 };
+    }
+
+    const actor = actors[0];
+
+    // Comparer le NOM
+    if (npcData.name !== actor.name) return { status: 'modified', count: actors.length };
+
+    // Comparer le TIER (sauf custom)
+    const npcTier = parseTier(npcData.tier);
+    if (npcData.tier !== 'custom' && npcTier !== actor.system.tier) {
+        return { status: 'modified', count: actors.length };
+    }
+
+    // Comparer les ITEMS (Class + Templates + Features)
+    const npcItems = [
+        ...(npcData.items || []).map(item => item.itemID),
+        ...(npcData.templates || []),
+        npcData.class
+    ].filter(lid => lid).sort();
+
+    const actorItems = actor.items
+        .map(item => item.system.lid)
+        .filter(lid => lid)
+        .sort();
+
+    if (npcItems.length !== actorItems.length) return { status: 'modified', count: actors.length };
+
+    for (let i = 0; i < npcItems.length; i++) {
+        if (npcItems[i] !== actorItems[i]) return { status: 'modified', count: actors.length };
+    }
+
+    // Comparer les STATS
+    const stats = npcData.stats || {};
+
+    const statChecks = [
+        ['hp', 'system.hp.max'],
+        ['armor', 'system.armor'],
+        ['evade', 'system.evasion'],
+        ['edef', 'system.edef'],
+        ['heatcap', 'system.heat.max'],
+        ['sensor', 'system.sensor_range'],
+        ['save', 'system.save'],
+        ['speed', 'system.speed'],
+        ['size', 'system.size'],
+        ['activations', 'system.activations'],
+        ['hull', 'system.hull'],
+        ['agility', 'system.agi'],
+        ['systems', 'system.sys'],
+        ['engineering', 'system.eng'],
+        ['structure', 'system.structure.max'],
+        ['stress', 'system.stress.max']
+    ];
+
+    for (const [ccKey, foundryPath] of statChecks) {
+        if (stats[ccKey] !== undefined) {
+            const actorValue = foundry.utils.getProperty(actor, foundryPath);
+
+            if (actorValue != stats[ccKey]) {
+                return { status: 'modified', count: actors.length };
+            }
+        }
+    }
+
+    return { status: 'synced', count: actors.length };
+}
+
+// Fonction principale d'import d'un NPC depuis Comp/Con
+async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled', targetActor = null, keepName = false, progressDialog = null) {
     const isCustomTier = npcData.tier === 'custom';
 
-    // Chercher si le NPC existe déjà (par lid)
-    let existingActor = null;
-    if (updateExisting && npcData.id) {
-        existingActor = game.actors.find(a => a.type === 'npc' && a.system.lid === npcData.id);
+    // Déterminer les acteurs à mettre à jour
+    let existingActors = [];
+    let isReplace = false;
+
+    if (targetActor) {
+        // Manual replace: utiliser l'acteur spécifié
+        existingActors = [targetActor];
+        isReplace = true;
+    } else if (updateExisting) {
+        // Chercher tous les NPCs existants par LID
+        existingActors = findExistingNPCsByLID(npcData);
+
+        if (existingActors.length > 1) {
+            console.log(`Found ${existingActors.length} existing NPCs matching "${npcData.name}". Updating all.`);
+            if (progressDialog) {
+                progressDialog.addLog(`  Found ${existingActors.length} existing copies, updating all...`, 'info');
+            }
+        }
     }
 
     const systemData = {
@@ -1184,21 +1625,37 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
 
     let actor;
     let wasUpdated = false;
+    let wasReplaced = false;
 
-    if (existingActor) {
-        // Update existant - on garde le token et l'image
-        console.log(`Updating existing NPC: ${existingActor.name}`);
+    if (existingActors.length > 0) {
+        // Mettre à jour tous les acteurs existants
+        for (const existingActor of existingActors) {
+            console.log(`Updating existing NPC: ${existingActor.name}`);
 
-        await existingActor.update({
-            name: npcData.name,
-            system: systemData
-            // On ne met PAS à jour 'img' ni 'prototypeToken'
-        });
+            const finalSystemData = { ...systemData };
+            // Préserver les tailles custom (> 4)
+            if (existingActor.system.size > 4) {
+                finalSystemData.size = existingActor.system.size;
+                console.log(`Preserving custom size (${existingActor.system.size}) for ${existingActor.name}`);
+            }
 
-        actor = existingActor;
-        wasUpdated = true;
+            const finalName = (isReplace && keepName) ? existingActor.name : npcData.name;
+
+            await existingActor.update({
+                name: finalName,
+                system: finalSystemData
+            });
+        }
+
+        actor = existingActors[0];
+
+        if (isReplace) {
+            wasReplaced = true;
+        } else {
+            wasUpdated = true;
+        }
     } else {
-        // Création nouveau
+        // Créer un nouvel acteur
         const actorData = {
             name: npcData.name,
             type: 'npc',
@@ -1219,7 +1676,9 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             classAndTemplates.push(npcClass.toObject());
         } else {
             missingItems.push(`Class: ${npcData.class}`);
-            ui.notifications.warn(`⚠ NPC "${npcData.name}": Class not found - ${npcData.class}`);
+            if (progressDialog) {
+                progressDialog.addLog(`  ⚠ Class not found: ${npcData.class}`, 'warning');
+            }
         }
     }
 
@@ -1230,25 +1689,11 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
                 classAndTemplates.push(template.toObject());
             } else {
                 missingItems.push(`Template: ${templateLid}`);
-                ui.notifications.warn(`⚠ NPC "${npcData.name}": Template not found - ${templateLid}`);
+                if (progressDialog) {
+                    progressDialog.addLog(`  ⚠ Template not found: ${templateLid}`, 'warning');
+                }
             }
         }
-    }
-
-    if (classAndTemplates.length > 0) {
-        await actor.createEmbeddedDocuments('Item', classAndTemplates);
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Si custom tier, appliquer les stats custom aux tiers de la classe
-    if (isCustomTier && npcData.class) {
-        await applyCustomTierStats(actor, npcData, customTierMode);
-    }
-
-    const allFeatures = actor.items.filter(i => i.type === 'npc_feature');
-    if (allFeatures.length > 0) {
-        await actor.deleteEmbeddedDocuments('Item', allFeatures.map(i => i.id));
     }
 
     const featuresToAdd = [];
@@ -1271,34 +1716,84 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
         }
     }
 
-    if (featuresToAdd.length > 0) {
-        await actor.createEmbeddedDocuments('Item', featuresToAdd);
+    const actorsToUpdate = existingActors.length > 0 ? existingActors : [actor];
+
+    // Appliquer les items à tous les acteurs
+    for (const actorToUpdate of actorsToUpdate) {
+        // Supprimer les anciennes classes et templates
+        const oldClassAndTemplates = actorToUpdate.items.filter(i =>
+            i.type === 'npc_class' || i.type === 'npc_template'
+        );
+        if (oldClassAndTemplates.length > 0) {
+            await actorToUpdate.deleteEmbeddedDocuments('Item', oldClassAndTemplates.map(i => i.id));
+        }
+
+        // Ajouter class et templates (déclenche automatiquement les base_features via hook)
+        if (classAndTemplates.length > 0) {
+            await actorToUpdate.createEmbeddedDocuments('Item', classAndTemplates);
+
+            // Attendre que Lancer finisse d'ajouter les base_features
+            if (actorToUpdate.npcClassSwapPromises && actorToUpdate.npcClassSwapPromises.length > 0) {
+                console.log(`Waiting for ${actorToUpdate.npcClassSwapPromises.length} NPC class swap(s) to complete...`);
+                await Promise.all(actorToUpdate.npcClassSwapPromises);
+                actorToUpdate.npcClassSwapPromises = [];
+                console.log('NPC class swaps completed');
+            }
+        }
+
+        // Appliquer les stats custom pour les custom tiers
+        if (isCustomTier && npcData.class) {
+            await applyCustomTierStats(actorToUpdate, npcData, customTierMode, progressDialog);
+        }
+        // Ou appliquer juste la taille si définie (certaines classes permettent plusieurs tailles)
+        else if (!isCustomTier && npcData.class && npcData.stats?.size) {
+            const npcClass = actorToUpdate.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
+            if (npcClass) {
+                const newBaseStats = npcClass.system.base_stats.map(tierStats => ({
+                    ...tierStats,
+                    size: npcData.stats.size
+                }));
+                await npcClass.update({ 'system.base_stats': newBaseStats });
+            }
+        }
+
+        // Supprimer TOUTES les features (y compris celles ajoutées par les templates)
+        const allFeatures = actorToUpdate.items.filter(i => i.type === 'npc_feature');
+        if (allFeatures.length > 0) {
+            console.log(`Removing ${allFeatures.length} auto-added features before adding Comp/Con features`);
+            await actorToUpdate.deleteEmbeddedDocuments('Item', allFeatures.map(i => i.id));
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        // Ajouter les features de Comp/Con
+        if (featuresToAdd.length > 0) {
+            await actorToUpdate.createEmbeddedDocuments('Item', featuresToAdd);
+        }
+
+        await applyFeatureCustomizations(actorToUpdate, npcData, progressDialog);
+
+        // Reset HP au max et heat à 0
+        await actorToUpdate.update({
+            'system.hp.value': actorToUpdate.system.hp.max,
+            'system.heat.value': 0
+        });
     }
 
-
-
-    // Appliquer les customisations des features (tier override, custom names, etc.)
-    await applyFeatureCustomizations(actor, npcData);
-
-    // Reset des stats de l'acteur (HP au max, heat à 0)
-    await actor.update({
-        'system.hp.value': actor.system.hp.max,
-        'system.heat.value': 0
-    });
-
-    // Afficher un résumé des features manquantes
     if (missingFeatures.length > 0) {
-        ui.notifications.warn(`⚠ NPC "${npcData.name}": ${missingFeatures.length} feature(s) not found in compendiums`);
+        if (progressDialog) {
+            progressDialog.addLog(`  ⚠ ${missingFeatures.length} feature(s) not found in compendiums`, 'warning');
+        }
         console.warn(`Missing features for ${npcData.name}:`, missingFeatures);
     }
 
-    // Afficher un message de succès ou d'avertissement
     if (missingItems.length > 0 || missingFeatures.length > 0) {
         const total = missingItems.length + missingFeatures.length;
-        ui.notifications.warn(`⚠ NPC "${npcData.name}" imported with ${total} missing item(s). Check console for details.`);
+        if (progressDialog) {
+            progressDialog.addLog(`  ⚠ Imported with ${total} missing item(s)`, 'warning');
+        }
     }
 
-    return { actor, updated: wasUpdated };
+    return { actor, updated: wasUpdated, replaced: wasReplaced };
 }
 
 async function findItemByLid(lid, itemType = null) {
