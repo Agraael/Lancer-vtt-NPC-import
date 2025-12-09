@@ -2,7 +2,7 @@
   "id": "lancer-npc-import",
   "title": "Lancer NPC Import",
   "description": "Module to import Lancer NPCs into FoundryVTT",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "compatibility": {
     "minimum": "11",
     "verified": "12"
