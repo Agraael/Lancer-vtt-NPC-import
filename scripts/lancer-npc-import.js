@@ -2,6 +2,28 @@ export async function ImportNPC() {
     new NPCImportDialog().render(true);
 }
 
+Hooks.once('init', () => {
+    // Option pour cocher la case par défaut
+    game.settings.register("lancer-npc-import", "defaultDownloadPortrait", {
+        name: "Download portraits by default",
+        hint: "If enabled, the portrait download checkbox will be checked by default in the import dialog.",
+        scope: "client",
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
+    // Chemin du dossier de stockage
+    game.settings.register("lancer-npc-import", "portraitStoragePath", {
+        name: "Portrait Storage Path",
+        hint: "The folder inside 'User Data' where portraits will be saved.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "compcon_img"
+    });
+});
+
 class NPCImportDialog extends Dialog {
     constructor() {
         super({
@@ -876,10 +898,51 @@ async function importFromCompCon() {
 
 class NPCSelectionDialog extends Dialog {
     constructor(npcs) {
+        const isDownloadChecked = game.settings.get("lancer-npc-import", "defaultDownloadPortrait") ? "checked" : "";
         const content = `
             <style>
                 .npc-import-options {
-                    margin-bottom: 15px;
+                    margin-bottom: 8px;
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                }
+                .npc-import-options-left {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+                .npc-import-options-right {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+                .npc-import-options .lancer-toggle-card {
+                    padding: 6px 10px;
+                    margin-bottom: 0;
+                }
+                .npc-import-options .lancer-toggle-card-icon {
+                    font-size: 14px;
+                    width: 24px;
+                    height: 24px;
+                }
+                .npc-import-options .lancer-toggle-card-text {
+                    font-size: 13px;
+                }
+                .npc-import-options .lancer-section-title {
+                    font-size: 12px;
+                    margin: 0 0 6px 0;
+                    padding: 0;
+                }
+                .npc-import-options .lancer-scaling-card .lancer-toggle-card-icon {
+                    font-size: 18px;
+                }
+                .npc-import-options .lancer-scaling-card .lancer-toggle-card-text {
+                    text-align: left !important;
+                }
+                .lancer-action-btn {
+                    padding: 6px 12px !important;
+                    height: auto !important;
                 }
                 .npc-list-container {
                     max-height: 500px;
@@ -888,6 +951,15 @@ class NPCSelectionDialog extends Dialog {
                 .npc-list-container p {
                     color: #000000;
                     font-weight: 600;
+                }
+                .lancer-list {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
+                    height: 500px;
+                    overflow-y: auto;
+                    overflow-x: hidden;
+                    align-content: start;
                 }
                 .npc-checkbox {
                     margin: 0 10px 0 0;
@@ -918,6 +990,9 @@ class NPCSelectionDialog extends Dialog {
                 }
                 .lancer-list-item {
                     position: relative;
+                    min-height: 80px;
+                    max-height: 80px;
+                    flex-shrink: 0;
                 }
                 .npc-status-badge {
                     position: absolute;
@@ -960,6 +1035,14 @@ class NPCSelectionDialog extends Dialog {
                 .lancer-list-item[data-status="unlinked"] {
                     border-left: 3px solid #9C27B0;
                 }
+                .status-filter-btn:hover:not(.active) {
+                    opacity: 0.8;
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                }
+                .status-filter-btn.active {
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                }
             </style>
             <div class="lancer-dialog-base">
                 <div class="lancer-dialog-header">
@@ -967,30 +1050,31 @@ class NPCSelectionDialog extends Dialog {
                     <div class="lancer-dialog-subtitle">Select NPCs to import from your Comp/Con roster (${npcs.length} available)</div>
                 </div>
                 <div class="npc-import-options">
-                    <div class="lancer-toggle-card active" data-setting="update-existing" id="update-existing-card-cc">
-                        <div class="lancer-toggle-card-icon"><i class="fas fa-check"></i></div>
-                        <div class="lancer-toggle-card-text">Update existing NPCs (keep token image & settings)</div>
-                        <input type="hidden" id="update-existing" value="true">
-                    </div>
-                    <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card-cc">
-                        <div class="lancer-toggle-card-icon"><i class="fas fa-times"></i></div>
-                        <div class="lancer-toggle-card-text">Manual replace mode (choose target actor for each NPC)</div>
-                        <input type="hidden" id="manual-replace" value="false">
-                    </div>
-                    <div class="lancer-section-title">Custom Tier Scaling Mode:</div>
-                    <div class="lancer-scaling-cards">
-                        <div class="lancer-scaling-card selected" data-mode="scaled">
-                            <div class="lancer-scaling-card-icon"><i class="cci cci-accuracy"></i></div>
-                            <div class="lancer-scaling-card-name">Scaled</div>
-                            <div class="lancer-scaling-card-desc">Keep tier increments</div>
+                    <div class="npc-import-options-left">
+                        <div class="lancer-section-title">Import Mode:</div>
+                        <div class="lancer-toggle-card active" data-setting="update-existing" id="update-existing-card-cc">
+                            <div class="lancer-toggle-card-icon"><i class="fas fa-check"></i></div>
+                            <div class="lancer-toggle-card-text">Update existing NPCs</div>
+                            <input type="hidden" id="update-existing" value="true">
                         </div>
-                        <div class="lancer-scaling-card" data-mode="flat">
-                            <div class="lancer-scaling-card-icon"><i class="cci cci-difficulty"></i></div>
-                            <div class="lancer-scaling-card-name">Flat</div>
-                            <div class="lancer-scaling-card-desc">Same stats all tiers</div>
+                        <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card-cc">
+                            <div class="lancer-toggle-card-icon"><i class="fas fa-times"></i></div>
+                            <div class="lancer-toggle-card-text">Manual replace mode</div>
+                            <input type="hidden" id="manual-replace" value="false">
                         </div>
                     </div>
-                    <input type="hidden" id="custom-tier-mode" value="scaled">
+                    <div class="npc-import-options-right">
+                        <div class="lancer-section-title">Custom Tier Scaling:</div>
+                        <div class="lancer-toggle-card lancer-scaling-card active" data-mode="scaled">
+                            <div class="lancer-toggle-card-icon"><i class="cci cci-accuracy"></i></div>
+                            <div class="lancer-toggle-card-text">Scaled (keep tier increments)</div>
+                        </div>
+                        <div class="lancer-toggle-card lancer-scaling-card" data-mode="flat">
+                            <div class="lancer-toggle-card-icon"><i class="cci cci-difficulty"></i></div>
+                            <div class="lancer-toggle-card-text">Flat (same stats all tiers)</div>
+                        </div>
+                        <input type="hidden" id="custom-tier-mode" value="scaled">
+                    </div>
                 </div>
                 <div class="npc-list-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -1003,6 +1087,23 @@ class NPCSelectionDialog extends Dialog {
                         <i class="fas fa-search lancer-search-icon"></i>
                         <input type="text" id="npc-search" placeholder="Search NPCs by name" autocomplete="off">
                     </div>
+                    <div class="lancer-status-filters" style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+                        <button type="button" class="status-filter-btn active" data-status="all" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #991e2a; border-radius: 4px; background: #991e2a; color: white; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
+                            All
+                        </button>
+                        <button type="button" class="status-filter-btn" data-status="new" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #2196F3; border-radius: 4px; background: white; color: #2196F3; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
+                            + New
+                        </button>
+                        <button type="button" class="status-filter-btn" data-status="synced" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #4CAF50; border-radius: 4px; background: white; color: #4CAF50; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
+                            ✓ Synced
+                        </button>
+                        <button type="button" class="status-filter-btn" data-status="modified" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #FF9800; border-radius: 4px; background: white; color: #FF9800; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
+                            ⚠ Modified
+                        </button>
+                        <button type="button" class="status-filter-btn" data-status="unlinked" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #9C27B0; border-radius: 4px; background: white; color: #9C27B0; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
+                            ? Unlinked
+                        </button>
+                    </div>
                     <div class="lancer-list">
                         ${npcs.map((npc, index) => {
                             const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
@@ -1011,6 +1112,7 @@ class NPCSelectionDialog extends Dialog {
                             const comparison = compareNPCWithActor(npc.json, existingActors);
                             const status = comparison.status;
                             const count = comparison.count;
+                            const reasons = comparison.reasons || [];
 
                             // Récupérer la liste des acteurs (par LID ou par nom)
                             let actorsList = [];
@@ -1033,9 +1135,17 @@ class NPCSelectionDialog extends Dialog {
                                     : 'NPC is up to date';
                             } else if (status === 'modified') {
                                 badgeText = count > 1 ? `⚠ (×${count})` : '⚠';
-                                badgeTooltip = count > 1
+                                const baseTooltip = count > 1
                                     ? `NPC has changes (${count} copies in world)`
                                     : 'NPC has changes';
+
+                                // Ajouter les raisons des modifications
+                                if (reasons.length > 0) {
+                                    const reasonsList = reasons.map(r => "- " + r).join('\n');
+                                    badgeTooltip = `${baseTooltip}\nReasons:\n${reasonsList}`;
+                                } else {
+                                    badgeTooltip = baseTooltip;
+                                }
                             } else if (status === 'new') {
                                 badgeText = '+';
                                 badgeTooltip = 'NPC does not exist in world';
@@ -1079,6 +1189,10 @@ class NPCSelectionDialog extends Dialog {
                     <button type="button" id="link-actors" class="lancer-action-btn">
                         <i class="fas fa-link"></i> Link Actors
                     </button>
+                    <label class="lancer-action-btn" style="display: inline-flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+                        <input type="checkbox" id="download-portraits-check" ${isDownloadChecked} style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+                        <i class="fas fa-download"></i> Save Portraits to Server
+                    </label>
                 </div>
             </div>
         `;
@@ -1104,8 +1218,9 @@ class NPCSelectionDialog extends Dialog {
                         const updateExisting = html.find('#update-existing').val() === 'true';
                         const manualReplace = html.find('#manual-replace').val() === 'true';
                         const customTierMode = html.find('#custom-tier-mode').val();
+                        const downloadPortraits = html.find('#download-portraits-check').prop('checked');
                         const selectedNPCs = selectedIndices.map(i => npcs[i]);
-                        await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode, manualReplace);
+                        await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode, manualReplace, downloadPortraits);
                     }
                 },
                 cancel: {
@@ -1115,7 +1230,7 @@ class NPCSelectionDialog extends Dialog {
             },
             default: "import"
         }, {
-            width: "auto",
+            width: 850,
             height: "auto",
             classes: ["npc-import-dialog"]
         });
@@ -1164,8 +1279,8 @@ class NPCSelectionDialog extends Dialog {
         });
 
         html.find('.lancer-scaling-card').click(function() {
-            html.find('.lancer-scaling-card').removeClass('selected');
-            $(this).addClass('selected');
+            html.find('.lancer-scaling-card').removeClass('active');
+            $(this).addClass('active');
             const mode = $(this).data('mode');
             html.find('#custom-tier-mode').val(mode);
         });
@@ -1181,8 +1296,11 @@ class NPCSelectionDialog extends Dialog {
             updateCount();
         });
 
-        html.find('#npc-search').on('input', function() {
-            const searchTerm = $(this).val().toLowerCase().trim();
+        // Fonction de filtre combinée (recherche + statut)
+        let currentStatusFilter = 'all';
+
+        function applyFilters() {
+            const searchTerm = html.find('#npc-search').val().toLowerCase().trim();
 
             html.find('.lancer-list-item').each(function() {
                 const $item = $(this);
@@ -1190,15 +1308,68 @@ class NPCSelectionDialog extends Dialog {
                 const npcClass = $item.data('npc-class') || '';
                 const tier = String($item.data('npc-tier') || '').toLowerCase();
                 const tag = $item.data('npc-tag') || '';
+                const status = $item.data('status') || '';
 
-                const matches = searchTerm === '' ||
+                // Filtre de recherche
+                const matchesSearch = searchTerm === '' ||
                     name.includes(searchTerm) ||
                     npcClass.includes(searchTerm) ||
                     tier.includes(searchTerm) ||
                     tag.includes(searchTerm);
 
-                $item.toggleClass('lancer-hidden', !matches);
+                // Filtre de statut
+                const matchesStatus = currentStatusFilter === 'all' || status === currentStatusFilter;
+
+                // Montrer l'item seulement s'il passe les deux filtres
+                $item.toggleClass('lancer-hidden', !(matchesSearch && matchesStatus));
             });
+        }
+
+        // Recherche par texte
+        html.find('#npc-search').on('input', applyFilters);
+
+        // Boutons de filtre par statut
+        html.find('.status-filter-btn').on('click', function() {
+            const $btn = $(this);
+            const status = $btn.data('status');
+
+            // Retirer la classe active de tous les boutons
+            html.find('.status-filter-btn').removeClass('active').each(function() {
+                const btnStatus = $(this).data('status');
+                const isActive = btnStatus === status;
+
+                // Styles pour bouton actif/inactif
+                if (isActive) {
+                    $(this).addClass('active');
+                    if (btnStatus === 'all') {
+                        $(this).css({ background: '#991e2a', color: 'white' });
+                    } else if (btnStatus === 'synced') {
+                        $(this).css({ background: '#4CAF50', color: 'white' });
+                    } else if (btnStatus === 'modified') {
+                        $(this).css({ background: '#FF9800', color: 'white' });
+                    } else if (btnStatus === 'new') {
+                        $(this).css({ background: '#2196F3', color: 'white' });
+                    } else if (btnStatus === 'unlinked') {
+                        $(this).css({ background: '#9C27B0', color: 'white' });
+                    }
+                } else {
+                    if (btnStatus === 'all') {
+                        $(this).css({ background: 'white', color: '#991e2a' });
+                    } else if (btnStatus === 'synced') {
+                        $(this).css({ background: 'white', color: '#4CAF50' });
+                    } else if (btnStatus === 'modified') {
+                        $(this).css({ background: 'white', color: '#FF9800' });
+                    } else if (btnStatus === 'new') {
+                        $(this).css({ background: 'white', color: '#2196F3' });
+                    } else if (btnStatus === 'unlinked') {
+                        $(this).css({ background: 'white', color: '#9C27B0' });
+                    }
+                }
+            });
+
+            // Appliquer le filtre
+            currentStatusFilter = status;
+            applyFilters();
         });
 
         html.find('#select-all').click(() => {
@@ -1262,8 +1433,39 @@ class NPCSelectionDialog extends Dialog {
     }
 }
 
+async function uploadPortraitToServer(url, npcName) {
+    if (!url) return null;
+
+    const subFolder = game.settings.get("lancer-npc-import", "portraitStoragePath");
+    const folderPath = `modules/lancer-npc-import/${subFolder}`;
+    const proxyUrl = "https://corsproxy.io/?"; //Pour éviter le blocage CORS
+    
+    try {
+        // 1. Créer le dossier s'il n'existe pas
+        try {
+            await FilePicker.createDirectory("data", folderPath);
+        } catch (e) { /* existe déjà */ }
+
+        // 2. Récupérer l'image via le proxy
+        const response = await fetch(proxyUrl + encodeURIComponent(url));
+        const blob = await response.blob();
+        
+        // 3. Préparer le fichier
+        const extension = url.split('.').pop().split(/\#|\?/)[0] || 'png';
+        const fileName = `${npcName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
+        const file = new File([blob], fileName, { type: blob.type });
+
+        // 4. Uploader sur Foundry
+        const uploadResponse = await FilePicker.upload("data", folderPath, file);
+        return uploadResponse.path;
+    } catch (error) {
+        console.error("Failed to upload portrait:", error);
+        return null;
+    }
+}
+
 // Importer les NPCs sélectionnés depuis Comp/Con
-async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled', manualReplace = false) {
+async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled', manualReplace = false, downloadPortraits = false) {
     let mappings = null;
     if (manualReplace) {
         const npcsForMapping = npcs.map(npc => ({ name: npc.name }));
@@ -1296,7 +1498,7 @@ async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 
 
         try {
             progressDialog.addLog(`Importing: ${npc.name}...`, 'info');
-            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode, targetActor, keepName, progressDialog);
+            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode, targetActor, keepName, progressDialog, downloadPortraits);
 
             if (result.updated) {
                 updateCount++;
@@ -1308,6 +1510,7 @@ async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 
                 progressDialog.addLog(`✓ Created: ${npc.name}`, 'success');
             }
             successCount++;
+
         } catch (error) {
             console.error(`Error importing ${npc.name}:`, error);
             progressDialog.addLog(`✗ Failed: ${npc.name} - ${error.message}`, 'error');
@@ -1489,7 +1692,7 @@ function findExistingNPCsByLID(npcData) {
 }
 
 // Comparer un NPC de Comp/Con avec un acteur existant
-// Retourne: { status: 'new'|'unlinked'|'synced'|'modified', count: nombre }
+// Retourne: { status: 'new'|'unlinked'|'synced'|'modified', count: nombre, reasons: [] }
 function compareNPCWithActor(npcData, actors) {
     // Aucun acteur trouvé par LID
     if (!actors || actors.length === 0) {
@@ -1500,83 +1703,137 @@ function compareNPCWithActor(npcData, actors) {
                 a.type === 'npc' && a.name.toLowerCase() === nameLower
             );
             if (actorsByName.length > 0) {
-                return { status: 'unlinked', count: actorsByName.length };
+                return { status: 'unlinked', count: actorsByName.length, reasons: [] };
             }
         }
-        return { status: 'new', count: 0 };
+        return { status: 'new', count: 0, reasons: [] };
     }
 
     const actor = actors[0];
+    const reasons = [];
 
-    // Comparer le NOM
-    if (npcData.name !== actor.name) return { status: 'modified', count: actors.length };
+    // Note: On ne compare PAS le nom - il est préservé lors des updates
 
     // Comparer le TIER (sauf custom)
     const npcTier = parseTier(npcData.tier);
     if (npcData.tier !== 'custom' && npcTier !== actor.system.tier) {
-        return { status: 'modified', count: actors.length };
+        reasons.push(`tier changed: ${actor.system.tier} → ${npcTier}`);
     }
 
-    // Comparer les ITEMS (Class + Templates + Features)
-    const npcItems = [
-        ...(npcData.items || []).map(item => item.itemID),
-        ...(npcData.templates || []),
-        npcData.class
-    ].filter(lid => lid).sort();
+    // Comparer les ITEMS par type (Class, Templates, Features)
 
-    const actorItems = actor.items
-        .map(item => item.system.lid)
+    // 1. Comparer la CLASSE
+    const actorClass = actor.items.find(i => i.type === 'npc_class');
+    const actorClassLid = actorClass?.system.lid;
+    if (npcData.class !== actorClassLid) {
+        reasons.push(`class: ${actorClassLid || 'none'} → ${npcData.class || 'none'}`);
+    }
+
+    // 2. Comparer les TEMPLATES
+    const npcTemplates = (npcData.templates || []).filter(lid => lid).sort();
+    const actorTemplates = actor.items
+        .filter(i => i.type === 'npc_template')
+        .map(i => i.system.lid)
         .filter(lid => lid)
         .sort();
 
-    if (npcItems.length !== actorItems.length) return { status: 'modified', count: actors.length };
-
-    for (let i = 0; i < npcItems.length; i++) {
-        if (npcItems[i] !== actorItems[i]) return { status: 'modified', count: actors.length };
+    // Différence neutre - on ne sait pas lequel est "l'original"
+    if (npcTemplates.length !== actorTemplates.length ||
+        !npcTemplates.every((lid, i) => lid === actorTemplates[i])) {
+        reasons.push(`templates: ${actorTemplates.length} → ${npcTemplates.length}`);
     }
 
-    // Comparer les STATS
+    // 3. Comparer les FEATURES
+    const npcFeatures = (npcData.items || [])
+        .map(item => item.itemID)
+        .filter(lid => lid)
+        .sort();
+    const actorFeatures = actor.items
+        .filter(i => i.type === 'npc_feature')
+        .map(i => i.system.lid)
+        .filter(lid => lid)
+        .sort();
+
+    // Différence neutre
+    if (npcFeatures.length !== actorFeatures.length ||
+        !npcFeatures.every((lid, i) => lid === actorFeatures[i])) {
+        reasons.push(`features: ${actorFeatures.length} → ${npcFeatures.length}`);
+    }
+
+    // Comparer les STATS de BASE de la classe (pas les stats totales de l'acteur qui incluent les bonus d'items)
     const stats = npcData.stats || {};
 
-    const statChecks = [
-        ['hp', 'system.hp.max'],
-        ['armor', 'system.armor'],
-        ['evade', 'system.evasion'],
-        ['edef', 'system.edef'],
-        ['heatcap', 'system.heat.max'],
-        ['sensor', 'system.sensor_range'],
-        ['save', 'system.save'],
-        ['speed', 'system.speed'],
-        ['size', 'system.size'],
-        ['activations', 'system.activations'],
-        ['hull', 'system.hull'],
-        ['agility', 'system.agi'],
-        ['systems', 'system.sys'],
-        ['engineering', 'system.eng'],
-        ['structure', 'system.structure.max'],
-        ['stress', 'system.stress.max']
-    ];
+    // Trouver la classe NPC
+    const npcClass = actor.items.find(i => i.type === 'npc_class');
 
-    for (const [ccKey, foundryPath] of statChecks) {
-        if (stats[ccKey] !== undefined) {
-            const actorValue = foundry.utils.getProperty(actor, foundryPath);
+    if (npcClass && npcClass.system.base_stats) {
+        // Déterminer le tier à utiliser pour la comparaison
+        // Custom tier = toujours tier 0 (index 0)
+        // Autres tiers = tier actuel (tier 1 = index 0, tier 2 = index 1, tier 3 = index 2)
+        const isCustomTier = npcData.tier === 'custom';
+        const tierIndex = isCustomTier ? 0 : Math.max(0, actor.system.tier - 1);
+        const baseStats = npcClass.system.base_stats[tierIndex];
 
-            if (actorValue != stats[ccKey]) {
-                return { status: 'modified', count: actors.length };
+        if (baseStats) {
+            const statChecks = [
+                ['hp', 'hp', 'HP'],
+                ['armor', 'armor', 'Armor'],
+                ['evade', 'evasion', 'Evasion'],
+                ['edef', 'edef', 'E-Defense'],
+                ['heatcap', 'heatcap', 'Heat Cap'],
+                ['sensor', 'sensor_range', 'Sensors'],
+                ['save', 'save', 'Save'],
+                ['speed', 'speed', 'Speed'],
+                ['size', 'size', 'Size'],
+                ['activations', 'activations', 'Activations'],
+                ['hull', 'hull', 'Hull'],
+                ['agility', 'agi', 'Agility'],
+                ['systems', 'sys', 'Systems'],
+                ['engineering', 'eng', 'Engineering'],
+                ['structure', 'structure', 'Structure'],
+                ['stress', 'stress', 'Stress']
+            ];
+
+            for (const [ccKey, baseStatKey, displayName] of statChecks) {
+                if (stats[ccKey] !== undefined) {
+                    // Skip size comparison if it's custom (> 4) - we preserve custom sizes
+                    if (ccKey === 'size' && actor.system.size > 4) {
+                        continue;
+                    }
+
+                    const baseValue = baseStats[baseStatKey];
+
+                    if (baseValue != stats[ccKey]) {
+                        reasons.push(`${displayName}: ${baseValue} → ${stats[ccKey]}`);
+                    }
+                }
             }
         }
     }
 
-    return { status: 'synced', count: actors.length };
+    if (reasons.length > 0) {
+        return { status: 'modified', count: actors.length, reasons };
+    }
+
+    return { status: 'synced', count: actors.length, reasons: [] };
 }
 
 // Fonction principale d'import d'un NPC depuis Comp/Con
-async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled', targetActor = null, keepName = false, progressDialog = null) {
+async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled', targetActor = null, keepName = false, progressDialog = null, downloadPortraits = false) {
     const isCustomTier = npcData.tier === 'custom';
 
     // Déterminer les acteurs à mettre à jour
     let existingActors = [];
     let isReplace = false;
+    let localImagePath = null;
+
+     if (downloadPortraits && npcData.cloud_portrait) {
+        progressDialog?.addLog(`  Uploading portrait to server...`, 'info');
+        localImagePath = await uploadPortraitToServer(npcData.cloud_portrait, npcData.name);
+        if (localImagePath) {
+            progressDialog?.addLog(`  ✓ Portrait saved: ${localImagePath}`, 'success');
+        }
+    }
 
     if (targetActor) {
         // Manual replace: utiliser l'acteur spécifié
@@ -1639,7 +1896,10 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
                 console.log(`Preserving custom size (${existingActor.system.size}) for ${existingActor.name}`);
             }
 
-            const finalName = (isReplace && keepName) ? existingActor.name : npcData.name;
+            // Déterminer si on change le nom :
+            // - Update normal : jamais changer le nom (garder celui de l'acteur)
+            // - Replace manuel : changer seulement si keepName=false
+            const finalName = (isReplace && !keepName) ? npcData.name : existingActor.name;
 
             await existingActor.update({
                 name: finalName,
@@ -1655,14 +1915,20 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             wasUpdated = true;
         }
     } else {
-        // Créer un nouvel acteur
+        const finalImg = localImagePath || npcData.cloud_portrait || npcData.localImage || '';
+        const finalImgForToken = localImagePath || npcData.localImage || '';
+        
         const actorData = {
             name: npcData.name,
             type: 'npc',
             system: systemData,
-            img: npcData.cloud_portrait || npcData.localImage || 'icons/svg/mystery-man.svg'
+            img: finalImg,
+            prototypeToken: {
+                texture: {
+                    src: finalImgForToken
+                }
+            }
         };
-
         actor = await Actor.create(actorData);
         if (!actor) throw new Error('Failed to create NPC actor');
     }
@@ -1772,10 +2038,12 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
 
         await applyFeatureCustomizations(actorToUpdate, npcData, progressDialog);
 
-        // Reset HP au max et heat à 0
+        // Reset HP, structure et stress au max, heat à 0
         await actorToUpdate.update({
             'system.hp.value': actorToUpdate.system.hp.max,
-            'system.heat.value': 0
+            'system.heat.value': 0,
+            'system.structure.value': actorToUpdate.system.structure.max,
+            'system.stress.value': actorToUpdate.system.stress.max
         });
     }
 
