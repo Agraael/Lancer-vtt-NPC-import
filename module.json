@@ -15,19 +15,15 @@
   "esmodules": [
     "scripts/lancer-npc-import.js"
   ],
+  "styles": [
+    "styles/lancer-dialogs.css"
+  ],
   "relationships": {
     "systems": [{
       "id": "lancer",
       "type": "system",
       "compatibility": {
         "minimum": "2.0.0"
-      }
-    }],
-    "requires": [{
-      "id": "lancer-style-library",
-      "type": "module",
-      "compatibility": {
-        "minimum": "1.0.0"
       }
     }]
   },
