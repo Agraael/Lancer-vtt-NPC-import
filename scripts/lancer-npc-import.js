@@ -29,14 +29,6 @@ class NPCImportDialog extends Dialog {
         super({
             title: "NPC Import",
             content: `
-                <style>
-                    .lancer-item-icon {
-                        font-size: 32px;
-                    }
-                    .lancer-item-name {
-                        font-size: 15px;
-                    }
-                </style>
                 <div class="lancer-dialog-base">
                     <div class="lancer-dialog-header">
                         <div class="lancer-dialog-title">NPC IMPORT // SOURCE SELECTION</div>
@@ -69,7 +61,8 @@ class NPCImportDialog extends Dialog {
             close: () => {}
         }, {
             width: 450,
-            height: "auto"
+            height: "auto",
+            classes: ["npc-import-dialog", "lancer-dialog-base", "lancer-no-title"]
         });
     }
 
@@ -102,77 +95,6 @@ class ImportProgressDialog {
         const progress = Math.round((this.currentCount / this.totalCount) * 100);
 
         const content = `
-            <style>
-                .import-progress-container {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                    height: 100%;       /* Prend toute la hauteur du parent (.dialog-content) */
-                    overflow: hidden;   /* Empêche le scroll sur le conteneur global */
-                }
-                .import-progress-bar-container {
-                    width: 100%;
-                    background: #1a1a1a;
-                    border: 2px solid #991e2a;
-                    border-radius: 5px;
-                    overflow: hidden;
-                    height: 35px;
-                    min-height: 35px;   /* Fixe la hauteur */
-                    position: relative;
-                    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
-                    flex-shrink: 0;     /* Ne jamais rétrécir la barre */
-                }
-                .import-progress-bar {
-                    height: 100%;
-                    background: linear-gradient(90deg, #991e2a, #d32f2f);
-                    transition: width 0.3s ease;
-                    box-shadow: 0 0 10px rgba(153, 30, 42, 0.5);
-                }
-                .import-progress-text {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: bold;
-                    font-size: 14px;
-                    color: #fff;
-                    text-shadow: 0 0 8px rgba(0,0,0,1), 1px 1px 2px rgba(0,0,0,1);
-                    z-index: 1;
-                }
-                .import-log-container {
-                    background: #1a1a1a;
-                    border: 1px solid #444;
-                    border-radius: 3px;
-                    padding: 10px;
-                    overflow-y: auto;       /* Scroll uniquement ici */
-                    overflow-x: hidden;
-                    font-family: 'Courier New', monospace;
-                    font-size: 13px;
-                    line-height: 1.5;
-                    flex: 1;                /* C'EST LA CLÉ : prend tout l'espace restant */
-                    min-height: 0;          /* Nécessaire pour que le scroll fonctionne dans un flex */
-                }
-                .import-log-entry {
-                    padding: 4px 0;
-                    border-bottom: 1px solid #2a2a2a;
-                }
-                .import-log-entry:last-child {
-                    border-bottom: none;
-                }
-                .import-log-entry.info { color: #e0e0e0; }
-                .import-log-entry.success { color: #66bb6a; font-weight: 500; }
-                .import-log-entry.warning { color: #ffa726; }
-                .import-log-entry.error { color: #ef5350; font-weight: 500; }
-                .import-log-timestamp {
-                    color: #888;
-                    margin-right: 10px;
-                    font-weight: normal;
-                }
-            </style>
             <div class="import-progress-container">
                 <div class="import-progress-bar-container">
                     <div class="import-progress-bar" style="width: ${progress}%"></div>
@@ -202,58 +124,23 @@ class ImportProgressDialog {
                 title: "NPC Import Progress",
                 content: content,
                 buttons: buttons,
-                close: () => { this.dialog = null; }
+                close: () => {
+                    this.dialog = null;
+                }
             }, {
                 width: 600,
                 height: 500, // Hauteur fixe
                 resizable: true,
-                classes: ["lancer-import-progress-dialog"]
+                classes: ["lancer-import-progress-dialog", "lancer-dialog-base", "lancer-no-title"]
             });
             this.dialog.render(true);
-
-            // Corrige le "vide gris" avec flexbox
-            setTimeout(() => {
-                if (this.dialog.element) {
-                    const style = document.createElement('style');
-                    style.textContent = `
-                        /* Force la fenêtre à utiliser Flexbox vertical */
-                        .lancer-import-progress-dialog .window-content {
-                            display: flex !important;
-                            flex-direction: column !important;
-                            height: 100% !important;
-                            overflow: hidden !important;
-                            padding: 0 !important;
-                        }
-                        
-                        /* Force le contenu de la dialog à s'étendre */
-                        .lancer-import-progress-dialog .dialog-content {
-                            flex: 1 !important; /* Prend tout l'espace disponible */
-                            display: flex !important;
-                            flex-direction: column !important;
-                            min-height: 0 !important; /* Important pour le scroll interne */
-                            padding: 12px !important;
-                            overflow: hidden !important; /* Laisse le scroll à .import-log-container */
-                        }
-                        
-                        /* Garde les boutons en bas sans qu'ils ne s'étirent */
-                        .lancer-import-progress-dialog .dialog-buttons {
-                            flex: 0 0 auto !important;
-                            background: rgba(0,0,0,0.1);
-                            border-top: 1px solid #333;
-                            padding: 10px !important;
-                            z-index: 10;
-                        }
-                    `;
-                    this.dialog.element[0].appendChild(style);
-                }
-            }, 10);
         } else {
             if (this.dialog.element) {
                 const contentDiv = this.dialog.element.find('.dialog-content')[0];
                 if (contentDiv) {
                     const logContainer = this.dialog.element.find('#import-log')[0];
                     const wasAtBottom = logContainer ? (logContainer.scrollHeight - logContainer.scrollTop === logContainer.clientHeight) : true;
-                    
+
                     contentDiv.innerHTML = content;
 
                     if (wasAtBottom) {
@@ -360,19 +247,6 @@ async function importFromFiles() {
         },
         default: "import",
         render: (html) => {
-            const dialogElem = html.closest('.dialog');
-            const buttons = dialogElem.find('.dialog-buttons');
-            buttons.css({
-                'height': 'auto',
-                'min-height': '50px',
-                'flex': '0 0 auto'
-            });
-            buttons.find('button').css({
-                'height': 'auto',
-                'padding': '8px 16px',
-                'line-height': 'normal'
-            });
-
             html.find('.lancer-toggle-card').click(function() {
                 const setting = $(this).data('setting');
                 const isActive = $(this).hasClass('active');
@@ -405,6 +279,8 @@ async function importFromFiles() {
                 html.find('#custom-tier-mode').val(mode);
             });
         }
+    }, {
+        classes: ["lancer-file-import-dialog", "lancer-dialog-base", "lancer-no-title"]
     });
 
     scalingDialog.render(true);
@@ -419,84 +295,6 @@ async function selectActorMappings(npcsToImport) {
             ${allActors.map(actor => `<option value="${actor.id}">${actor.name}  (${actor.system.class.name ? actor.system.class.name : 'Unknown'})-(${actor.system.tier ? 'T' + actor.system.tier : 'Unknown'})</option>`).join('')}`;
 
         const content = `
-            <style>
-                .lancer-dialog-base {
-                    display: flex;
-                    flex-direction: column;
-                    height: 100%;
-                    overflow: hidden;
-                }
-                
-                .lancer-dialog-header {
-                    flex: 0 0 auto;
-                    margin-bottom: 10px;
-                    padding-right: 5px;
-                }
-
-                .mapping-list {
-                    flex: 1;
-                    overflow-y: auto;
-                    overflow-x: hidden;
-                    padding-right: 5px;
-                    padding-bottom: 5px;
-                    scrollbar-width: thin;
-                    scrollbar-color: #991e2a #1a1a1a;
-                }
-                
-                .mapping-list::-webkit-scrollbar { width: 8px; }
-                .mapping-list::-webkit-scrollbar-track { background: #1a1a1a; }
-                .mapping-list::-webkit-scrollbar-thumb { background-color: #991e2a; border-radius: 4px; }
-
-                .mapping-item {
-                    padding: 12px;
-                    margin-bottom: 10px;
-                    background: rgba(0,0,0,0.2);
-                    border-radius: 3px;
-                    border-left: 3px solid #991e2a;
-                }
-                .mapping-item-header {
-                    font-weight: bold;
-                    margin-bottom: 8px;
-                    color: #fff;
-                    font-size: 14px;
-                }
-                .mapping-item-controls {
-                    display: grid;
-                    gap: 8px;
-                }
-                .mapping-item select {
-                    width: 100%;
-                    padding: 6px;
-                    font-size: 13px;
-                    background: #f0f0f0;
-                    color: #000;
-                    border: 1px solid #ccc;
-                    border-radius: 3px;
-                }
-                .mapping-item select option {
-                    color: #000;
-                    background: #fff;
-                }
-                .mapping-item .keep-name-toggle {
-                    display: none;
-                    padding: 6px 10px;
-                    background: rgba(0,0,0,0.2);
-                    border-radius: 3px;
-                    cursor: pointer;
-                    font-size: 12px;
-                    border: 1px solid rgba(255,255,255,0.1);
-                    color: #fff;
-                }
-                .mapping-item .keep-name-toggle.visible {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-                .mapping-item .keep-name-toggle.active {
-                    background: rgba(153, 30, 42, 0.3);
-                    border-color: #991e2a;
-                }
-            </style>
             <div class="lancer-dialog-base">
                 <div class="lancer-dialog-header">
                     <div class="lancer-dialog-title">MANUAL REPLACE // TARGET MAPPING</div>
@@ -552,37 +350,6 @@ async function selectActorMappings(npcsToImport) {
             },
             default: "import",
             render: (html) => {
-                const win = html.closest('.window-app');
-                
-                win.find('.window-content').css({
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    height: '100%',
-                    padding: '0'
-                });
-
-                win.find('.dialog-content').css({
-                    flex: '1',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    minHeight: '0',
-                    padding: '10px'
-                });
-
-                win.find('.dialog-buttons').css({
-                    flex: '0 0 auto',
-                    zIndex: '10',
-                    background: 'rgba(0,0,0,0.2)'
-                });
-
-                const buttons = win.find('.dialog-buttons');
-                buttons.css({
-                    height: 'auto',
-                    minHeight: '50px'
-                });
-
                 html.find('.target-select').on('change', function() {
                     const index = $(this).data('index');
                     const selectedValue = $(this).val();
@@ -611,7 +378,7 @@ async function selectActorMappings(npcsToImport) {
         }, {
             width: 600,
             height: 600,
-            classes: ["mapping-dialog"],
+            classes: ["mapping-dialog", "lancer-dialog-base", "lancer-no-title"],
             resizable: true
         });
 
@@ -627,7 +394,8 @@ async function selectAndImportFiles(customTierMode, updateExisting = true, manua
 
     input.onchange = async (e) => {
         const files = Array.from(e.target.files);
-        if (files.length === 0) return;
+        if (files.length === 0)
+            return;
 
         const npcsToImport = [];
         for (const file of files) {
@@ -706,10 +474,14 @@ async function selectAndImportFiles(customTierMode, updateExisting = true, manua
 
         let summaryParts = [];
         const created = successCount - replaceCount - updateCount;
-        if (created > 0) summaryParts.push(`${created} created`);
-        if (updateCount > 0) summaryParts.push(`${updateCount} updated`);
-        if (replaceCount > 0) summaryParts.push(`${replaceCount} replaced`);
-        if (errorCount > 0) summaryParts.push(`${errorCount} failed`);
+        if (created > 0)
+            summaryParts.push(`${created} created`);
+        if (updateCount > 0)
+            summaryParts.push(`${updateCount} updated`);
+        if (replaceCount > 0)
+            summaryParts.push(`${replaceCount} replaced`);
+        if (errorCount > 0)
+            summaryParts.push(`${errorCount} failed`);
 
         const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
         progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
@@ -900,150 +672,6 @@ class NPCSelectionDialog extends Dialog {
     constructor(npcs) {
         const isDownloadChecked = game.settings.get("lancer-npc-import", "defaultDownloadPortrait") ? "checked" : "";
         const content = `
-            <style>
-                .npc-import-options {
-                    margin-bottom: 8px;
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 10px;
-                }
-                .npc-import-options-left {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                }
-                .npc-import-options-right {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                }
-                .npc-import-options .lancer-toggle-card {
-                    padding: 6px 10px;
-                    margin-bottom: 0;
-                }
-                .npc-import-options .lancer-toggle-card-icon {
-                    font-size: 14px;
-                    width: 24px;
-                    height: 24px;
-                }
-                .npc-import-options .lancer-toggle-card-text {
-                    font-size: 13px;
-                }
-                .npc-import-options .lancer-section-title {
-                    font-size: 12px;
-                    margin: 0 0 6px 0;
-                    padding: 0;
-                }
-                .npc-import-options .lancer-scaling-card .lancer-toggle-card-icon {
-                    font-size: 18px;
-                }
-                .npc-import-options .lancer-scaling-card .lancer-toggle-card-text {
-                    text-align: left !important;
-                }
-                .lancer-action-btn {
-                    padding: 6px 12px !important;
-                    height: auto !important;
-                }
-                .npc-list-container {
-                    max-height: 500px;
-                    min-height: auto;
-                }
-                .npc-list-container p {
-                    color: #000000;
-                    font-weight: 600;
-                }
-                .lancer-list {
-                    display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 8px;
-                    height: 500px;
-                    overflow-y: auto;
-                    overflow-x: hidden;
-                    align-content: start;
-                }
-                .npc-checkbox {
-                    margin: 0 10px 0 0;
-                    cursor: pointer;
-                    width: 18px;
-                    height: 18px;
-                }
-                .npc-info {
-                    flex: 1;
-                }
-                .npc-name {
-                    font-weight: bold;
-                    color: #000000;
-                    margin-bottom: 3px;
-                }
-                .npc-details {
-                    font-size: 0.9em;
-                    color: #333333;
-                }
-                .npc-portrait {
-                    width: 48px;
-                    height: 48px;
-                    object-fit: cover;
-                    border-radius: 3px;
-                    margin-left: 10px;
-                    flex-shrink: 0;
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                }
-                .lancer-list-item {
-                    position: relative;
-                    min-height: 80px;
-                    max-height: 80px;
-                    flex-shrink: 0;
-                }
-                .npc-status-badge {
-                    position: absolute;
-                    top: 8px;
-                    right: 8px;
-                    padding: 2px 5px;
-                    border-radius: 10px;
-                    font-size: 10px;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    letter-spacing: 0px;
-                    z-index: 10;
-                    cursor: help;
-                }
-                .npc-status-badge.synced {
-                    background: rgba(76, 175, 80, 0.9);
-                    color: #fff;
-                }
-                .npc-status-badge.modified {
-                    background: rgba(255, 152, 0, 0.9);
-                    color: #fff;
-                }
-                .npc-status-badge.new {
-                    background: rgba(33, 150, 243, 0.9);
-                    color: #fff;
-                }
-                .npc-status-badge.unlinked {
-                    background: rgba(156, 39, 176, 0.9);
-                    color: #fff;
-                }
-                .lancer-list-item[data-status="synced"] {
-                    border-left: 3px solid #4CAF50;
-                }
-                .lancer-list-item[data-status="modified"] {
-                    border-left: 3px solid #FF9800;
-                }
-                .lancer-list-item[data-status="new"] {
-                    border-left: 3px solid #2196F3;
-                }
-                .lancer-list-item[data-status="unlinked"] {
-                    border-left: 3px solid #9C27B0;
-                }
-                .status-filter-btn:hover:not(.active) {
-                    opacity: 0.8;
-                    transform: translateY(-1px);
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                }
-                .status-filter-btn.active {
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-                }
-            </style>
             <div class="lancer-dialog-base">
                 <div class="lancer-dialog-header">
                     <div class="lancer-dialog-title">COMP/CON IMPORT // NPC SELECTION</div>
@@ -1077,9 +705,9 @@ class NPCSelectionDialog extends Dialog {
                     </div>
                 </div>
                 <div class="npc-list-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <p style="margin: 0; color: #000000; font-weight: 600;">Select NPCs</p>
-                        <p style="margin: 0; color: #991e2a; font-weight: 600;">
+                    <div class="npc-list-header">
+                        <p class="npc-list-label">Select NPCs</p>
+                        <p class="npc-list-count">
                             <span id="selected-count">0</span> selected
                         </p>
                     </div>
@@ -1087,84 +715,74 @@ class NPCSelectionDialog extends Dialog {
                         <i class="fas fa-search lancer-search-icon"></i>
                         <input type="text" id="npc-search" placeholder="Search NPCs by name" autocomplete="off">
                     </div>
-                    <div class="lancer-status-filters" style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
-                        <button type="button" class="status-filter-btn active" data-status="all" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #991e2a; border-radius: 4px; background: #991e2a; color: white; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
-                            All
-                        </button>
-                        <button type="button" class="status-filter-btn" data-status="new" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #2196F3; border-radius: 4px; background: white; color: #2196F3; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
-                            + New
-                        </button>
-                        <button type="button" class="status-filter-btn" data-status="synced" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #4CAF50; border-radius: 4px; background: white; color: #4CAF50; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
-                            ✓ Synced
-                        </button>
-                        <button type="button" class="status-filter-btn" data-status="modified" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #FF9800; border-radius: 4px; background: white; color: #FF9800; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
-                            ⚠ Modified
-                        </button>
-                        <button type="button" class="status-filter-btn" data-status="unlinked" style="flex: 1; min-width: 55px; padding: 4px 8px; border: 1px solid #9C27B0; border-radius: 4px; background: white; color: #9C27B0; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">
-                            ? Unlinked
-                        </button>
+                    <div class="lancer-status-filters">
+                        <button type="button" class="status-filter-btn active" data-status="all">All</button>
+                        <button type="button" class="status-filter-btn" data-status="new">+ New</button>
+                        <button type="button" class="status-filter-btn" data-status="synced">✓ Synced</button>
+                        <button type="button" class="status-filter-btn" data-status="modified">⚠ Modified</button>
+                        <button type="button" class="status-filter-btn" data-status="unlinked">? Unlinked</button>
                     </div>
                     <div class="lancer-list">
                         ${npcs.map((npc, index) => {
-                            const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
+        const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
 
-                            const existingActors = findExistingNPCsByLID(npc.json);
-                            const comparison = compareNPCWithActor(npc.json, existingActors);
-                            const status = comparison.status;
-                            const count = comparison.count;
-                            const reasons = comparison.reasons || [];
+        const existingActors = findExistingNPCsByLID(npc.json);
+        const comparison = compareNPCWithActor(npc.json, existingActors);
+        const status = comparison.status;
+        const count = comparison.count;
+        const reasons = comparison.reasons || [];
 
-                            // Récupérer la liste des acteurs (par LID ou par nom)
-                            let actorsList = [];
-                            if (existingActors.length > 0) {
-                                actorsList = existingActors;
-                            } else if (status === 'unlinked' && npc.json.name) {
-                                const nameLower = npc.json.name.toLowerCase();
-                                actorsList = game.actors.filter(a =>
-                                    a.type === 'npc' && a.name.toLowerCase() === nameLower
-                                );
-                            }
+        // Récupérer la liste des acteurs (par LID ou par nom)
+        let actorsList = [];
+        if (existingActors.length > 0) {
+            actorsList = existingActors;
+        } else if (status === 'unlinked' && npc.json.name) {
+            const nameLower = npc.json.name.toLowerCase();
+            actorsList = game.actors.filter(a =>
+                a.type === 'npc' && a.name.toLowerCase() === nameLower
+            );
+        }
 
-                            let badgeText = '';
-                            let badgeTooltip = '';
+        let badgeText = '';
+        let badgeTooltip = '';
 
-                            if (status === 'synced') {
-                                badgeText = count > 1 ? `✓ (×${count})` : '✓';
-                                badgeTooltip = count > 1
-                                    ? `NPC is up to date (${count} copies in world)`
-                                    : 'NPC is up to date';
-                            } else if (status === 'modified') {
-                                badgeText = count > 1 ? `⚠ (×${count})` : '⚠';
-                                const baseTooltip = count > 1
-                                    ? `NPC has changes (${count} copies in world)`
-                                    : 'NPC has changes';
+        if (status === 'synced') {
+            badgeText = count > 1 ? `✓ (×${count})` : '✓';
+            badgeTooltip = count > 1
+                ? `NPC is up to date (${count} copies in world)`
+                : 'NPC is up to date';
+        } else if (status === 'modified') {
+            badgeText = count > 1 ? `⚠ (×${count})` : '⚠';
+            const baseTooltip = count > 1
+                ? `NPC has changes (${count} copies in world)`
+                : 'NPC has changes';
 
-                                // Ajouter les raisons des modifications
-                                if (reasons.length > 0) {
-                                    const reasonsList = reasons.map(r => "- " + r).join('\n');
-                                    badgeTooltip = `${baseTooltip}\nReasons:\n${reasonsList}`;
-                                } else {
-                                    badgeTooltip = baseTooltip;
-                                }
-                            } else if (status === 'new') {
-                                badgeText = '+';
-                                badgeTooltip = 'NPC does not exist in world';
-                            } else if (status === 'unlinked') {
-                                badgeText = count > 1 ? `? (×${count})` : '?';
-                                badgeTooltip = count > 1
-                                    ? `NPC with same name exists but not linked (${count} found)`
-                                    : 'NPC with same name exists but not linked (no LID)';
-                            }
+            // Ajouter les raisons des modifications
+            if (reasons.length > 0) {
+                const reasonsList = reasons.map(r => "- " + r).join('\n');
+                badgeTooltip = `${baseTooltip}\nReasons:\n${reasonsList}`;
+            } else {
+                badgeTooltip = baseTooltip;
+            }
+        } else if (status === 'new') {
+            badgeText = '+';
+            badgeTooltip = 'NPC does not exist in world';
+        } else if (status === 'unlinked') {
+            badgeText = count > 1 ? `? (×${count})` : '?';
+            badgeTooltip = count > 1
+                ? `NPC with same name exists but not linked (${count} found)`
+                : 'NPC with same name exists but not linked (no LID)';
+        }
 
-                            // Ajouter la liste des acteurs au tooltip
-                            if (actorsList.length > 0) {
-                                const actorNames = actorsList.map(a => "- " + a.name).join('\n');
-                                badgeTooltip += '\nActors:\n' + actorNames;
-                            }
+        // Ajouter la liste des acteurs au tooltip
+        if (actorsList.length > 0) {
+            const actorNames = actorsList.map(a => "- " + a.name).join('\n');
+            badgeTooltip += '\nActors:\n' + actorNames;
+        }
 
-                            const badgeHTML = badgeText ? `<div class="npc-status-badge ${status}" title="${badgeTooltip}">${badgeText}</div>` : '';
+        const badgeHTML = badgeText ? `<div class="npc-status-badge ${status}" title="${badgeTooltip}">${badgeText}</div>` : '';
 
-                            return `
+        return `
                             <label class="lancer-list-item" data-npc-name="${npc.name.toLowerCase()}" data-npc-class="${npc.class.toLowerCase()}" data-npc-tier="${npc.tier}" data-npc-tag="${(npc.tag || '').toLowerCase()}" data-status="${status}">
                                 ${badgeHTML}
                                 <input type="checkbox" class="npc-checkbox" data-index="${index}">
@@ -1176,7 +794,8 @@ class NPCSelectionDialog extends Dialog {
                                 </div>
                                 ${imageUrl ? `<img src="${imageUrl}" class="npc-portrait" alt="${npc.name}">` : ''}
                             </label>
-                        `;}).join('')}
+                        `;
+    }).join('')}
                     </div>
                 </div>
                 <div class="lancer-action-buttons">
@@ -1189,8 +808,8 @@ class NPCSelectionDialog extends Dialog {
                     <button type="button" id="link-actors" class="lancer-action-btn">
                         <i class="fas fa-link"></i> Link Actors
                     </button>
-                    <label class="lancer-action-btn" style="display: inline-flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
-                        <input type="checkbox" id="download-portraits-check" ${isDownloadChecked} style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+                    <label class="lancer-action-btn lancer-action-btn--inline">
+                        <input type="checkbox" id="download-portraits-check" ${isDownloadChecked} class="lancer-action-btn__checkbox">
                         <i class="fas fa-download"></i> Save Portraits to Server
                     </label>
                 </div>
@@ -1232,7 +851,7 @@ class NPCSelectionDialog extends Dialog {
         }, {
             width: 850,
             height: "auto",
-            classes: ["npc-import-dialog"]
+            classes: ["npc-import-dialog", "lancer-dialog-base", "lancer-no-title"]
         });
 
         this.npcs = npcs;
@@ -1240,18 +859,6 @@ class NPCSelectionDialog extends Dialog {
 
     activateListeners(html) {
         super.activateListeners(html);
-
-        const dialog = html.closest('.dialog');
-        const buttons = dialog.find('.dialog-buttons');
-        buttons.css({
-            'height': 'auto',
-            'min-height': '50px',
-            'flex': '0 0 auto'
-        });
-        buttons.find('button').css({
-            'height': 'auto',
-            'padding': '8px 16px'
-        });
 
         html.find('.lancer-toggle-card').click(function() {
             const setting = $(this).data('setting');
@@ -1330,44 +937,9 @@ class NPCSelectionDialog extends Dialog {
 
         // Boutons de filtre par statut
         html.find('.status-filter-btn').on('click', function() {
-            const $btn = $(this);
-            const status = $btn.data('status');
-
-            // Retirer la classe active de tous les boutons
-            html.find('.status-filter-btn').removeClass('active').each(function() {
-                const btnStatus = $(this).data('status');
-                const isActive = btnStatus === status;
-
-                // Styles pour bouton actif/inactif
-                if (isActive) {
-                    $(this).addClass('active');
-                    if (btnStatus === 'all') {
-                        $(this).css({ background: '#991e2a', color: 'white' });
-                    } else if (btnStatus === 'synced') {
-                        $(this).css({ background: '#4CAF50', color: 'white' });
-                    } else if (btnStatus === 'modified') {
-                        $(this).css({ background: '#FF9800', color: 'white' });
-                    } else if (btnStatus === 'new') {
-                        $(this).css({ background: '#2196F3', color: 'white' });
-                    } else if (btnStatus === 'unlinked') {
-                        $(this).css({ background: '#9C27B0', color: 'white' });
-                    }
-                } else {
-                    if (btnStatus === 'all') {
-                        $(this).css({ background: 'white', color: '#991e2a' });
-                    } else if (btnStatus === 'synced') {
-                        $(this).css({ background: 'white', color: '#4CAF50' });
-                    } else if (btnStatus === 'modified') {
-                        $(this).css({ background: 'white', color: '#FF9800' });
-                    } else if (btnStatus === 'new') {
-                        $(this).css({ background: 'white', color: '#2196F3' });
-                    } else if (btnStatus === 'unlinked') {
-                        $(this).css({ background: 'white', color: '#9C27B0' });
-                    }
-                }
-            });
-
-            // Appliquer le filtre
+            const status = $(this).data('status');
+            html.find('.status-filter-btn').removeClass('active');
+            $(this).addClass('active');
             currentStatusFilter = status;
             applyFilters();
         });
@@ -1434,12 +1006,13 @@ class NPCSelectionDialog extends Dialog {
 }
 
 async function uploadPortraitToServer(url, npcName) {
-    if (!url) return null;
+    if (!url)
+        return null;
 
     const subFolder = game.settings.get("lancer-npc-import", "portraitStoragePath");
     const folderPath = `modules/lancer-npc-import/${subFolder}`;
     const proxyUrl = "https://corsproxy.io/?"; //Pour éviter le blocage CORS
-    
+
     try {
         // 1. Créer le dossier s'il n'existe pas
         try {
@@ -1449,7 +1022,7 @@ async function uploadPortraitToServer(url, npcName) {
         // 2. Récupérer l'image via le proxy
         const response = await fetch(proxyUrl + encodeURIComponent(url));
         const blob = await response.blob();
-        
+
         // 3. Préparer le fichier
         const extension = url.split('.').pop().split(/\#|\?/)[0] || 'png';
         const fileName = `${npcName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
@@ -1522,10 +1095,14 @@ async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 
 
     let summaryParts = [];
     const created = successCount - replaceCount - updateCount;
-    if (created > 0) summaryParts.push(`${created} created`);
-    if (updateCount > 0) summaryParts.push(`${updateCount} updated`);
-    if (replaceCount > 0) summaryParts.push(`${replaceCount} replaced`);
-    if (errorCount > 0) summaryParts.push(`${errorCount} failed`);
+    if (created > 0)
+        summaryParts.push(`${created} created`);
+    if (updateCount > 0)
+        summaryParts.push(`${updateCount} updated`);
+    if (replaceCount > 0)
+        summaryParts.push(`${replaceCount} replaced`);
+    if (errorCount > 0)
+        summaryParts.push(`${errorCount} failed`);
 
     const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
     progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
@@ -1827,7 +1404,7 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
     let isReplace = false;
     let localImagePath = null;
 
-     if (downloadPortraits && npcData.cloud_portrait) {
+    if (downloadPortraits && npcData.cloud_portrait) {
         progressDialog?.addLog(`  Uploading portrait to server...`, 'info');
         localImagePath = await uploadPortraitToServer(npcData.cloud_portrait, npcData.name);
         if (localImagePath) {
@@ -1915,9 +1492,11 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             wasUpdated = true;
         }
     } else {
-        const finalImg = localImagePath || npcData.cloud_portrait || npcData.localImage || '';
+        const proxyUrl = "https://corsproxy.io/?";
+        const proxiedPortrait = npcData.cloud_portrait ? (proxyUrl + encodeURIComponent(npcData.cloud_portrait)) : '';
+        const finalImg = localImagePath || proxiedPortrait || npcData.localImage || '';
         const finalImgForToken = localImagePath || npcData.localImage || '';
-        
+
         const actorData = {
             name: npcData.name,
             type: 'npc',
@@ -1930,7 +1509,8 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             }
         };
         actor = await Actor.create(actorData);
-        if (!actor) throw new Error('Failed to create NPC actor');
+        if (!actor)
+            throw new Error('Failed to create NPC actor');
     }
 
     const classAndTemplates = [];
@@ -1970,11 +1550,16 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             const foundItem = await findItemByLid(ccItem.itemID, 'npc_feature');
             if (foundItem) {
                 const itemData = foundItem.toObject();
-                if (ccItem.flavorName) itemData.system.custom_name = ccItem.flavorName;
-                if (ccItem.description) itemData.system.custom_description = ccItem.description;
-                if (ccItem.tier !== undefined) itemData.system.tier = ccItem.tier;
-                if (ccItem.destroyed !== undefined) itemData.system.destroyed = ccItem.destroyed;
-                if (ccItem.uses !== undefined) itemData.system.uses = { value: ccItem.uses, max: ccItem.uses };
+                if (ccItem.flavorName)
+                    itemData.system.custom_name = ccItem.flavorName;
+                if (ccItem.description)
+                    itemData.system.custom_description = ccItem.description;
+                if (ccItem.tier !== undefined)
+                    itemData.system.tier = ccItem.tier;
+                if (ccItem.destroyed !== undefined)
+                    itemData.system.destroyed = ccItem.destroyed;
+                if (ccItem.uses !== undefined)
+                    itemData.system.uses = { value: ccItem.uses, max: ccItem.uses };
                 featuresToAdd.push(itemData);
             } else {
                 missingFeatures.push(ccItem.itemID);
@@ -2066,33 +1651,40 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
 
 async function findItemByLid(lid, itemType = null) {
     for (const pack of game.packs) {
-        if (pack.metadata.type !== 'Item') continue;
+        if (pack.metadata.type !== 'Item')
+            continue;
         const index = await pack.getIndex({ fields: ['system.lid', 'type'] });
         const entry = index.find(i => {
             const matchesLid = i.system?.lid === lid;
             const matchesType = itemType ? i.type === itemType : true;
             return matchesLid && matchesType;
         });
-        if (entry) return await pack.getDocument(entry._id);
+        if (entry)
+            return await pack.getDocument(entry._id);
     }
     return null;
 }
 
 function parseTier(tier) {
-    if (tier === 'custom') return 1;
-    if (typeof tier === 'number') return Math.max(1, Math.min(3, tier));
+    if (tier === 'custom')
+        return 1;
+    if (typeof tier === 'number')
+        return Math.max(1, Math.min(3, tier));
     if (typeof tier === 'string') {
         const num = parseInt(tier);
-        if (!isNaN(num)) return Math.max(1, Math.min(3, num));
+        if (!isNaN(num))
+            return Math.max(1, Math.min(3, num));
     }
     return 1;
 }
 
 Hooks.on('renderActorDirectory', (_app, html) => {
-    if (game.system.id !== 'lancer') return;
+    if (game.system.id !== 'lancer')
+        return;
 
     const headerActions = html.find('.header-actions.action-buttons');
-    if (headerActions.length === 0) return;
+    if (headerActions.length === 0)
+        return;
 
     const importButton = $(`
         <button class="import-npc-button" title="Import NPCs from Comp/Con or JSON files">

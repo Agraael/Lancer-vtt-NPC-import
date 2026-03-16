@@ -1,0 +1,557 @@
+/* ============================================================
+   lancer-npc-import.css
+   Theme-aware styles for Lancer NPC Import dialogs.
+   Uses Lancer system CSS variables (set by applyTheme()).
+   Semantic status colors (green/orange/blue/purple) are
+   intentionally hardcoded — they are not theme-dependent.
+   ============================================================ */
+
+/* --- Force dialog text to always be dark (Foundry default light dialog bg) --- */
+.npc-import-dialog .window-content,
+.lancer-file-import-dialog .window-content,
+.mapping-dialog .window-content,
+.lancer-import-progress-dialog .window-content {
+    color: var(--color-text-dark-primary);
+}
+
+/* --- Source selection dialog item sizing --- */
+.lancer-item-icon { font-size: 32px; }
+.lancer-item-name { font-size: 15px; }
+
+
+/* ============================================================
+   IMPORT PROGRESS DIALOG
+   ============================================================ */
+
+/* Force the progress dialog to use flex layout so the log
+   panel scrolls correctly while the bar stays fixed */
+.lancer-import-progress-dialog .window-content {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+.lancer-import-progress-dialog .dialog-content {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    padding: 12px !important;
+    overflow: hidden !important;
+}
+
+.lancer-import-progress-dialog .dialog-buttons {
+    flex: 0 0 auto !important;
+    padding: 10px !important;
+    z-index: 10;
+}
+
+.lancer-import-progress-dialog .dialog-buttons button {
+    height: auto !important;
+    padding: 10px 16px !important;
+    background: transparent !important;
+    border: 2px solid rgba(0, 0, 0, 0.2) !important;
+    border-radius: 6px !important;
+    color: var(--color-text-dark-primary) !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+    width: 100%;
+}
+
+.lancer-import-progress-dialog .dialog-buttons button:hover {
+    border-color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
+    box-shadow: 0 2px 8px var(--darken-3) !important;
+}
+
+.lancer-import-progress-dialog .dialog-buttons button i {
+    color: var(--primary-color);
+    margin-right: 5px;
+}
+
+.import-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+.import-progress-bar-container {
+    width: 100%;
+    background: var(--dark-gray-color);
+    border: 2px solid var(--primary-color);
+    border-radius: 5px;
+    overflow: hidden;
+    height: 35px;
+    min-height: 35px;
+    position: relative;
+    box-shadow: inset 0 2px 4px var(--darken-3);
+    flex-shrink: 0;
+}
+
+.import-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ef5350, #66bb6a);
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px rgba(102, 187, 106, 0.4);
+}
+
+.import-progress-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    color: var(--light-text);
+    text-shadow: 0 0 8px rgba(0,0,0,1), 1px 1px 2px rgba(0,0,0,1);
+    z-index: 1;
+}
+
+.import-log-container {
+    background: var(--dark-gray-color);
+    border: 1px solid color-mix(in srgb, var(--dark-text), transparent 70%);
+    border-radius: 3px;
+    padding: 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    flex: 1;
+    min-height: 0;
+}
+
+.import-log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--dark-text), transparent 80%);
+}
+
+.import-log-entry:last-child {
+    border-bottom: none;
+}
+
+/* Log entry severity colors — hardcoded semantic palette */
+.import-log-entry.info    { color: var(--light-text); }
+.import-log-entry.success { color: #66bb6a; font-weight: 500; }
+.import-log-entry.warning { color: #ffa726; }
+.import-log-entry.error   { color: #ef5350; font-weight: 500; }
+
+.import-log-timestamp {
+    color: color-mix(in srgb, var(--dark-text), transparent 40%);
+    margin-right: 10px;
+    font-weight: normal;
+}
+
+
+/* ============================================================
+   FILE IMPORT DIALOG
+   ============================================================ */
+
+.lancer-file-import-dialog .dialog-buttons {
+    height: auto !important;
+    min-height: 50px !important;
+    flex: 0 0 auto !important;
+}
+
+.lancer-file-import-dialog .dialog-buttons button {
+    height: auto !important;
+    padding: 10px 16px !important;
+    line-height: normal !important;
+    background: transparent !important;
+    border: 2px solid rgba(0, 0, 0, 0.2) !important;
+    border-radius: 6px !important;
+    color: var(--color-text-dark-primary) !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.lancer-file-import-dialog .dialog-buttons button:hover {
+    border-color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
+    box-shadow: 0 2px 8px var(--darken-3) !important;
+}
+
+.lancer-file-import-dialog .dialog-buttons button i {
+    color: var(--primary-color);
+    margin-right: 5px;
+}
+
+
+/* ============================================================
+   MANUAL ACTOR MAPPING DIALOG
+   ============================================================ */
+
+.mapping-dialog .window-content {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    height: 100% !important;
+    padding: 0 !important;
+}
+
+.mapping-dialog .dialog-content {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    min-height: 0 !important;
+    padding: 10px !important;
+}
+
+.mapping-dialog .dialog-buttons {
+    flex: 0 0 auto !important;
+    z-index: 10;
+    height: auto !important;
+    min-height: 50px !important;
+}
+
+.mapping-dialog .dialog-buttons button {
+    height: auto !important;
+    padding: 10px 16px !important;
+    background: transparent !important;
+    border: 2px solid rgba(0, 0, 0, 0.2) !important;
+    border-radius: 6px !important;
+    color: var(--color-text-dark-primary) !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.mapping-dialog .dialog-buttons button:hover {
+    border-color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
+    box-shadow: 0 2px 8px var(--darken-3) !important;
+}
+
+.mapping-dialog .dialog-buttons button i {
+    color: var(--primary-color);
+    margin-right: 5px;
+}
+
+.mapping-dialog .lancer-dialog-base {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.mapping-dialog .lancer-dialog-header {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+    padding-right: 5px;
+}
+
+.mapping-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 5px;
+    padding-bottom: 5px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) transparent;
+}
+
+.mapping-list::-webkit-scrollbar        { width: 8px; }
+.mapping-list::-webkit-scrollbar-track  { background: transparent; }
+.mapping-list::-webkit-scrollbar-thumb  { background-color: var(--primary-color); border-radius: 4px; }
+
+.mapping-item {
+    padding: 12px;
+    margin-bottom: 10px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.mapping-item-header {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #191813;
+    font-size: 14px;
+}
+
+.mapping-item-controls {
+    display: grid;
+    gap: 8px;
+}
+
+.mapping-item select {
+    width: 100%;
+    padding: 6px;
+    font-size: 13px;
+    border: 1px solid color-mix(in srgb, var(--primary-color), transparent 70%);
+    border-radius: 3px;
+}
+
+.mapping-item select option {
+    color: #191813;
+}
+
+.mapping-item .keep-name-toggle {
+    display: none;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color: #191813;
+}
+
+.mapping-item .keep-name-toggle.visible {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mapping-item .keep-name-toggle.active {
+    background: color-mix(in srgb, var(--primary-color), transparent 70%);
+    border-color: var(--primary-color);
+}
+
+
+/* ============================================================
+   NPC SELECTION DIALOG (COMP/CON)
+   ============================================================ */
+
+.npc-import-dialog .dialog-buttons {
+    height: auto !important;
+    min-height: 50px !important;
+    flex: 0 0 auto !important;
+}
+
+.npc-import-dialog .dialog-buttons button {
+    height: auto !important;
+    padding: 10px 16px !important;
+    background: transparent !important;
+    border: 2px solid rgba(0, 0, 0, 0.2) !important;
+    border-radius: 6px !important;
+    color: var(--color-text-dark-primary) !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.npc-import-dialog .dialog-buttons button:hover {
+    border-color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
+    box-shadow: 0 2px 8px var(--darken-3) !important;
+}
+
+.npc-import-dialog .dialog-buttons button i {
+    color: var(--primary-color);
+    margin-right: 5px;
+}
+
+.npc-import-options {
+    margin-bottom: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.npc-import-options-left,
+.npc-import-options-right {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.npc-import-options .lancer-toggle-card           { padding: 6px 10px; margin-bottom: 0; }
+.npc-import-options .lancer-toggle-card-icon      { font-size: 14px; width: 24px; height: 24px; }
+.npc-import-options .lancer-toggle-card-text      { font-size: 13px; }
+.npc-import-options .lancer-section-title         { font-size: 12px; margin: 0 0 6px 0; padding: 0; }
+.npc-import-options .lancer-scaling-card .lancer-toggle-card-icon { font-size: 18px; }
+.npc-import-options .lancer-scaling-card .lancer-toggle-card-text { text-align: left !important; }
+
+.npc-import-dialog .lancer-action-btn {
+    padding: 6px 12px !important;
+    height: auto !important;
+}
+
+.lancer-action-btn--inline {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.lancer-action-btn__checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    margin: 0;
+}
+
+.npc-list-container {
+    max-height: 500px;
+    min-height: auto;
+}
+
+/* Header row above the NPC list */
+.npc-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.npc-list-label {
+    margin: 0;
+    color: #191813;
+    font-weight: 600;
+}
+
+.npc-list-count {
+    margin: 0;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* Status filter button bar */
+.lancer-status-filters {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+/* NPC list grid */
+.npc-import-dialog .lancer-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    align-content: start;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) transparent;
+}
+
+.npc-import-dialog .lancer-list::-webkit-scrollbar        { width: 8px; }
+.npc-import-dialog .lancer-list::-webkit-scrollbar-track  { background: transparent; }
+.npc-import-dialog .lancer-list::-webkit-scrollbar-thumb  { background-color: var(--primary-color); border-radius: 4px; }
+
+.npc-checkbox {
+    margin: 0 10px 0 0;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color) !important;
+}
+
+.npc-info { flex: 1; }
+
+.npc-name {
+    font-weight: bold;
+    color: #191813 !important;
+    margin-bottom: 3px;
+}
+
+.npc-details {
+    font-size: 0.9em;
+    color: rgba(25, 24, 19, 0.6) !important;
+}
+
+.npc-portrait {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 3px;
+    margin-left: 10px;
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--light-text), transparent 80%);
+}
+
+.lancer-list-item {
+    position: relative;
+    min-height: 80px;
+    max-height: 80px;
+    flex-shrink: 0;
+}
+
+.npc-status-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 2px 5px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0px;
+    z-index: 10;
+    cursor: help;
+}
+
+/* Status badge backgrounds — semantic hardcoded colors */
+.npc-status-badge.synced   { background: rgba(76, 175, 80, 0.9);  color: #fff; }
+.npc-status-badge.modified { background: rgba(255, 152, 0, 0.9);  color: #fff; }
+.npc-status-badge.new      { background: rgba(33, 150, 243, 0.9); color: #fff; }
+.npc-status-badge.unlinked { background: rgba(156, 39, 176, 0.9); color: #fff; }
+
+/* Status left-border indicators — semantic hardcoded colors */
+.lancer-list-item[data-status="synced"]   { border-left: 3px solid #4CAF50; }
+.lancer-list-item[data-status="modified"] { border-left: 3px solid #FF9800; }
+.lancer-list-item[data-status="new"]      { border-left: 3px solid #2196F3; }
+.lancer-list-item[data-status="unlinked"] { border-left: 3px solid #9C27B0; }
+
+
+/* ============================================================
+   STATUS FILTER BUTTONS
+   Base inactive state + active state for each status type.
+   "All" button uses theme variables; others use semantic colors.
+   ============================================================ */
+
+.status-filter-btn {
+    flex: 1;
+    min-width: 55px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.status-filter-btn:hover:not(.active) {
+    opacity: 0.8;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px var(--darken-2);
+}
+
+.status-filter-btn.active {
+    box-shadow: 0 2px 6px var(--darken-3);
+}
+
+/* "All" button — theme-aware */
+.status-filter-btn[data-status="all"] {
+    border: 1px solid var(--primary-color);
+    background: transparent;
+    color: var(--primary-color);
+}
+.status-filter-btn[data-status="all"].active {
+    background: var(--primary-color) !important;
+    color: var(--light-text);
+}
+
+/* Semantic status buttons — hardcoded */
+.status-filter-btn[data-status="new"]           { border: 1px solid #2196F3; background: transparent; color: #2196F3; }
+.status-filter-btn[data-status="new"].active    { background: #2196F3 !important; color: #fff; }
+
+.status-filter-btn[data-status="synced"]        { border: 1px solid #4CAF50; background: transparent; color: #4CAF50; }
+.status-filter-btn[data-status="synced"].active { background: #4CAF50 !important; color: #fff; }
+
+.status-filter-btn[data-status="modified"]        { border: 1px solid #FF9800; background: transparent; color: #FF9800; }
+.status-filter-btn[data-status="modified"].active { background: #FF9800 !important; color: #fff; }
+
+.status-filter-btn[data-status="unlinked"]        { border: 1px solid #9C27B0; background: transparent; color: #9C27B0; }
+.status-filter-btn[data-status="unlinked"].active { background: #9C27B0 !important; color: #fff; }
