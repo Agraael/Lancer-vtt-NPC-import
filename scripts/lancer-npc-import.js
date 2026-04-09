@@ -1,3 +1,5 @@
+import { checkModuleUpdate } from "./version-check.js";
+
 export async function ImportNPC() {
     new NPCImportDialog().render(true);
 }
@@ -22,6 +24,401 @@ Hooks.once('init', () => {
         type: String,
         default: "compcon_img"
     });
+
+    // Patch to V3 endpoint
+    game.settings.register("lancer-npc-import", "useV3Endpoint", {
+        name: "Patch to V3 endpoint",
+        hint: "Use the Comp/Con V3 API instead of the legacy V2 S3 path. Enable this if you use dev.compcon.app (or compcon.app once V3 is live). Requires reload.",
+        scope: "client",
+        config: true,
+        type: Boolean,
+        default: false,
+        requiresReload: true
+    });
+
+
+    game.settings.register("lancer-npc-import", "lastNotifiedVersion", {
+        name: "Last Notified Version",
+        scope: "world",
+        config: false,
+        type: String,
+        default: ""
+    });
+});
+
+// ─── V3 Comp/Con Compatibility Patch ─────────────────────────────────────────
+// Patches the Lancer system to work with Comp/Con v3 (dev.compcon.app):
+//   1. Storage.list/get  → rerouted to the v3 API (pilots + NPCs cloud sync)
+//   2. window.fetch      → share code calls redirected to v3 /code endpoint
+//   3. Pilot sheet       → 12-char v3 share codes accepted (v2 only allows 6)
+// ES modules are singletons so patching Storage here affects all Lancer callers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CORS_PROXY = "https://corsproxy.io/?";
+const V2_SHARE_API = "https://api.compcon.app/share";
+const V2_SHARE_API_KEY = "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf";
+const V3_API_BASE = "https://idu55qr85i.execute-api.us-east-1.amazonaws.com/prod";
+
+let _cachedAuth = null;
+let _cachedStorage = null;
+let _originalStorageList = null;
+let _originalStorageGet = null;
+let _originalFetch = null;
+
+
+// v3 item data keyed by fake S3-style key
+const _v3ItemDataCache = new Map();
+
+async function getJwtTokenFromV5Auth() {
+    if (!_cachedAuth)
+        return null;
+    try {
+        const session = await _cachedAuth.currentSession();
+        return session.getIdToken().getJwtToken();
+    } catch (e) {
+        console.warn("[V3] Could not get JWT:", e.message);
+        return null;
+    }
+}
+
+async function getUserIdFromV5Auth() {
+    if (!_cachedAuth)
+        return null;
+    try {
+        const session = await _cachedAuth.currentSession();
+        return session.getIdToken().payload.sub;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function v3ApiFetch(path) {
+    const v3Base = V3_API_BASE;
+    const jwt = await getJwtTokenFromV5Auth();
+    const headers = { "Content-Type": "application/json", "x-api-key": V3_API_KEY };
+    if (jwt)
+        headers["Authorization"] = jwt;
+
+    const targetUrl = `${v3Base}${path}`;
+    const fetcher = _originalFetch || window.fetch;
+    const resp = await fetcher.call(window, CORS_PROXY + encodeURIComponent(targetUrl), { method: "GET", headers });
+    if (!resp.ok)
+        throw new Error(`V3 API ${resp.status} ${resp.statusText}`);
+    return resp.json();
+}
+
+// Matches the sanitization Lancer/CompCon use for S3 keys
+function sanitizeName(name) {
+    return (name || 'unnamed').replace(/[^a-zA-Z\d\s:]/g, " ");
+}
+
+// ── Storage.list / Storage.get patch ─────────────────────────────────────────
+// list()  → { results: [{ key: "pilot/Name--uuid--active" }, ...] }
+// get()   → { Body: Blob }  (Blob.text() gives the JSON string)
+
+function installStoragePatch() {
+    if (!_cachedStorage)
+        return;
+    if (_originalStorageList)
+        return; // already patched
+
+    _originalStorageList = _cachedStorage.list.bind(_cachedStorage);
+    _originalStorageGet = _cachedStorage.get.bind(_cachedStorage);
+
+    _cachedStorage.list = async function(prefix, options) {
+        if (!game.settings.get("lancer-npc-import", "useV3Endpoint")) {
+            return _originalStorageList(prefix, options);
+        }
+
+        try {
+            const userId = await getUserIdFromV5Auth();
+            if (!userId)
+                throw new Error("Not authenticated");
+
+            const data = await v3ApiFetch(`/user?user_id=${encodeURIComponent(userId)}&scope=all`);
+            let items = Array.isArray(data) ? data : (data.items || data.Items || []);
+
+            // v3 sortkeys: savedata_Pilot_uuid, savedata_Unit_uuid (Unit = NPC)
+            const v3TypeMap = { 'pilot': 'Pilot', 'npc': 'Unit' };
+            const v3Type = v3TypeMap[prefix.toLowerCase()] || prefix;
+            const skPrefix = `savedata_${v3Type}_`.toLowerCase();
+
+            const matched = items.filter(item => {
+                const sk = (item.SortKey || item.sortkey || item.sk || '').toLowerCase();
+                return sk.startsWith(skPrefix);
+            });
+
+            if (matched.length === 0 && items.length > 0) {
+                console.warn(`[V3] No "${prefix}" items found in ${items.length} total`);
+            }
+
+            // Build S3-style keys and cache the actual data for Storage.get
+            _v3ItemDataCache.clear();
+            const results = [];
+
+            for (const item of matched) {
+                let itemData = null;
+
+                if (item.data) {
+                    itemData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+                } else if (item.name && (item.class || item.callsign || item.items)) {
+                    itemData = item;
+                }
+
+                // If data wasn't inline, try downloading via presigned URL
+                if (!itemData && item.presign?.download) {
+                    try {
+                        const fetcher = _originalFetch || window.fetch;
+                        const dlResp = await fetcher.call(window, item.presign.download);
+                        itemData = await dlResp.json();
+                    } catch (e) {
+                        console.warn(`[V3] Failed to download item:`, e);
+                    }
+                }
+
+                if (itemData) {
+                    const name = sanitizeName(itemData.name || item.Name || item.name);
+                    const id = itemData.id || item.id || crypto.randomUUID();
+                    const fakeKey = `${prefix}/${name}--${id}--active`;
+                    _v3ItemDataCache.set(fakeKey, itemData);
+                    results.push({ key: fakeKey });
+                }
+            }
+
+            return { results };
+        } catch (e) {
+            console.error(`[V3] Storage.list failed, falling back to v2:`, e);
+            return _originalStorageList(prefix, options);
+        }
+    };
+
+    _cachedStorage.get = async function(key, options) {
+        if (!game.settings.get("lancer-npc-import", "useV3Endpoint")) {
+            return _originalStorageGet(key, options);
+        }
+
+        if (_v3ItemDataCache.has(key)) {
+            const json = JSON.stringify(_v3ItemDataCache.get(key));
+            return { Body: new Blob([json], { type: "application/json" }) };
+        }
+        return _originalStorageGet(key, options);
+    };
+
+    console.log("[V3] Storage.list and Storage.get patched");
+}
+
+
+// ── Share code fetch interceptor ─────────────────────────────────────────────
+// Redirects api.compcon.app/share → v3 /code endpoint
+
+function installFetchPatch() {
+    if (_originalFetch)
+        return;
+    _originalFetch = window.fetch;
+
+    window.fetch = async function(input, init) {
+        if (!game.settings.get("lancer-npc-import", "useV3Endpoint")) {
+            return _originalFetch.call(window, input, init);
+        }
+
+        const url = typeof input === 'string' ? input : input?.url;
+
+        if (url?.startsWith(V2_SHARE_API)) {
+            try {
+                const parsed = new URL(url);
+                const code = parsed.searchParams.get("code");
+                if (code) {
+                    console.log(`[V3] Share code "${code}" → v3`);
+                    const v3Base = V3_API_BASE;
+                    const jwt = await getJwtTokenFromV5Auth();
+
+                    const v3Headers = {
+                        "Content-Type": "application/json",
+                        "x-api-key": V3_API_KEY
+                    };
+                    if (jwt)
+                        v3Headers["Authorization"] = jwt;
+
+                    const v3Url = `${v3Base}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
+                    const v3Response = await _originalFetch.call(window, v3Url, {
+                        method: "GET",
+                        headers: v3Headers
+                    });
+
+                    if (!v3Response.ok) {
+                        console.warn(`[V3] /code returned ${v3Response.status}, trying v2`);
+                        return _originalFetch.call(window, input, init);
+                    }
+
+                    const v3Data = await v3Response.json();
+
+                    // Lancer expects { presigned: "s3-url" } then fetches that for JSON.
+                    // Adapt whatever v3 returns to that format.
+                    let itemData = null;
+
+                    if (v3Data.presigned) {
+                        return new Response(JSON.stringify(v3Data), { status: 200, headers: { "Content-Type": "application/json" } });
+                    } else if (v3Data.presign?.download) {
+                        return new Response(JSON.stringify({ presigned: v3Data.presign.download }), { status: 200, headers: { "Content-Type": "application/json" } });
+                    } else if (Array.isArray(v3Data) && v3Data.length > 0) {
+                        const first = v3Data[0];
+                        if (first.presign?.download) {
+                            return new Response(JSON.stringify({ presigned: first.presign.download }), { status: 200, headers: { "Content-Type": "application/json" } });
+                        }
+                        itemData = first.data ? (typeof first.data === 'string' ? JSON.parse(first.data) : first.data) : first;
+                    } else if (v3Data.data) {
+                        itemData = typeof v3Data.data === 'string' ? JSON.parse(v3Data.data) : v3Data.data;
+                    } else if (v3Data.name || v3Data.callsign || v3Data.class) {
+                        itemData = v3Data;
+                    }
+
+                    if (itemData) {
+                        // Wrap data in a blob URL so Lancer's fetch(presigned) flow works
+                        const blob = new Blob([JSON.stringify(itemData)], { type: "application/json" });
+                        const blobUrl = URL.createObjectURL(blob);
+                        return new Response(JSON.stringify({ presigned: blobUrl }), { status: 200, headers: { "Content-Type": "application/json" } });
+                    }
+
+                    console.warn("[V3] Unexpected share code response format:", v3Data);
+                }
+            } catch (e) {
+                console.error("[V3] Share code redirect failed, trying v2:", e);
+            }
+        }
+
+        return _originalFetch.call(window, input, init);
+    };
+
+    console.log("[V3] Fetch interceptor installed");
+}
+
+
+// ── Pilot sheet patch ────────────────────────────────────────────────────────
+// Lancer's regex only matches 6-char v2 share codes. v3 uses 12-char codes,
+// so we rebind the download button for 7+ char codes on each render.
+
+function installPilotSheetPatch() {
+    Hooks.on('renderActorSheet', _onRenderPilotSheet);
+    console.log("[V3] Pilot sheet hook installed");
+}
+
+
+function _onRenderPilotSheet(app, html) {
+    if (!game.settings.get("lancer-npc-import", "useV3Endpoint"))
+        return;
+    if (app.actor?.type !== 'pilot')
+        return;
+    if (!app.options.editable || !app.actor.isOwner)
+        return;
+
+    const pilot = app.actor;
+    const cloudId = pilot.system.cloud_id;
+    if (!cloudId)
+        return;
+
+    const download = html.find('.cloud-control[data-action*="download"]');
+    if (!download.length)
+        return;
+
+    // v2 6-char codes already work with the original handler
+    if (cloudId.length <= 6)
+        return;
+    if (!/^[A-Z0-9]{7,12}$/i.test(cloudId))
+        return;
+
+    // Rebind click for this v3 share code
+    download.off('click').on('click', async (ev) => {
+        ev.stopPropagation();
+        ui.notifications.info("Importing character from v3 share code...");
+        try {
+            // Goes through our fetch interceptor → v3 /code endpoint
+            const shareObj = await (await fetch(`${V2_SHARE_API}?code=${cloudId}`, {
+                headers: { "x-api-key": V2_SHARE_API_KEY }
+            })).json();
+            const pilotData = await (await fetch(shareObj.presigned)).json();
+
+            if (typeof app._onPilotJsonParsed === 'function') {
+                await app._onPilotJsonParsed(JSON.stringify(pilotData));
+            } else {
+                console.error("[V3] _onPilotJsonParsed not found on pilot sheet");
+                ui.notifications.error("Import failed: incompatible Lancer system version");
+            }
+        } catch (error) {
+            ui.notifications.error("Error importing from v3 share code: " + error.message);
+            console.error("[V3] Share code import error:", error);
+        }
+    });
+
+    console.log(`[V3] Pilot sheet patched for "${cloudId}"`);
+}
+
+// ── Load Auth + Storage from Lancer's bundled modules ────────────────────────
+
+async function loadLancerAwsModules() {
+    const lancerPath = "systems/lancer";
+    const lancerResponse = await fetch(`/${lancerPath}/lancer.mjs`);
+    if (!lancerResponse.ok)
+        throw new Error("Could not fetch lancer.mjs");
+
+    const lancerContent = await lancerResponse.text();
+    const lancerHashMatch = lancerContent.match(/import\s+["']\.\/lancer-([a-f0-9]+)\.mjs["']/);
+    if (!lancerHashMatch)
+        throw new Error("Could not find lancer-HASH.mjs");
+
+    const lancerHashResponse = await fetch(`/${lancerPath}/lancer-${lancerHashMatch[1]}.mjs`);
+    if (!lancerHashResponse.ok)
+        throw new Error("Could not fetch lancer hash file");
+
+    const lancerHashContent = await lancerHashResponse.text();
+    const awsConfigMatch = lancerHashContent.match(/await import\(["']\.\/aws-exports-([a-f0-9]+)\.mjs["']\)/);
+    const authMatch = lancerHashContent.match(/\{\s*Auth\s*\}\s*=\s*await import\(["']\.\/index-([a-f0-9]+)\.mjs["']\)/);
+    const storageMatch = lancerHashContent.match(/\{\s*Storage\s*\}\s*=\s*await import\(["']\.\/index-([a-f0-9]+)\.mjs["']\)/);
+
+    if (!awsConfigMatch || !authMatch || !storageMatch) {
+        throw new Error("Could not parse AWS module file names");
+    }
+
+    const [authModule, storageModule, configModule] = await Promise.all([
+        import(`/${lancerPath}/index-${authMatch[1]}.mjs`),
+        import(`/${lancerPath}/index-${storageMatch[1]}.mjs`),
+        import(`/${lancerPath}/aws-exports-${awsConfigMatch[1]}.mjs`)
+    ]);
+
+    if (!authModule.Auth || !storageModule.Storage || !configModule.default) {
+        throw new Error("AWS modules missing expected exports");
+    }
+
+    authModule.Auth.configure(configModule.default);
+    storageModule.Storage.configure(configModule.default);
+
+    _cachedAuth = authModule.Auth;
+    _cachedStorage = storageModule.Storage;
+
+    console.log("[V3] Auth + Storage loaded from Lancer system");
+}
+
+// ── Bootstrap on ready ───────────────────────────────────────────────────────
+
+Hooks.once('ready', async () => {
+    if (game.system.id !== 'lancer')
+        return;
+
+    checkModuleUpdate('lancer-npc-import');
+
+    if (!game.settings.get("lancer-npc-import", "useV3Endpoint"))
+        return;
+
+    try {
+        await loadLancerAwsModules();
+        installFetchPatch();
+        installStoragePatch();
+        installPilotSheetPatch();
+        console.log("[V3] All patches active");
+        ui.notifications.info("NPC Import: V3 patch active");
+    } catch (e) {
+        console.error("[V3] Failed to initialize:", e);
+        ui.notifications.error("NPC Import: V3 patch failed: " + e.message);
+    }
 });
 
 class NPCImportDialog extends Dialog {
@@ -401,7 +798,7 @@ async function selectAndImportFiles(customTierMode, updateExisting = true, manua
         for (const file of files) {
             try {
                 const text = await file.text();
-                const npcData = JSON.parse(text);
+                const npcData = normalizeNpcData(JSON.parse(text));
 
                 if (!npcData.class || !npcData.name) {
                     ui.notifications.error(`Invalid NPC JSON: ${file.name} - missing required fields`);
@@ -495,6 +892,154 @@ async function selectAndImportFiles(customTierMode, updateExisting = true, manua
     };
 
     input.click();
+}
+
+// V3 API key (same Cognito pool as v2, different API Gateway)
+const V3_API_KEY = "Y5DnZ4miJi30iazqn9VV73A253Db7HRxamHEQeMr";
+
+async function getV3AuthHeaders(Auth) {
+    const session = await Auth.currentSession();
+    const idToken = session.getIdToken().getJwtToken();
+    const userId = session.getIdToken().payload.sub;
+    return {
+        headers: {
+            "Content-Type": "application/json",
+            "x-api-key": V3_API_KEY,
+            "Authorization": idToken
+        },
+        userId
+    };
+}
+
+// Check if any tier's stats differ from class base stats
+function detectCustomStats(json) {
+    const classStats = json.class?.data?.stats;
+    const npcStats = json.combat_data?.stats?.max;
+    if (!classStats || !npcStats)
+        return false;
+
+    const tier = Math.max(0, (json.tier || 1) - 1);
+    const checks = [
+        'hp', 'evasion', 'edef', 'heatcap', 'speed', 'armor',
+        'hull', 'agi', 'sys', 'eng', 'structure', 'stress',
+        'sensorRange', 'saveTarget', 'activations'
+    ];
+
+    for (const stat of checks) {
+        const base = Array.isArray(classStats[stat]) ? classStats[stat][tier] : classStats[stat];
+        if (npcStats[stat] !== undefined && base !== undefined && npcStats[stat] !== base)
+            return true;
+    }
+    return false;
+}
+
+function npcFromV3Json(json, key) {
+    if (!json || !json.name)
+        return null;
+
+    // Detect custom stats before normalizing (needs full class object)
+    const hasCustomStats = json.tier === 'custom' || detectCustomStats(json);
+
+    // Normalize with shared function
+    normalizeNpcData(json);
+
+    const classId = typeof json.class === 'string' ? json.class : 'Unknown';
+    const tierDisplay = json.tier === 'custom'
+        ? 'custom'
+        : (hasCustomStats ? `${json.tier || '?'} custom` : (json.tier || '?'));
+
+    return {
+        key: key || json.id || '',
+        json: json,
+        name: json.name,
+        class: classId,
+        tier: tierDisplay,
+        tag: json.tag || '',
+        id: json.id || ''
+    };
+}
+
+async function fetchNPCsViaV3API(Auth) {
+    const v3Base = V3_API_BASE;
+    const { headers, userId } = await getV3AuthHeaders(Auth);
+
+    ui.notifications.info("Fetching NPC list from Comp/Con v3...");
+
+    let data;
+    const changedUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=changed&since=0`;
+    const changedResp = await fetch(CORS_PROXY + encodeURIComponent(changedUrl), { method: "GET", headers });
+    if (changedResp.ok) {
+        data = await changedResp.json();
+    } else {
+        const allUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=all`;
+        const allResp = await fetch(CORS_PROXY + encodeURIComponent(allUrl), { method: "GET", headers });
+        if (!allResp.ok)
+            throw new Error(`V3 API ${allResp.status} ${allResp.statusText}`);
+        data = await allResp.json();
+    }
+
+    let items = Array.isArray(data) ? data : (data.items || data.Items || []);
+
+    const npcItems = items.filter(item => {
+        const sk = (item.SortKey || item.sortkey || item.sk || '').toLowerCase();
+        return sk.startsWith('savedata_unit_');
+    });
+
+    console.log(`[V3] ${npcItems.length} NPC(s) found`);
+
+    // Show a loading dialog while downloading NPC data from CDN
+    const loadingDialog = new Dialog({
+        title: "Loading NPCs",
+        content: `
+            <div class="lancer-dialog-base" style="text-align:center; padding: 20px;">
+                <div class="lancer-dialog-title" style="color: #eee;">DOWNLOADING NPC DATA</div>
+                <div style="margin: 15px 0;">
+                    <div style="background: #555; border-radius: 4px; overflow: hidden; height: 20px;">
+                        <div id="v3-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                    <div id="v3-loading-text" style="margin-top: 8px; color: #ccc;">0 / ${npcItems.length}</div>
+                </div>
+            </div>
+        `,
+        buttons: {},
+        close: () => {}
+    }, {
+        width: 350,
+        classes: ["lancer-dialog-base", "lancer-no-title"]
+    });
+    loadingDialog.render(true);
+
+    const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
+    const npcs = [];
+    let loaded = 0;
+
+    for (const item of npcItems) {
+        try {
+            if (!item.uri)
+                continue;
+            const resp = await fetch(`${V3_CDN}/${item.uri}`);
+            if (!resp.ok) {
+                console.warn(`[V3] CDN ${resp.status} for "${item.name}"`);
+                continue;
+            }
+            const npcJson = await resp.json();
+            const npc = npcFromV3Json(npcJson, item.sortkey || item.uri);
+            if (npc)
+                npcs.push(npc);
+        } catch (e) {
+            console.error(`[V3] Error loading "${item.name}":`, e);
+        }
+
+        loaded++;
+        const pct = Math.round((loaded / npcItems.length) * 100);
+        if (loadingDialog.element) {
+            loadingDialog.element.find('#v3-loading-bar').css('width', pct + '%');
+            loadingDialog.element.find('#v3-loading-text').text(`${loaded} / ${npcItems.length}`);
+        }
+    }
+
+    loadingDialog.close();
+    return npcs;
 }
 
 async function importFromCompCon() {
@@ -604,6 +1149,9 @@ async function importFromCompCon() {
         Auth.configure(awsConfig);
         Storage.configure(awsConfig);
 
+        // Cache Auth for the V3 fetch interceptor to use
+        _cachedAuth = Auth;
+
         try {
             await Auth.currentSession();
         } catch (e) {
@@ -613,21 +1161,51 @@ async function importFromCompCon() {
 
         ui.notifications.info("Fetching NPCs from Comp/Con...");
 
-        const res = await Storage.list("npc", {
-            level: "protected",
-            cacheControl: "no-cache",
-            pageSize: 1000
-        });
+        const useV3 = game.settings.get("lancer-npc-import", "useV3Endpoint");
+        let validNPCs = [];
 
-        const active = res.results.filter(x => x.key?.endsWith("--active"));
+        if (useV3) {
+            // V3 path: use the v3 API Gateway directly
+            validNPCs = await fetchNPCsViaV3API(Auth);
+        } else {
+            // V2 path: legacy direct S3 via Amplify Storage
+            const res = await Storage.list("npc", {
+                level: "protected",
+                cacheControl: "no-cache",
+                pageSize: 1000
+            });
 
-        if (active.length === 0) {
-            ui.notifications.warn("No NPCs found in Comp/Con roster");
-            return;
-        }
+            const active = res.results.filter(x => x.key?.endsWith("--active"));
 
-        const allNPCs = await Promise.all(
-            active.map(async (item) => {
+            if (active.length === 0) {
+                ui.notifications.warn("No NPCs found in Comp/Con roster");
+                return;
+            }
+
+            const v2LoadingDialog = new Dialog({
+                title: "Loading NPCs",
+                content: `
+                    <div class="lancer-dialog-base" style="text-align:center; padding: 20px;">
+                        <div class="lancer-dialog-title" style="color: #eee;">DOWNLOADING NPC DATA</div>
+                        <div style="margin: 15px 0;">
+                            <div style="background: #555; border-radius: 4px; overflow: hidden; height: 20px;">
+                                <div id="v2-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
+                            </div>
+                            <div id="v2-loading-text" style="margin-top: 8px; color: #ccc;">0 / ${active.length}</div>
+                        </div>
+                    </div>
+                `,
+                buttons: {},
+                close: () => {}
+            }, {
+                width: 350,
+                classes: ["lancer-dialog-base", "lancer-no-title"]
+            });
+            v2LoadingDialog.render(true);
+
+            let v2Loaded = 0;
+            const allNPCs = [];
+            for (const item of active) {
                 try {
                     const data = await Storage.get(item.key, {
                         level: "protected",
@@ -637,7 +1215,7 @@ async function importFromCompCon() {
                     const text = await data.Body.text();
                     const json = JSON.parse(text);
 
-                    return {
+                    allNPCs.push({
                         key: item.key,
                         json: json,
                         name: json.name || 'Unnamed',
@@ -645,18 +1223,25 @@ async function importFromCompCon() {
                         tier: json.tier || '?',
                         tag: json.tag || '',
                         id: json.id || ''
-                    };
+                    });
                 } catch (e) {
                     console.error(`Error loading ${item.key}:`, e);
-                    return null;
                 }
-            })
-        );
 
-        const validNPCs = allNPCs.filter(n => n !== null);
+                v2Loaded++;
+                const pct = Math.round((v2Loaded / active.length) * 100);
+                if (v2LoadingDialog.element) {
+                    v2LoadingDialog.element.find('#v2-loading-bar').css('width', pct + '%');
+                    v2LoadingDialog.element.find('#v2-loading-text').text(`${v2Loaded} / ${active.length}`);
+                }
+            }
+
+            v2LoadingDialog.close();
+            validNPCs = allNPCs;
+        }
 
         if (validNPCs.length === 0) {
-            ui.notifications.warn("No valid NPCs found");
+            ui.notifications.warn("No NPCs found in Comp/Con roster");
             return;
         }
 
@@ -724,7 +1309,7 @@ class NPCSelectionDialog extends Dialog {
                     </div>
                     <div class="lancer-list">
                         ${npcs.map((npc, index) => {
-        const imageUrl = npc.json.cloud_portrait || npc.json.localImage || '';
+        const imageUrl = npc.json.cloud_portrait || npc.json.img?.cloud_portrait || npc.json.localImage || '';
 
         const existingActors = findExistingNPCsByLID(npc.json);
         const comparison = compareNPCWithActor(npc.json, existingActors);
@@ -1011,7 +1596,7 @@ async function uploadPortraitToServer(url, npcName) {
 
     const subFolder = game.settings.get("lancer-npc-import", "portraitStoragePath");
     const folderPath = `modules/lancer-npc-import/${subFolder}`;
-    const proxyUrl = "https://corsproxy.io/?"; //Pour éviter le blocage CORS
+    const proxyUrl = CORS_PROXY;
 
     try {
         // 1. Créer le dossier s'il n'existe pas
@@ -1395,8 +1980,67 @@ function compareNPCWithActor(npcData, actors) {
     return { status: 'synced', count: actors.length, reasons: [] };
 }
 
-// Fonction principale d'import d'un NPC depuis Comp/Con
+// Normalize any comp/con JSON format (v2 full objects or v3 strings) into the format
+// the import function expects: class/templates as string LIDs, items array, stats at root
+function normalizeNpcData(npcData) {
+    // class: object → string LID
+    if (npcData.class && typeof npcData.class !== 'string') {
+        npcData.class = npcData.class.data?.id || npcData.class.id || npcData.class;
+    }
+
+    // templates: objects → string LIDs
+    if (Array.isArray(npcData.templates)) {
+        npcData.templates = npcData.templates.map(t =>
+            typeof t === 'string' ? t : (t.data?.id || t.id || t)
+        );
+    }
+
+    // features (v2) → items (v3)
+    if (npcData.features && !npcData.items) {
+        npcData.items = npcData.features.map(f => ({
+            itemID: f.data?.id || f.id || f.itemID,
+            tier: f.tier || 1,
+            flavorName: f.flavorName || '',
+            description: f.description || '',
+            destroyed: f.destroyed || false,
+            charged: f.charged ?? true,
+            uses: f.uses || 0
+        }));
+    }
+
+    // v2 stats: combat_data.stats.max → stats at root (with v3 field names)
+    if (!npcData.stats && npcData.combat_data?.stats?.max) {
+        const s = npcData.combat_data.stats.max;
+        npcData.stats = {
+            activations: s.activations,
+            armor: s.armor,
+            hp: s.hp,
+            evade: s.evasion,
+            edef: s.edef,
+            heatcap: s.heatcap,
+            speed: s.speed,
+            sensor: s.sensorRange,
+            save: s.saveTarget,
+            hull: s.hull,
+            agility: s.agi,
+            systems: s.sys,
+            engineering: s.eng,
+            size: s.size,
+            structure: s.structure,
+            stress: s.stress
+        };
+    }
+
+    // cloud_portrait: nested → root
+    if (!npcData.cloud_portrait && npcData.img?.cloud_portrait) {
+        npcData.cloud_portrait = npcData.img.cloud_portrait;
+    }
+
+    return npcData;
+}
+
 async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled', targetActor = null, keepName = false, progressDialog = null, downloadPortraits = false) {
+    normalizeNpcData(npcData);
     const isCustomTier = npcData.tier === 'custom';
 
     // Déterminer les acteurs à mettre à jour
@@ -1404,9 +2048,10 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
     let isReplace = false;
     let localImagePath = null;
 
-    if (downloadPortraits && npcData.cloud_portrait) {
+    const cloudPortrait = npcData.cloud_portrait || npcData.img?.cloud_portrait || '';
+    if (downloadPortraits && cloudPortrait) {
         progressDialog?.addLog(`  Uploading portrait to server...`, 'info');
-        localImagePath = await uploadPortraitToServer(npcData.cloud_portrait, npcData.name);
+        localImagePath = await uploadPortraitToServer(cloudPortrait, npcData.name);
         if (localImagePath) {
             progressDialog?.addLog(`  ✓ Portrait saved: ${localImagePath}`, 'success');
         }
@@ -1492,9 +2137,7 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             wasUpdated = true;
         }
     } else {
-        const proxyUrl = "https://corsproxy.io/?";
-        const proxiedPortrait = npcData.cloud_portrait ? (proxyUrl + encodeURIComponent(npcData.cloud_portrait)) : '';
-        const finalImg = localImagePath || proxiedPortrait || npcData.localImage || '';
+        const finalImg = localImagePath || cloudPortrait || npcData.localImage || '';
         const finalImgForToken = localImagePath || npcData.localImage || '';
 
         const actorData = {
@@ -1592,12 +2235,42 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
             }
         }
 
-        // Appliquer les stats custom pour les custom tiers
-        if (isCustomTier && npcData.class) {
-            await applyCustomTierStats(actorToUpdate, npcData, customTierMode, progressDialog);
+        // Detect custom stats: either tier === 'custom' or stats don't match class base
+        let needsCustomStats = isCustomTier;
+
+        if (!needsCustomStats && npcData.class && npcData.stats) {
+            const npcClass = actorToUpdate.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
+            if (npcClass?.system.base_stats) {
+                const tierIndex = Math.max(0, parseTier(npcData.tier) - 1);
+                const base = npcClass.system.base_stats[tierIndex];
+                if (base) {
+                    const statMap = [
+                        ['hp', 'hp'], ['armor', 'armor'], ['evasion', 'evade'],
+                        ['edef', 'edef'], ['heatcap', 'heatcap'], ['speed', 'speed'],
+                        ['sensor_range', 'sensor'], ['save', 'save'], ['hull', 'hull'],
+                        ['agi', 'agility'], ['sys', 'systems'], ['eng', 'engineering'],
+                        ['activations', 'activations'], ['structure', 'structure'],
+                        ['stress', 'stress'], ['size', 'size']
+                    ];
+                    for (const [baseKey, ccKey] of statMap) {
+                        if (npcData.stats[ccKey] !== undefined && base[baseKey] !== undefined) {
+                            if (npcData.stats[ccKey] !== base[baseKey]) {
+                                needsCustomStats = true;
+                                if (progressDialog) {
+                                    progressDialog.addLog(`  Stats differ from class base (${baseKey}: ${base[baseKey]} → ${npcData.stats[ccKey]}), applying custom stats`, 'info');
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
-        // Ou appliquer juste la taille si définie (certaines classes permettent plusieurs tailles)
-        else if (!isCustomTier && npcData.class && npcData.stats?.size) {
+
+        if (needsCustomStats && npcData.class) {
+            await applyCustomTierStats(actorToUpdate, npcData, customTierMode, progressDialog);
+        } else if (npcData.class && npcData.stats?.size) {
+            // Just apply size if it differs (some classes allow multiple sizes)
             const npcClass = actorToUpdate.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
             if (npcClass) {
                 const newBaseStats = npcClass.system.base_stats.map(tierStats => ({
