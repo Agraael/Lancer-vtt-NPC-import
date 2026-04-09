@@ -44,6 +44,18 @@ Hooks.once('init', () => {
         type: String,
         default: ""
     });
+
+    // Install Storage + fetch patches during init so they're ready before
+    // the Lancer system's configureAmplify() calls populatePilotCache()
+    if (game.system.id === 'lancer' && game.settings.get("lancer-npc-import", "useV3Endpoint")) {
+        loadLancerAwsModules().then(() => {
+            installStoragePatch();
+            installFetchPatch();
+            console.log("[V3] Storage + fetch patches active (init)");
+        }).catch(e => {
+            console.error("[V3] Failed to install patches during init:", e);
+        });
+    }
 });
 
 // ─── V3 Comp/Con Compatibility Patch ─────────────────────────────────────────
@@ -64,6 +76,9 @@ let _cachedStorage = null;
 let _originalStorageList = null;
 let _originalStorageGet = null;
 let _originalFetch = null;
+
+// Maps fake S3 keys → CloudFront URIs for on-demand download
+const _v3KeyToUri = new Map();
 
 
 // v3 item data keyed by fake S3-style key
@@ -125,6 +140,8 @@ function installStoragePatch() {
     _originalStorageList = _cachedStorage.list.bind(_cachedStorage);
     _originalStorageGet = _cachedStorage.get.bind(_cachedStorage);
 
+    const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
+
     _cachedStorage.list = async function(prefix, options) {
         if (!game.settings.get("lancer-npc-import", "useV3Endpoint")) {
             return _originalStorageList(prefix, options);
@@ -152,37 +169,19 @@ function installStoragePatch() {
                 console.warn(`[V3] No "${prefix}" items found in ${items.length} total`);
             }
 
-            // Build S3-style keys and cache the actual data for Storage.get
+            // Map fake S3 keys → CloudFront URIs (data downloaded on demand in get())
+            _v3KeyToUri.clear();
             _v3ItemDataCache.clear();
             const results = [];
 
             for (const item of matched) {
-                let itemData = null;
-
-                if (item.data) {
-                    itemData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
-                } else if (item.name && (item.class || item.callsign || item.items)) {
-                    itemData = item;
-                }
-
-                // If data wasn't inline, try downloading via presigned URL
-                if (!itemData && item.presign?.download) {
-                    try {
-                        const fetcher = _originalFetch || window.fetch;
-                        const dlResp = await fetcher.call(window, item.presign.download);
-                        itemData = await dlResp.json();
-                    } catch (e) {
-                        console.warn(`[V3] Failed to download item:`, e);
-                    }
-                }
-
-                if (itemData) {
-                    const name = sanitizeName(itemData.name || item.Name || item.name);
-                    const id = itemData.id || item.id || crypto.randomUUID();
-                    const fakeKey = `${prefix}/${name}--${id}--active`;
-                    _v3ItemDataCache.set(fakeKey, itemData);
-                    results.push({ key: fakeKey });
-                }
+                if (!item.uri)
+                    continue;
+                const name = sanitizeName(item.name || 'unnamed');
+                const id = item.uri.match(/([0-9a-f-]{36})\.json$/)?.[1] || crypto.randomUUID();
+                const fakeKey = `${prefix}/${name}--${id}--active`;
+                _v3KeyToUri.set(fakeKey, item.uri);
+                results.push({ key: fakeKey });
             }
 
             return { results };
@@ -197,10 +196,29 @@ function installStoragePatch() {
             return _originalStorageGet(key, options);
         }
 
+        // Cached from a previous get
         if (_v3ItemDataCache.has(key)) {
             const json = JSON.stringify(_v3ItemDataCache.get(key));
             return { Body: new Blob([json], { type: "application/json" }) };
         }
+
+        // Download from CloudFront on demand using the URI from list()
+        const uri = _v3KeyToUri.get(key);
+        if (uri) {
+            try {
+                const resp = await fetch(`${V3_CDN}/${uri}`);
+                if (resp.ok) {
+                    const text = await resp.text();
+                    const parsed = JSON.parse(text);
+                    normalizeNpcData(parsed);
+                    _v3ItemDataCache.set(key, parsed);
+                    return { Body: new Blob([JSON.stringify(parsed)], { type: "application/json" }) };
+                }
+            } catch (e) {
+                console.warn(`[V3] CDN download failed for "${key}":`, e);
+            }
+        }
+
         return _originalStorageGet(key, options);
     };
 
@@ -229,7 +247,6 @@ function installFetchPatch() {
                 const code = parsed.searchParams.get("code");
                 if (code) {
                     console.log(`[V3] Share code "${code}" → v3`);
-                    const v3Base = V3_API_BASE;
                     const jwt = await getJwtTokenFromV5Auth();
 
                     const v3Headers = {
@@ -239,8 +256,8 @@ function installFetchPatch() {
                     if (jwt)
                         v3Headers["Authorization"] = jwt;
 
-                    const v3Url = `${v3Base}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
-                    const v3Response = await _originalFetch.call(window, v3Url, {
+                    const v3Url = `${V3_API_BASE}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
+                    const v3Response = await _originalFetch.call(window, CORS_PROXY + encodeURIComponent(v3Url), {
                         method: "GET",
                         headers: v3Headers
                     });
@@ -251,35 +268,36 @@ function installFetchPatch() {
                     }
 
                     const v3Data = await v3Response.json();
+                    const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
 
-                    // Lancer expects { presigned: "s3-url" } then fetches that for JSON.
-                    // Adapt whatever v3 returns to that format.
+                    // /code returns metadata with a uri — download actual data from CDN
                     let itemData = null;
+                    const entry = Array.isArray(v3Data) ? v3Data[0] : v3Data;
+                    const uri = entry?.uri;
 
-                    if (v3Data.presigned) {
-                        return new Response(JSON.stringify(v3Data), { status: 200, headers: { "Content-Type": "application/json" } });
-                    } else if (v3Data.presign?.download) {
-                        return new Response(JSON.stringify({ presigned: v3Data.presign.download }), { status: 200, headers: { "Content-Type": "application/json" } });
-                    } else if (Array.isArray(v3Data) && v3Data.length > 0) {
-                        const first = v3Data[0];
-                        if (first.presign?.download) {
-                            return new Response(JSON.stringify({ presigned: first.presign.download }), { status: 200, headers: { "Content-Type": "application/json" } });
-                        }
-                        itemData = first.data ? (typeof first.data === 'string' ? JSON.parse(first.data) : first.data) : first;
-                    } else if (v3Data.data) {
-                        itemData = typeof v3Data.data === 'string' ? JSON.parse(v3Data.data) : v3Data.data;
-                    } else if (v3Data.name || v3Data.callsign || v3Data.class) {
-                        itemData = v3Data;
+                    if (uri) {
+                        const cdnResp = await _originalFetch.call(window, `${V3_CDN}/${uri}`);
+                        if (cdnResp.ok)
+                            itemData = await cdnResp.json();
+                    } else if (entry?.presign?.download) {
+                        const dlResp = await _originalFetch.call(window, entry.presign.download);
+                        if (dlResp.ok)
+                            itemData = await dlResp.json();
+                    } else if (entry?.data) {
+                        itemData = typeof entry.data === 'string' ? JSON.parse(entry.data) : entry.data;
+                    } else if (entry?.name && (entry?.callsign || entry?.class)) {
+                        itemData = entry;
                     }
 
                     if (itemData) {
-                        // Wrap data in a blob URL so Lancer's fetch(presigned) flow works
+                        // Lancer expects { presigned: url } then fetches that url for JSON.
+                        // We wrap the data in a blob URL.
                         const blob = new Blob([JSON.stringify(itemData)], { type: "application/json" });
                         const blobUrl = URL.createObjectURL(blob);
                         return new Response(JSON.stringify({ presigned: blobUrl }), { status: 200, headers: { "Content-Type": "application/json" } });
                     }
 
-                    console.warn("[V3] Unexpected share code response format:", v3Data);
+                    console.warn("[V3] Could not resolve share code data:", v3Data);
                 }
             } catch (e) {
                 console.error("[V3] Share code redirect failed, trying v2:", e);
@@ -408,17 +426,10 @@ Hooks.once('ready', async () => {
     if (!game.settings.get("lancer-npc-import", "useV3Endpoint"))
         return;
 
-    try {
-        await loadLancerAwsModules();
-        installFetchPatch();
-        installStoragePatch();
-        installPilotSheetPatch();
-        console.log("[V3] All patches active");
-        ui.notifications.info("NPC Import: V3 patch active");
-    } catch (e) {
-        console.error("[V3] Failed to initialize:", e);
-        ui.notifications.error("NPC Import: V3 patch failed: " + e.message);
-    }
+    // Storage + fetch patches already installed during init.
+    // Pilot sheet hook needs the DOM so it goes here.
+    installPilotSheetPatch();
+    ui.notifications.info("NPC Import: V3 patch active");
 });
 
 class NPCImportDialog extends Dialog {
