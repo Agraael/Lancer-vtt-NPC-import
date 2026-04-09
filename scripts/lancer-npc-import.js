@@ -64,6 +64,12 @@ Hooks.once('init', () => {
 //   2. window.fetch      → share code calls redirected to v3 /code endpoint
 //   3. Pilot sheet       → 12-char v3 share codes accepted (v2 only allows 6)
 // ES modules are singletons so patching Storage here affects all Lancer callers.
+//
+// Sources:
+//   Comp/Con v3:   https://github.com/massif-press/compcon (master branch)
+//   Lancer VTT:    https://github.com/Eranziel/foundryvtt-lancer
+//   V3 support:    https://github.com/Eranziel/foundryvtt-lancer/issues/878
+//   V3 upgrade:    https://github.com/orgs/massif-press/discussions/64
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CORS_PROXY = "https://corsproxy.io/?";
@@ -105,6 +111,13 @@ async function getUserIdFromV5Auth() {
     } catch (e) {
         return null;
     }
+}
+
+// v3 may wrap item data in { data: { stuff } }
+function unwrapData(json) {
+    if (json && json.data && !json.name && !json.class && !json.callsign)
+        return typeof json.data === 'string' ? JSON.parse(json.data) : json.data;
+    return json;
 }
 
 async function v3ApiFetch(path) {
@@ -209,7 +222,7 @@ function installStoragePatch() {
                 const resp = await fetch(`${V3_CDN}/${uri}`);
                 if (resp.ok) {
                     const text = await resp.text();
-                    const parsed = JSON.parse(text);
+                    const parsed = unwrapData(JSON.parse(text));
                     normalizeNpcData(parsed);
                     _v3ItemDataCache.set(key, parsed);
                     return { Body: new Blob([JSON.stringify(parsed)], { type: "application/json" }) };
@@ -278,7 +291,7 @@ function installFetchPatch() {
                     if (uri) {
                         const cdnResp = await _originalFetch.call(window, `${V3_CDN}/${uri}`);
                         if (cdnResp.ok)
-                            itemData = await cdnResp.json();
+                            itemData = unwrapData(await cdnResp.json());
                     } else if (entry?.presign?.download) {
                         const dlResp = await _originalFetch.call(window, entry.presign.download);
                         if (dlResp.ok)
@@ -809,7 +822,7 @@ async function selectAndImportFiles(customTierMode, updateExisting = true, manua
         for (const file of files) {
             try {
                 const text = await file.text();
-                const npcData = normalizeNpcData(JSON.parse(text));
+                const npcData = normalizeNpcData(unwrapData(JSON.parse(text)));
 
                 if (!npcData.class || !npcData.name) {
                     ui.notifications.error(`Invalid NPC JSON: ${file.name} - missing required fields`);
@@ -1002,13 +1015,13 @@ async function fetchNPCsViaV3API(Auth) {
     const loadingDialog = new Dialog({
         title: "Loading NPCs",
         content: `
-            <div class="lancer-dialog-base" style="text-align:center; padding: 20px;">
-                <div class="lancer-dialog-title" style="color: #eee;">DOWNLOADING NPC DATA</div>
+            <div style="text-align:center; padding: 20px;">
+                <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING NPC DATA</div>
                 <div style="margin: 15px 0;">
-                    <div style="background: #555; border-radius: 4px; overflow: hidden; height: 20px;">
+                    <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
                         <div id="v3-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
                     </div>
-                    <div id="v3-loading-text" style="margin-top: 8px; color: #ccc;">0 / ${npcItems.length}</div>
+                    <div id="v3-loading-text" style="margin-top: 8px; color: #444;">0 / ${npcItems.length}</div>
                 </div>
             </div>
         `,
@@ -1033,7 +1046,7 @@ async function fetchNPCsViaV3API(Auth) {
                 console.warn(`[V3] CDN ${resp.status} for "${item.name}"`);
                 continue;
             }
-            const npcJson = await resp.json();
+            const npcJson = unwrapData(await resp.json());
             const npc = npcFromV3Json(npcJson, item.sortkey || item.uri);
             if (npc)
                 npcs.push(npc);
@@ -1196,13 +1209,13 @@ async function importFromCompCon() {
             const v2LoadingDialog = new Dialog({
                 title: "Loading NPCs",
                 content: `
-                    <div class="lancer-dialog-base" style="text-align:center; padding: 20px;">
-                        <div class="lancer-dialog-title" style="color: #eee;">DOWNLOADING NPC DATA</div>
+                    <div style="text-align:center; padding: 20px;">
+                        <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING NPC DATA</div>
                         <div style="margin: 15px 0;">
-                            <div style="background: #555; border-radius: 4px; overflow: hidden; height: 20px;">
+                            <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
                                 <div id="v2-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
                             </div>
-                            <div id="v2-loading-text" style="margin-top: 8px; color: #ccc;">0 / ${active.length}</div>
+                            <div id="v2-loading-text" style="margin-top: 8px; color: #444;">0 / ${active.length}</div>
                         </div>
                     </div>
                 `,
@@ -1790,6 +1803,8 @@ async function applyCustomTierStats(actor, npcData, mode = 'scaled', progressDia
 
         const customStats = npcData.stats || {};
         const originalStats = npcClass.system.base_stats;
+        // Use the NPC's actual tier as the reference for computing offsets
+        const baseTierIndex = Math.max(0, parseTier(npcData.tier) - 1);
 
         const calculateStat = (statName, ccKey, tierIndex) => {
             const customValue = customStats[ccKey];
@@ -1804,8 +1819,8 @@ async function applyCustomTierStats(actor, npcData, mode = 'scaled', progressDia
             }
 
             if (mode === 'scaled') {
-                const tier1Original = originalStats[0][statName];
-                const increment = originalValue - tier1Original;
+                const baseTierOriginal = originalStats[baseTierIndex][statName];
+                const increment = originalValue - baseTierOriginal;
                 return customValue + increment;
             }
 
@@ -2217,6 +2232,9 @@ async function importNPCFromCompCon(npcData, updateExisting = true, customTierMo
                 featuresToAdd.push(itemData);
             } else {
                 missingFeatures.push(ccItem.itemID);
+                if (progressDialog) {
+                    progressDialog.addLog(`  ⚠ Feature not found: ${ccItem.flavorName || ccItem.itemID}`, 'warning');
+                }
             }
         }
     }

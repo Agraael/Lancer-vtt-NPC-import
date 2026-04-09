@@ -38,11 +38,14 @@ Click the **Import NPCs** button in the Actors sidebar.
 
 ## Comp/Con V3 Support
 
-Enable **Patch to V3 endpoint** in module settings to use the Comp/Con v3 API (dev.compcon.app). This patches:
+Enable **Patch to V3 endpoint** in module settings if you use Comp/Con v3 (dev.compcon.app). This patches:
 
-- NPC cloud import (v3 API + CloudFront CDN)
-- Pilot cloud sync (Storage.list/get rerouted to v3)
-- Pilot share codes (12-char v3 codes, redirected to v3 /code endpoint)
+- **NPC cloud import** — fetches your NPC roster from the v3 API
+- **NPC JSON file import** — handles both v2 and v3 export formats
+- **Lancer pilot cloud sync** — the pilot dropdown on the pilot sheet pulls from v3
+- **Lancer pilot share codes** — v3 12-char share codes work in the pilot sheet
+
+This is a temporary patch until the Lancer system natively supports v3. When v3 goes live on `compcon.app`, toggle this on. Users still on v2 (`old.compcon.app`) keep it off.
 
 > Requires reload after toggling.
 
