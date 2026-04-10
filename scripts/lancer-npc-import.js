@@ -68,8 +68,6 @@ Hooks.once('init', () => {
 // Sources:
 //   Comp/Con v3:   https://github.com/massif-press/compcon (master branch)
 //   Lancer VTT:    https://github.com/Eranziel/foundryvtt-lancer
-//   V3 support:    https://github.com/Eranziel/foundryvtt-lancer/issues/878
-//   V3 upgrade:    https://github.com/orgs/massif-press/discussions/64
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CORS_PROXY = "https://corsproxy.io/?";
@@ -1036,25 +1034,29 @@ async function fetchNPCsViaV3API(Auth) {
     const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
     const npcs = [];
     let loaded = 0;
+    const BATCH_SIZE = 10;
 
-    for (const item of npcItems) {
-        try {
-            if (!item.uri)
-                continue;
-            const resp = await fetch(`${V3_CDN}/${item.uri}`);
-            if (!resp.ok) {
-                console.warn(`[V3] CDN ${resp.status} for "${item.name}"`);
-                continue;
-            }
-            const npcJson = unwrapData(await resp.json());
-            const npc = npcFromV3Json(npcJson, item.sortkey || item.uri);
-            if (npc)
-                npcs.push(npc);
-        } catch (e) {
-            console.error(`[V3] Error loading "${item.name}":`, e);
+    for (let i = 0; i < npcItems.length; i += BATCH_SIZE) {
+        const batch = npcItems.slice(i, i + BATCH_SIZE).filter(item => item.uri);
+
+        const results = await Promise.allSettled(
+            batch.map(async (item) => {
+                const resp = await fetch(`${V3_CDN}/${item.uri}`);
+                if (!resp.ok)
+                    throw new Error(`CDN ${resp.status}`);
+                const npcJson = unwrapData(await resp.json());
+                return npcFromV3Json(npcJson, item.sortkey || item.uri);
+            })
+        );
+
+        for (let j = 0; j < results.length; j++) {
+            if (results[j].status === 'fulfilled' && results[j].value)
+                npcs.push(results[j].value);
+            else if (results[j].status === 'rejected')
+                console.warn(`[V3] Failed to load "${batch[j].name}":`, results[j].reason);
         }
 
-        loaded++;
+        loaded += batch.length;
         const pct = Math.round((loaded / npcItems.length) * 100);
         if (loadingDialog.element) {
             loadingDialog.element.find('#v3-loading-bar').css('width', pct + '%');
