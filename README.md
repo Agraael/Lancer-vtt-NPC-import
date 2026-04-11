@@ -45,7 +45,7 @@ Enable **Patch to V3 endpoint** in module settings if you use Comp/Con v3 (dev.c
 - **Lancer pilot cloud sync** — the pilot dropdown on the pilot sheet pulls from v3
 - **Lancer pilot share codes** — v3 12-char share codes work in the pilot sheet
 
-This is a temporary patch until the Lancer system natively supports v3. When v3 goes live on `compcon.app`, toggle this on. Users still on v2 (`old.compcon.app`) keep it off.
+This is a temporary patch until the Lancer system natively supports v3.
 
 ## Custom Tier Support
 
