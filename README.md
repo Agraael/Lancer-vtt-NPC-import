@@ -45,9 +45,8 @@ Enable **Patch to V3 endpoint** in module settings if you use Comp/Con v3 (dev.c
 - **Lancer pilot cloud sync** — the pilot dropdown on the pilot sheet pulls from v3
 - **Lancer pilot share codes** — v3 12-char share codes work in the pilot sheet
 
-This is a temporary patch until the Lancer system natively supports v3. When v3 goes live on `compcon.app`, toggle this on. Users still on v2 (`old.compcon.app`) keep it off.
+This is a temporary patch until the Lancer system natively supports v3.
 
-> Requires reload after toggling.
 
 ## Custom Tier Support
 
@@ -67,6 +66,7 @@ The module detects custom stats automatically by comparing against the class bas
 - Portrait download to server
 - Sync status indicators (new, synced, modified, unlinked)
 - Link unlinked actors by name
+- Pilot JSON import: reserves and organizations
 - Update notification on new releases
 
 ![Import Dialog](Screenshot.png)
