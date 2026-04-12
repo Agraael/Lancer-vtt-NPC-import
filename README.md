@@ -47,7 +47,6 @@ Enable **Patch to V3 endpoint** in module settings if you use Comp/Con v3 (dev.c
 
 This is a temporary patch until the Lancer system natively supports v3.
 
-
 ## Custom Tier Support
 
 For NPCs with custom tiers, choose a scaling mode:
