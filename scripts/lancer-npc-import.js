@@ -28,12 +28,72 @@ Hooks.once('init', () => {
     // Patch to V3 endpoint
     game.settings.register("lancer-npc-import", "useV3Endpoint", {
         name: "Patch to V3 endpoint",
-        hint: "Use the Comp/Con V3 API instead of the legacy V2 S3 path. Enable this if you use dev.compcon.app (or compcon.app once V3 is live). Requires reload.",
+        hint: "Use Comp/Con V3. Required since compcon.app is V3 and api.compcon.app/share is offline. Requires reload.",
         scope: "client",
         config: true,
         type: Boolean,
-        default: false,
+        default: true,
         requiresReload: true
+    });
+
+    // Endpoint overrides, editable without code release.
+    game.settings.register("lancer-npc-import", "v3ApiBase", {
+        name: "V3 API Base URL",
+        hint: "V3 API Gateway URL, no trailing slash.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "https://idu55qr85i.execute-api.us-east-1.amazonaws.com/prod",
+        requiresReload: true
+    });
+
+    game.settings.register("lancer-npc-import", "v3ApiKey", {
+        name: "V3 API Key",
+        hint: "x-api-key header for V3.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "Y5DnZ4miJi30iazqn9VV73A253Db7HRxamHEQeMr",
+        requiresReload: true
+    });
+
+    game.settings.register("lancer-npc-import", "v3Cdn", {
+        name: "V3 CDN Base URL",
+        hint: "CloudFront host for V3 item JSON, no trailing slash.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "https://ds69h3g1zxwgy.cloudfront.net",
+        requiresReload: true
+    });
+
+    game.settings.register("lancer-npc-import", "v2ShareApi", {
+        name: "V2 Share API URL",
+        hint: "V2 share hosts intercepted by the V3 redirect. Comma-separated.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "https://api.compcon.app/share,https://ujgatmvzlg.execute-api.us-east-1.amazonaws.com/prod/share",
+        requiresReload: true
+    });
+
+    game.settings.register("lancer-npc-import", "v2ShareApiKey", {
+        name: "V2 Share API Key",
+        hint: "x-api-key header for V2 share endpoint.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf",
+        requiresReload: true
+    });
+
+    game.settings.register("lancer-npc-import", "v3Debug", {
+        name: "V3 debug logging",
+        hint: "Logs V3 /code response, CDN payload, unwrap/normalize steps to console.",
+        scope: "client",
+        config: true,
+        type: Boolean,
+        default: false
     });
 
 
@@ -71,9 +131,43 @@ Hooks.once('init', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CORS_PROXY = "https://corsproxy.io/?";
-const V2_SHARE_API = "https://api.compcon.app/share";
-const V2_SHARE_API_KEY = "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf";
-const V3_API_BASE = "https://idu55qr85i.execute-api.us-east-1.amazonaws.com/prod";
+
+// Endpoint accessors — resolve from settings with hardcoded fallbacks so this
+// file is usable even if settings aren't registered yet (e.g. early boot).
+function _setting(key, fallback) {
+    try {
+        const v = game.settings.get("lancer-npc-import", key);
+        return (typeof v === "string" && v.length > 0) ? v : fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+function getV3ApiBase() {
+    return _setting("v3ApiBase", "https://idu55qr85i.execute-api.us-east-1.amazonaws.com/prod").replace(/\/+$/, "");
+}
+function getV3ApiKey() {
+    return _setting("v3ApiKey", "Y5DnZ4miJi30iazqn9VV73A253Db7HRxamHEQeMr");
+}
+function getV3Cdn() {
+    return _setting("v3Cdn", "https://ds69h3g1zxwgy.cloudfront.net").replace(/\/+$/, "");
+}
+function getV2ShareApiHosts() {
+    const raw = _setting("v2ShareApi", "https://api.compcon.app/share");
+    return raw.split(",").map(s => s.trim()).filter(Boolean);
+}
+function getV2ShareApiPrimary() {
+    return getV2ShareApiHosts()[0] || "https://api.compcon.app/share";
+}
+function getV2ShareApiKey() {
+    return _setting("v2ShareApiKey", "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf");
+}
+function v3DebugEnabled() {
+    try { return !!game.settings.get("lancer-npc-import", "v3Debug"); } catch { return false; }
+}
+function v3Log(label, data) {
+    if (!v3DebugEnabled()) return;
+    console.log(`[V3-DEBUG] ${label}`, data);
+}
 
 let _cachedAuth = null;
 let _cachedStorage = null;
@@ -118,10 +212,54 @@ function unwrapData(json) {
     return json;
 }
 
+// Normalize a V3 pilot object so Lancer's v2 pilot parser accepts it.
+// Main V3 -> V2 shifts:
+//   - loadouts[] + active_index -> loadout (singular)
+//   - mech.frame string + frameData -> mech.frame object (v2 shape)
+//   - mech.loadouts[] + active_loadout_index -> mech.loadout (singular)
+//   - core_bonuses/licenses normalized to v2-friendly shape
+function normalizePilotData(pilotData) {
+    if (!pilotData || typeof pilotData !== 'object')
+        return pilotData;
+    const isPilot = pilotData.itemType === 'pilot'
+        || pilotData.callsign !== undefined
+        || Array.isArray(pilotData.mechs);
+    if (!isPilot)
+        return pilotData;
+
+    // Pilot loadout: V3 plural array -> V2 singular object
+    if (!pilotData.loadout && Array.isArray(pilotData.loadouts) && pilotData.loadouts.length) {
+        const idx = pilotData.active_index ?? pilotData.active_loadout_index ?? 0;
+        pilotData.loadout = pilotData.loadouts[idx] || pilotData.loadouts[0];
+    }
+
+    // core_bonuses: objects -> string LIDs
+    if (Array.isArray(pilotData.core_bonuses)) {
+        pilotData.core_bonuses = pilotData.core_bonuses.map(cb =>
+            typeof cb === 'string' ? cb : (cb?.id || cb?.data?.id || cb)
+        );
+    }
+
+    // licenses: normalize to { id, rank }
+    if (Array.isArray(pilotData.licenses)) {
+        pilotData.licenses = pilotData.licenses.map(l => {
+            if (typeof l === 'string') return { id: l, rank: 1 };
+            return { id: l.id || l.data?.id || l, rank: l.rank ?? l.level ?? 1 };
+        });
+    }
+
+    // Mechs: leave shape alone. V3 mech.frame is already a string LID (same
+    // as V2); Lancer's pilot importer looks it up in the compendium. Wrapping
+    // it in an object produces "MECO - [object Object]" import warnings.
+    // mech.loadouts[] stays as-is; Lancer handles mech loadouts separately.
+
+    return pilotData;
+}
+
 async function v3ApiFetch(path) {
-    const v3Base = V3_API_BASE;
+    const v3Base = getV3ApiBase();
     const jwt = await getJwtTokenFromV5Auth();
-    const headers = { "Content-Type": "application/json", "x-api-key": V3_API_KEY };
+    const headers = { "Content-Type": "application/json", "x-api-key": getV3ApiKey() };
     if (jwt)
         headers["Authorization"] = jwt;
 
@@ -150,8 +288,6 @@ function installStoragePatch() {
 
     _originalStorageList = _cachedStorage.list.bind(_cachedStorage);
     _originalStorageGet = _cachedStorage.get.bind(_cachedStorage);
-
-    const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
 
     _cachedStorage.list = async function(prefix, options) {
         if (!game.settings.get("lancer-npc-import", "useV3Endpoint")) {
@@ -217,11 +353,14 @@ function installStoragePatch() {
         const uri = _v3KeyToUri.get(key);
         if (uri) {
             try {
-                const resp = await fetch(`${V3_CDN}/${uri}`);
+                const resp = await fetch(`${getV3Cdn()}/${uri}`);
                 if (resp.ok) {
                     const text = await resp.text();
                     const parsed = unwrapData(JSON.parse(text));
-                    normalizeNpcData(parsed);
+                    if (key.startsWith('pilot/'))
+                        normalizePilotData(parsed);
+                    else
+                        normalizeNpcData(parsed);
                     _v3ItemDataCache.set(key, parsed);
                     return { Body: new Blob([JSON.stringify(parsed)], { type: "application/json" }) };
                 }
@@ -252,7 +391,9 @@ function installFetchPatch() {
 
         const url = typeof input === 'string' ? input : input?.url;
 
-        if (url?.startsWith(V2_SHARE_API)) {
+        const v2Hosts = getV2ShareApiHosts();
+        const isV2Share = url && v2Hosts.some(h => url.startsWith(h));
+        if (isV2Share) {
             try {
                 const parsed = new URL(url);
                 const code = parsed.searchParams.get("code");
@@ -262,12 +403,12 @@ function installFetchPatch() {
 
                     const v3Headers = {
                         "Content-Type": "application/json",
-                        "x-api-key": V3_API_KEY
+                        "x-api-key": getV3ApiKey()
                     };
                     if (jwt)
                         v3Headers["Authorization"] = jwt;
 
-                    const v3Url = `${V3_API_BASE}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
+                    const v3Url = `${getV3ApiBase()}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
                     const v3Response = await _originalFetch.call(window, CORS_PROXY + encodeURIComponent(v3Url), {
                         method: "GET",
                         headers: v3Headers
@@ -279,21 +420,31 @@ function installFetchPatch() {
                     }
 
                     const v3Data = await v3Response.json();
-                    const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
+                    v3Log(`/code response for "${code}"`, v3Data);
 
                     // /code returns metadata with a uri — download actual data from CDN
                     let itemData = null;
+                    let rawCdnData = null;
                     const entry = Array.isArray(v3Data) ? v3Data[0] : v3Data;
                     const uri = entry?.uri;
 
                     if (uri) {
-                        const cdnResp = await _originalFetch.call(window, `${V3_CDN}/${uri}`);
-                        if (cdnResp.ok)
-                            itemData = unwrapData(await cdnResp.json());
+                        const cdnUrl = `${getV3Cdn()}/${uri}`;
+                        v3Log(`CDN GET`, cdnUrl);
+                        const cdnResp = await _originalFetch.call(window, cdnUrl);
+                        if (cdnResp.ok) {
+                            rawCdnData = await cdnResp.json();
+                            v3Log(`CDN raw payload`, rawCdnData);
+                            itemData = unwrapData(rawCdnData);
+                            v3Log(`after unwrapData`, itemData);
+                        }
                     } else if (entry?.presign?.download) {
                         const dlResp = await _originalFetch.call(window, entry.presign.download);
-                        if (dlResp.ok)
-                            itemData = await dlResp.json();
+                        if (dlResp.ok) {
+                            rawCdnData = await dlResp.json();
+                            v3Log(`presign raw payload`, rawCdnData);
+                            itemData = unwrapData(rawCdnData);
+                        }
                     } else if (entry?.data) {
                         itemData = typeof entry.data === 'string' ? JSON.parse(entry.data) : entry.data;
                     } else if (entry?.name && (entry?.callsign || entry?.class)) {
@@ -301,6 +452,11 @@ function installFetchPatch() {
                     }
 
                     if (itemData) {
+                        // Share codes can resolve to pilots or NPCs — detect and normalize.
+                        if (itemData.callsign !== undefined || itemData.itemType === 'pilot' || Array.isArray(itemData.mechs)) {
+                            normalizePilotData(itemData);
+                            v3Log(`after normalizePilotData`, itemData);
+                        }
                         // Lancer expects { presigned: url } then fetches that url for JSON.
                         // We wrap the data in a blob URL.
                         const blob = new Blob([JSON.stringify(itemData)], { type: "application/json" });
@@ -360,9 +516,10 @@ function _onRenderPilotSheet(app, html) {
         ev.stopPropagation();
         ui.notifications.info("Importing character from v3 share code...");
         try {
-            // Goes through our fetch interceptor → v3 /code endpoint
-            const shareObj = await (await fetch(`${V2_SHARE_API}?code=${cloudId}`, {
-                headers: { "x-api-key": V2_SHARE_API_KEY }
+            // Goes through our fetch interceptor -> v3 /code endpoint.
+            // The interceptor already unwraps + normalizes the pilot data.
+            const shareObj = await (await fetch(`${getV2ShareApiPrimary()}?code=${cloudId}`, {
+                headers: { "x-api-key": getV2ShareApiKey() }
             })).json();
             const pilotData = await (await fetch(shareObj.presigned)).json();
 
@@ -371,7 +528,16 @@ function _onRenderPilotSheet(app, html) {
             } else {
                 console.error("[V3] _onPilotJsonParsed not found on pilot sheet");
                 ui.notifications.error("Import failed: incompatible Lancer system version");
+                return;
             }
+
+            // Import reserves/orgs directly in case Lancer's share-code path
+            // bypasses our _onPilotJsonParsed wrapper.
+            if (pilotData?.reserves?.length > 0)
+                await _importReserves(app.actor, pilotData.reserves);
+            if (pilotData?.orgs?.length > 0)
+                await _importOrganizations(app.actor, pilotData.orgs);
+            await _refillResources(app.actor);
         } catch (error) {
             ui.notifications.error("Error importing from v3 share code: " + error.message);
             console.error("[V3] Share code import error:", error);
@@ -917,9 +1083,6 @@ async function selectAndImportFiles(customTierMode, updateExisting = true, manua
     input.click();
 }
 
-// V3 API key (same Cognito pool as v2, different API Gateway)
-const V3_API_KEY = "Y5DnZ4miJi30iazqn9VV73A253Db7HRxamHEQeMr";
-
 async function getV3AuthHeaders(Auth) {
     const session = await Auth.currentSession();
     const idToken = session.getIdToken().getJwtToken();
@@ -927,7 +1090,7 @@ async function getV3AuthHeaders(Auth) {
     return {
         headers: {
             "Content-Type": "application/json",
-            "x-api-key": V3_API_KEY,
+            "x-api-key": getV3ApiKey(),
             "Authorization": idToken
         },
         userId
@@ -983,7 +1146,7 @@ function npcFromV3Json(json, key) {
 }
 
 async function fetchNPCsViaV3API(Auth) {
-    const v3Base = V3_API_BASE;
+    const v3Base = getV3ApiBase();
     const { headers, userId } = await getV3AuthHeaders(Auth);
 
     ui.notifications.info("Fetching NPC list from Comp/Con v3...");
@@ -1032,7 +1195,7 @@ async function fetchNPCsViaV3API(Auth) {
     });
     loadingDialog.render(true);
 
-    const V3_CDN = "https://ds69h3g1zxwgy.cloudfront.net";
+    const v3Cdn = getV3Cdn();
     const npcs = [];
     let loaded = 0;
     const BATCH_SIZE = 10;
@@ -1042,7 +1205,7 @@ async function fetchNPCsViaV3API(Auth) {
 
         const results = await Promise.allSettled(
             batch.map(async (item) => {
-                const resp = await fetch(`${V3_CDN}/${item.uri}`);
+                const resp = await fetch(`${v3Cdn}/${item.uri}`);
                 if (!resp.ok)
                     throw new Error(`CDN ${resp.status}`);
                 const npcJson = unwrapData(await resp.json());
@@ -2402,16 +2565,21 @@ function patchPilotImportReserves() {
     const orig = PilotSheet.prototype._onPilotJsonParsed;
     PilotSheet.prototype._onPilotJsonParsed = async function (fileData) {
         let pilotData = null;
+        let normalizedFileData = fileData;
         if (fileData) {
             try {
                 pilotData = JSON.parse(fileData);
+                pilotData = unwrapData(pilotData);
+                normalizePilotData(pilotData);
+                normalizedFileData = JSON.stringify(pilotData);
             } catch { /* not JSON, let original handle */ }
         }
-        await orig.call(this, fileData);
+        await orig.call(this, normalizedFileData);
         if (pilotData?.reserves?.length > 0)
             await _importReserves(this.actor, pilotData.reserves);
         if (pilotData?.orgs?.length > 0)
             await _importOrganizations(this.actor, pilotData.orgs);
+        await _refillResources(this.actor);
     };
     console.log('lancer-npc-import | Patched pilot import to include reserves & organizations');
 }
@@ -2516,6 +2684,64 @@ async function _importOrganizations(pilot, orgs) {
         await pilot.createEmbeddedDocuments('Item', toCreate);
         console.log(`lancer-npc-import | Imported ${toCreate.length} organization(s) for ${pilot.name}`);
     }
+}
+
+// After import, V3 serialized current values are 0. Refill pool resources to
+// their max so the pilot and owned mechs show full HP/heat/etc on the sheet.
+// Lancer's import is async and settles over multiple render passes, so poll
+// until the mech's HP max is populated before refilling.
+async function _refillResources(pilot) {
+    if (!pilot?.system)
+        return;
+
+    const refillOne = async (actor) => {
+        const update = {};
+        const sys = actor.system;
+        const fillKeys = ['hp', 'structure', 'stress', 'repairs'];
+        const zeroKeys = ['heat', 'burn', 'overshield'];
+        for (const k of fillKeys) {
+            const pool = sys[k];
+            if (pool && typeof pool === 'object' && pool.max !== undefined && pool.value !== pool.max)
+                update[`system.${k}.value`] = pool.max;
+        }
+        for (const k of zeroKeys) {
+            const pool = sys[k];
+            if (pool && typeof pool === 'object' && pool.value !== undefined && pool.value !== 0)
+                update[`system.${k}.value`] = 0;
+        }
+        if (Object.keys(update).length > 0)
+            await actor.update(update);
+    };
+
+    const findMechs = () => {
+        const mechs = [];
+        const seen = new Set();
+        const ownedIds = pilot.system.owned_mechs || pilot.system.mechs || [];
+        for (const ref of ownedIds) {
+            const id = typeof ref === 'string' ? ref : (ref?.id || ref?.value);
+            if (!id || seen.has(id)) continue;
+            const m = game.actors.get(id);
+            if (m?.type === 'mech') { seen.add(id); mechs.push(m); }
+        }
+        for (const actor of game.actors) {
+            if (actor.type !== 'mech' || seen.has(actor.id)) continue;
+            const pr = actor.system?.pilot;
+            const pid = typeof pr === 'string' ? pr : (pr?.id || pr?.value);
+            if (pid === pilot.id) { seen.add(actor.id); mechs.push(actor); }
+        }
+        return mechs;
+    };
+
+    // Poll up to ~2s for Lancer to finish computing mech HP max from frame.
+    for (let i = 0; i < 20; i++) {
+        const ready = findMechs().every(m => (m.system?.hp?.max ?? 0) > 0);
+        if (ready) break;
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    await refillOne(pilot);
+    for (const mech of findMechs())
+        await refillOne(mech);
 }
 
 Hooks.on('renderActorDirectory', (_app, html) => {

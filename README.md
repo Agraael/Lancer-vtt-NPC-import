@@ -38,14 +38,29 @@ Click the **Import NPCs** button in the Actors sidebar.
 
 ## Comp/Con V3 Support
 
-Enable **Patch to V3 endpoint** in module settings if you use Comp/Con v3 (dev.compcon.app). This patches:
+As of 2026-04-22, `compcon.app` is V3 and the legacy `api.compcon.app/share` endpoint is offline. V2 lives at `old.compcon.app`. The **Patch to V3 endpoint** setting is now **on by default** because pilot and NPC import will not work against the current Lancer system without it.
 
-- **NPC cloud import** — fetches your NPC roster from the v3 API
-- **NPC JSON file import** — handles both v2 and v3 export formats
-- **Lancer pilot cloud sync** — the pilot dropdown on the pilot sheet pulls from v3
-- **Lancer pilot share codes** — v3 12-char share codes work in the pilot sheet
+What the patch does:
 
-This is a temporary patch until the Lancer system natively supports v3.
+- NPC cloud import: fetches the NPC roster from the V3 API.
+- NPC JSON file import: handles v2 and v3 export formats.
+- Lancer pilot cloud sync: pilot dropdown pulls from V3.
+- Lancer pilot share codes: v3 12-char codes work in the pilot sheet.
+
+Disable only if you are hosting a private V2 deployment that still works.
+
+### Endpoint Overrides
+
+Five world-scope settings expose the V3/V2 hosts so you can update them without a module release if Massif Press rotates keys or moves hosts:
+
+- `V3 API Base URL` (default: `https://idu55qr85i.execute-api.us-east-1.amazonaws.com/prod`)
+- `V3 API Key` (default matches production `compcon.app`)
+- `V3 CDN Base URL` (default: `https://ds69h3g1zxwgy.cloudfront.net`)
+- `V2 Share API URL` (comma-separated; intercepts both `api.compcon.app/share` and the `ujgatmvzlg` gateway that `old.compcon.app` uses)
+- `V2 Share API Key`
+
+All five require a world reload to take effect.
+
 
 ## Custom Tier Support
 
