@@ -51,10 +51,10 @@ Custom stats are detected by comparing against the class base, so it still works
 
 The button only appears when the selected `.lcp` is actually v3. v2 LCPs use the normal import path unchanged.
 
-A few v3-only features have no Lancer VTT equivalent and get handled as follows:
-- **Eidolon layers**: dropped.
-- **Structured automation** (`active_effects`): lifted into native `bonuses` / `actions` / `deployables` where shapes match; anything else gets appended as readable text on the item's effect.
-- **Status/resistance grants** (`add_status`, `add_resist`): appended as text (Lancer has no way to apply these from LCP JSON).
+A few v3-only things don't map cleanly to Lancer VTT:
+- **Eidolons**: each layer becomes an NPC template, its rules and shards become features, everything goes in an `Eidolons` folder. Pick a layer, apply the template to your Eidolon actor. No auto layer-swap.
+- **active_effects**: turned into real bonuses/actions where possible, rest is appended as text to the item's effect.
+- **add_status / add_resist**: appended as text. Lancer can't auto-apply these from an LCP.
 
 The badge counts shown above the button are a preview of what will be imported.
 
