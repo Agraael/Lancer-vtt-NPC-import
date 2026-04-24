@@ -8,79 +8,69 @@
 
 ---
 
-Import Lancer NPCs into FoundryVTT from Comp/Con cloud (v2 and v3) or JSON files.
+Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC import, but at this point it does a bit more than that - see below.
 
-## Installation
+## What it does
 
-**Manifest URL:**
+- **NPC import** from Comp/Con cloud or JSON files, with tier scaling and update-in-place.
+- **Pilot import patch**: makes the built-in Lancer pilot import also bring in reserves and organizations (the system drops those by default).
+- **Pilot share code patch**: the 12-character codes that the new Comp/Con hands out work in the pilot sheet again.
+- **Pilot cloud sync patch**: the pilot dropdown in the Lancer system pulls from the new Comp/Con.
+- **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one. Click it and the content is translated and imported in one step — no file conversion or re-upload.
+
+The three pilot-side patches run automatically as long as the V3 setting is on (it is, by default).
+
+## Install
+
+Manifest URL:
+
 ```
 https://github.com/Agraael/Lancer-vtt-NPC-import-Macro/releases/latest/download/module.json
 ```
 
-### Required
+Requires:
 - [Lancer system](https://foundryvtt.com/packages/lancer) v2.0.0+
 - [Lancer Style Library](https://github.com/Agraael/lancer-style-library)
 
-## Usage
+## Using it
 
-Click the **Import NPCs** button in the Actors sidebar.
+Click **Import NPCs** in the Actors sidebar.
 
-### Import from Comp/Con Cloud
-1. Login to Comp/Con (Settings > Lancer System Settings > COMP/CON Login)
-2. Select "Import from Comp/Con"
-3. Choose NPCs and scaling mode
-4. Import
+- **From the cloud**: log in under Settings > Lancer System Settings > COMP/CON Login, then pick NPCs and a scaling mode.
+- **From JSON**: export from Comp/Con, pick the files, pick a scaling mode. Both v2 and v3 export formats are handled.
 
-### Import from JSON Files
-1. Export NPCs from Comp/Con as JSON
-2. Select "Import from JSON File(s)"
-3. Choose scaling mode and select files
+For NPCs with custom tiers:
+- **Scaled** keeps the tier-to-tier increments (custom base + tier delta).
+- **Flat** uses the same custom stats for every tier.
 
-## Comp/Con V3 Support
-
-As of 2026-04-22, `compcon.app` is V3 and the legacy `api.compcon.app/share` endpoint is offline. V2 lives at `old.compcon.app`. The **Patch to V3 endpoint** setting is now **on by default** because pilot and NPC import will not work against the current Lancer system without it.
-
-What the patch does:
-
-- NPC cloud import: fetches the NPC roster from the V3 API.
-- NPC JSON file import: handles v2 and v3 export formats.
-- Lancer pilot cloud sync: pilot dropdown pulls from V3.
-- Lancer pilot share codes: v3 12-char codes work in the pilot sheet.
-
-Disable only if you are hosting a private V2 deployment that still works.
-
-### Endpoint Overrides
-
-Five world-scope settings expose the V3/V2 hosts so you can update them without a module release if Massif Press rotates keys or moves hosts:
-
-- `V3 API Base URL` (default: `https://idu55qr85i.execute-api.us-east-1.amazonaws.com/prod`)
-- `V3 API Key` (default matches production `compcon.app`)
-- `V3 CDN Base URL` (default: `https://ds69h3g1zxwgy.cloudfront.net`)
-- `V2 Share API URL` (comma-separated; intercepts both `api.compcon.app/share` and the `ujgatmvzlg` gateway that `old.compcon.app` uses)
-- `V2 Share API Key`
-
-All five require a world reload to take effect.
-
-
-## Custom Tier Support
-
-For NPCs with custom tiers, choose a scaling mode:
-- **Scaled**: Keeps tier increments (custom value + tier difference from base)
-- **Flat**: Same custom stats for all tiers
-
-The module detects custom stats automatically by comparing against the class base stats, even when the tier field is not explicitly "custom" (v3 behavior).
-
-## Features
-
-- Import from Comp/Con cloud (v2 + v3) or JSON files
-- Update existing NPCs (by LID matching)
-- Manual replace mode (choose target actor)
-- Custom tier stat scaling (flat or scaled)
-- Auto-detect custom stats vs class base
-- Portrait download to server
-- Sync status indicators (new, synced, modified, unlinked)
-- Link unlinked actors by name
-- Pilot JSON import: reserves and organizations
-- Update notification on new releases
+Custom stats are detected by comparing against the class base, so it still works when Comp/Con doesn't flag the tier as "custom".
 
 ![Import Dialog](Screenshot.png)
+
+## V3 LCP notes
+
+The button only appears when the selected `.lcp` is actually v3. v2 LCPs use the normal import path unchanged.
+
+A few v3-only features have no Lancer VTT equivalent and get handled as follows:
+- **Eidolon layers**: dropped.
+- **Structured automation** (`active_effects`): lifted into native `bonuses` / `actions` / `deployables` where shapes match; anything else gets appended as readable text on the item's effect.
+- **Status/resistance grants** (`add_status`, `add_resist`): appended as text (Lancer has no way to apply these from LCP JSON).
+
+The badge counts shown above the button are a preview of what will be imported.
+
+## About the V3 switch
+
+Comp/Con moved to a new backend in April 2026. The old `api.compcon.app/share` endpoint is gone, the legacy site lives on at `old.compcon.app`, and the new site (`compcon.app`) is V3. The V3 patch is on by default because nothing pilot- or NPC-related works against the current Lancer system without it. Only turn it off if you're running your own V2 server.
+
+<details>
+<summary>Advanced: endpoint overrides</summary>
+
+If Massif rotates keys or moves hosts, five world settings let you update things without waiting for a module release. World reload required after changing any of them.
+
+- `V3 API Base URL`
+- `V3 API Key`
+- `V3 CDN Base URL`
+- `V2 Share API URL` (comma-separated; covers both the old `api.compcon.app/share` and the `ujgatmvzlg` gateway `old.compcon.app` uses)
+- `V2 Share API Key`
+
+</details>
