@@ -131,6 +131,12 @@ export function normalizePilotData(pilotData) {
         });
     }
 
+    // Bonds: v3 uses snake_case (bond_id / bond_powers), Lancer's importCC reads camelCase.
+    if (pilotData.bondId === undefined && pilotData.bond_id !== undefined)
+        pilotData.bondId = pilotData.bond_id;
+    if (!Array.isArray(pilotData.bondPowers) && Array.isArray(pilotData.bond_powers))
+        pilotData.bondPowers = pilotData.bond_powers;
+
     // Mechs kept as-is: frame is already a string LID; wrapping it breaks
     // Lancer's compendium lookup.
 
