@@ -14,9 +14,9 @@ Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC impo
 
 - **NPC import** from Comp/Con cloud or JSON files, with tier scaling and update-in-place.
 - **Pilot import patch**: makes the built-in Lancer pilot import also bring in reserves and organizations (the system drops those by default).
-- **Pilot share code patch**: the 12-character codes that the new Comp/Con hands out work in the pilot sheet again.
+- **Pilot share code patch**: the codes that the new Comp/Con hands out work in the pilot sheet again.
 - **Pilot cloud sync patch**: the pilot dropdown in the Lancer system pulls from the new Comp/Con.
-- **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one. Click it and the content is translated and imported in one step — no file conversion or re-upload.
+- **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one. Click it and the content is translated and imported in one step.
 
 The three pilot-side patches run automatically as long as the V3 setting is on (it is, by default).
 
@@ -49,14 +49,12 @@ Custom stats are detected by comparing against the class base, so it still works
 
 ## V3 LCP notes
 
-The button only appears when the selected `.lcp` is actually v3. v2 LCPs use the normal import path unchanged.
+Button only shows up for v3 LCPs. v2 LCPs go through the normal Lancer importer.
 
-A few v3-only things don't map cleanly to Lancer VTT:
-- **Eidolons**: each layer becomes an NPC template, its rules and shards become features, everything goes in an `Eidolons` folder. Pick a layer, apply the template to your Eidolon actor. No auto layer-swap.
-- **active_effects**: turned into real bonuses/actions where possible, rest is appended as text to the item's effect.
-- **add_status / add_resist**: appended as text. Lancer can't auto-apply these from an LCP.
-
-The badge counts shown above the button are a preview of what will be imported.
+Stuff v3 has that Lancer doesn't:
+- Eidolons → each layer becomes an NPC template + features in an `Eidolons` folder. Apply the template you want on the Eidolon actor manually. No layer-swap.
+- `active_effects` → lifted into bonuses/actions where possible, rest appended to the item's effect text.
+- `add_status` / `add_resist` → appended as text. Lancer doesn't apply statuses from LCPs.
 
 ## About the V3 switch
 
