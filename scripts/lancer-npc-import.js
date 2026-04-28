@@ -9,6 +9,7 @@ import {
 import { installPilotSheetPatch } from "./pilot-sheet-patch.js";
 import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
 import { NPCImportDialog } from "./npc-import-ui.js";
+import { LcpDebugDiffMenu } from "./lcp-debug-diff.js";
 
 export async function ImportNPC() {
     new NPCImportDialog().render(true);
@@ -95,6 +96,15 @@ Hooks.once('init', () => {
         type: String,
         default: "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf",
         requiresReload: true
+    });
+
+    game.settings.registerMenu("lancer-npc-import", "lcpDebugDiff", {
+        name: "LCP Debug Diff",
+        label: "Open LCP Diff Tool",
+        hint: "Pick two LCPs and compare what each would import (no actual import is performed).",
+        icon: "fas fa-not-equal",
+        type: LcpDebugDiffMenu,
+        restricted: true
     });
 
     game.settings.register("lancer-npc-import", "v3Debug", {

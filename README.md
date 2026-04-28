@@ -8,7 +8,7 @@
 
 ---
 
-Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC import, but at this point it does a bit more than that - see below.
+Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC import, but at this point it does a bit more than that.
 
 ## What it does
 
@@ -16,7 +16,7 @@ Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC impo
 - **Pilot import patch**: makes the built-in Lancer pilot import also bring in reserves and organizations (the system drops those by default).
 - **Pilot share code patch**: the codes that the new Comp/Con hands out work in the pilot sheet again.
 - **Pilot cloud sync patch**: the pilot dropdown in the Lancer system pulls from the new Comp/Con.
-- **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one. Click it and the content is translated and imported in one step.
+- **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one.
 
 The three pilot-side patches run automatically as long as the V3 setting is on (it is, by default).
 
@@ -56,9 +56,14 @@ Stuff v3 has that Lancer doesn't:
 - `active_effects` → lifted into bonuses/actions where possible, rest appended to the item's effect text.
 - `add_status` / `add_resist` → appended as text. Lancer doesn't apply statuses from LCPs.
 
-## About the V3 switch
 
-Comp/Con moved to a new backend in April 2026. The old `api.compcon.app/share` endpoint is gone, the legacy site lives on at `old.compcon.app`, and the new site (`compcon.app`) is V3. The V3 patch is on by default because nothing pilot- or NPC-related works against the current Lancer system without it. Only turn it off if you're running your own V2 server.
+## V3 LCP diff tool
+
+There are way too many LCPs out there for me to test them all, so some translation edge cases probably slipped through. To help with that, I added a diff tool in the module configuration.
+
+Open **Module Settings → Lancer NPC Import → Open LCP Diff Tool**, pick two LCPs, and you get a side-by-side breakdown: per-bucket counts, added/removed/changed entries, and field-level diffs on the items that changed. Nothing is actually imported.
+
+Mainly useful for LCP authors who want to sanity-check that their v3 pack translates the way they expect, but it also gives me something concrete to look at when someone reports a bad import.
 
 <details>
 <summary>Advanced: endpoint overrides</summary>
