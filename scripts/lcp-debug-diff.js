@@ -1,55 +1,85 @@
-const MODULE_ID = "lancer-npc-import";
-const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+import { translateV3LcpBlob, getLancerApi } from "./v3-lcp-shim.js";
 
-let _jszipPromise = null;
-async function getJSZip() {
-    if (globalThis.JSZip)
-        return globalThis.JSZip;
-    if (!_jszipPromise)
-        _jszipPromise = import(JSZIP_CDN).then(m => m.default || m.JSZip || m);
-    return _jszipPromise;
+async function parsePackOnly(file) {
+    let blob = file;
+    const translated = await translateV3LcpBlob(file);
+    if (!translated.summary?.alreadyV2 && translated.blob)
+        blob = translated.blob;
+    const arrayBuf = await blob.arrayBuffer();
+    const { parseContentPack } = await getLancerApi();
+    const pack = await parseContentPack(arrayBuf);
+    return { manifest: pack.manifest, packId: pack.id, buckets: pack.data };
 }
 
-const BUCKETS = [
-    "npc_classes", "npc_templates", "npc_features",
-    "frames", "weapons", "systems", "mods",
-    "pilot_gear", "skills", "talents", "bonds", "reserves",
-    "tags", "statuses", "core_bonuses"
-];
+async function simulateImport(file) {
+    let blob = file;
+    const translated = await translateV3LcpBlob(file);
+    if (!translated.summary?.alreadyV2 && translated.blob)
+        blob = translated.blob;
+    const arrayBuf = await blob.arrayBuffer();
+    const { parseContentPack, importCP } = await getLancerApi();
+    const pack = await parseContentPack(arrayBuf);
 
-async function readZipBuckets(blob) {
-    const JSZip = await getJSZip();
-    const zip = await JSZip.loadAsync(blob);
-    const manifest = await readJsonIfExists(zip, "lcp_manifest.json");
-    const buckets = {};
-    for (const name of BUCKETS) {
-        const arr = await readJsonIfExists(zip, `${name}.json`);
-        if (Array.isArray(arr))
-            buckets[name] = arr;
-    }
-    return { manifest, buckets };
-}
+    const captured = {};
+    const captureInto = (arr) => {
+        for (const d of arr) {
+            const t = d.type ?? "unknown";
+            (captured[t] ??= []).push(d);
+        }
+    };
 
-async function readJsonIfExists(zip, name) {
-    const f = zip.file(name);
-    if (!f)
-        return null;
+    const ItemCls = CONFIG.Item.documentClass;
+    const ActorCls = CONFIG.Actor.documentClass;
+    const orig = {
+        itemCreate: ItemCls.createDocuments,
+        itemUpdate: ItemCls.updateDocuments,
+        actorCreate: ActorCls.createDocuments,
+        actorUpdate: ActorCls.updateDocuments,
+        folderCreate: Folder.create,
+        settingsSet: game.settings.set.bind(game.settings)
+    };
+
+    ItemCls.createDocuments = async function (data) {
+        captureInto(data ?? []);
+        return (data ?? []).map(d => ({ id: d._id ?? foundry.utils.randomID(), ...d }));
+    };
+    ItemCls.updateDocuments = async function (data) {
+        captureInto(data ?? []);
+        return data ?? [];
+    };
+    ActorCls.createDocuments = async function (data) {
+        captureInto(data ?? []);
+        return (data ?? []).map(d => ({ id: d._id ?? foundry.utils.randomID(), ...d }));
+    };
+    ActorCls.updateDocuments = async function (data) {
+        captureInto(data ?? []);
+        return data ?? [];
+    };
+    Folder.create = async function (data) {
+        return { id: foundry.utils.randomID(), getFlag: () => null, ...data };
+    };
+    game.settings.set = async function (scope, key, value) {
+        if (scope === game.system.id && typeof key === "string" && key.includes("tag_config"))
+            return value;
+        return orig.settingsSet(scope, key, value);
+    };
+
     try {
-        return JSON.parse(await f.async("string"));
-    } catch {
-        return null;
+        await importCP(pack);
+    } finally {
+        ItemCls.createDocuments = orig.itemCreate;
+        ItemCls.updateDocuments = orig.itemUpdate;
+        ActorCls.createDocuments = orig.actorCreate;
+        ActorCls.updateDocuments = orig.actorUpdate;
+        Folder.create = orig.folderCreate;
+        game.settings.set = orig.settingsSet;
     }
+
+    return { manifest: pack.manifest, packId: pack.id, buckets: captured };
 }
 
-async function loadLcpAsBuckets(file) {
-    const api = game.modules.get(MODULE_ID)?.api;
-    const translate = api?.translateV3LcpBlob;
-    if (typeof translate === "function") {
-        const result = await translate(file);
-        if (!result.summary?.alreadyV2 && result.blob)
-            return readZipBuckets(result.blob);
-    }
-    return readZipBuckets(file);
+async function loadLcpAsBuckets(file, mode) {
+    return mode === "simulated" ? simulateImport(file) : parsePackOnly(file);
 }
 
 function indexBucket(arr) {
@@ -99,6 +129,7 @@ function diffBuckets(a, b) {
         const added = [];
         const removed = [];
         const changed = [];
+        const unchanged = [];
         for (const [k, v] of mb)
             if (!ma.has(k))
                 added.push({ key: k, item: v });
@@ -109,17 +140,20 @@ function diffBuckets(a, b) {
             if (!mb.has(k))
                 continue;
             const vb = mb.get(k);
-            if (stableStringify(va) === stableStringify(vb))
+            if (stableStringify(va) === stableStringify(vb)) {
+                unchanged.push({ key: k, item: va });
                 continue;
+            }
             changed.push({ key: k, a: va, b: vb, fields: fieldDiff(va, vb) });
         }
-        if (added.length || removed.length || changed.length || ma.size || mb.size) {
+        if (added.length || removed.length || changed.length || unchanged.length || ma.size || mb.size) {
             out[bucket] = {
                 countA: ma.size,
                 countB: mb.size,
                 added,
                 removed,
-                changed
+                changed,
+                unchanged
             };
         }
     }
@@ -148,7 +182,7 @@ function previewValue(v) {
     return escapeHtml(s);
 }
 
-function renderDiffHtml(manifestA, manifestB, diff) {
+function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed") {
     const sections = [];
     const totals = { added: 0, removed: 0, changed: 0, countA: 0, countB: 0 };
     for (const info of Object.values(diff)) {
@@ -161,6 +195,7 @@ function renderDiffHtml(manifestA, manifestB, diff) {
 
     const head = `
         <div class="lcp-diff-head">
+            <div style="font-size:11px;color:#555;margin-bottom:4px;">${mode === "simulated" ? "Diff of <strong>simulated import</strong> output (what would land in compendia, no write performed)." : "Diff of <code>parseContentPack</code> output (translator + parser only, before <code>importCP</code>)."}</div>
             <div><strong>A:</strong> ${escapeHtml(manifestA?.name ?? "(no manifest)")}
                  <span class="lcp-diff-ver">${escapeHtml(manifestA?.version ?? "")}</span></div>
             <div><strong>B:</strong> ${escapeHtml(manifestB?.name ?? "(no manifest)")}
@@ -177,15 +212,31 @@ function renderDiffHtml(manifestA, manifestB, diff) {
 
     for (const [bucket, info] of Object.entries(diff)) {
         const hasChanges = info.added.length || info.removed.length || info.changed.length;
+        const unchangedCount = info.unchanged?.length ?? 0;
         const summary = `${bucket} (${info.countA} → ${info.countB}` +
-            (hasChanges ? `, +${info.added.length} -${info.removed.length} ~${info.changed.length}` : ", identical") +
+            (hasChanges ? `, +${info.added.length} -${info.removed.length} ~${info.changed.length} =${unchangedCount}` : `, identical (=${unchangedCount})`) +
             `)`;
 
         const rows = [];
+        const fullJson = (item) => escapeHtml(JSON.stringify(item, null, 2));
         for (const e of info.added)
-            rows.push(`<li class="lcp-diff-row lcp-diff-row-add"><span class="lcp-diff-tag">ADDED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></li>`);
+            rows.push(`
+                <li class="lcp-diff-row lcp-diff-row-add">
+                    <details>
+                        <summary><span class="lcp-diff-tag">ADDED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></summary>
+                        <pre class="lcp-diff-full">${fullJson(e.item)}</pre>
+                    </details>
+                </li>
+            `);
         for (const e of info.removed)
-            rows.push(`<li class="lcp-diff-row lcp-diff-row-rem"><span class="lcp-diff-tag">REMOVED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></li>`);
+            rows.push(`
+                <li class="lcp-diff-row lcp-diff-row-rem">
+                    <details>
+                        <summary><span class="lcp-diff-tag">REMOVED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></summary>
+                        <pre class="lcp-diff-full">${fullJson(e.item)}</pre>
+                    </details>
+                </li>
+            `);
         for (const e of info.changed) {
             const fields = e.fields.slice(0, 12).map(f => `
                 <li class="lcp-diff-field">
@@ -197,12 +248,29 @@ function renderDiffHtml(manifestA, manifestB, diff) {
             const more = e.fields.length > 12 ? `<li class="lcp-diff-field-more">+${e.fields.length - 12} more</li>` : "";
             rows.push(`
                 <li class="lcp-diff-row lcp-diff-row-chg">
-                    <span class="lcp-diff-tag">CHANGED</span><code>${escapeHtml(e.key)}</code>
-                    <span class="lcp-diff-name">${escapeHtml(e.b?.name ?? e.a?.name ?? "")}</span>
-                    <ul class="lcp-diff-fields">${fields}${more}</ul>
+                    <details open>
+                        <summary><span class="lcp-diff-tag">CHANGED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.b?.name ?? e.a?.name ?? "")}</span> <span class="lcp-diff-field-count">(${e.fields.length} field${e.fields.length === 1 ? "" : "s"})</span></summary>
+                        <ul class="lcp-diff-fields">${fields}${more}</ul>
+                        <details>
+                            <summary class="lcp-diff-full-toggle">Show full A &amp; B</summary>
+                            <div class="lcp-diff-full-pair">
+                                <div><div class="lcp-diff-full-label">A (full)</div><pre class="lcp-diff-full">${fullJson(e.a)}</pre></div>
+                                <div><div class="lcp-diff-full-label">B (full)</div><pre class="lcp-diff-full">${fullJson(e.b)}</pre></div>
+                            </div>
+                        </details>
+                    </details>
                 </li>
             `);
         }
+        for (const e of info.unchanged ?? [])
+            rows.push(`
+                <li class="lcp-diff-row lcp-diff-row-unc">
+                    <details>
+                        <summary><span class="lcp-diff-tag">UNCHANGED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></summary>
+                        <pre class="lcp-diff-full">${fullJson(e.item)}</pre>
+                    </details>
+                </li>
+            `);
 
         sections.push(`
             <details class="lcp-diff-bucket" ${hasChanges ? "open" : ""}>
@@ -253,6 +321,8 @@ function inlineStyles() {
             .lcp-diff-row-add .lcp-diff-tag { background: #1e6f3a; }
             .lcp-diff-row-rem .lcp-diff-tag { background: #7a2424; }
             .lcp-diff-row-chg .lcp-diff-tag { background: #7a5c1c; }
+            .lcp-diff-row-unc .lcp-diff-tag { background: #555; }
+            .lcp-diff-row-unc { opacity: 0.75; }
             .lcp-diff-name { color: #444; margin-left: 6px; font-style: italic; }
             .lcp-diff-row > code { background: rgba(0,0,0,0.08); padding: 1px 4px; border-radius: 2px; color: #1c1c1c; }
             .lcp-diff-fields { margin: 4px 0 6px 16px; padding: 0; list-style: none; }
@@ -265,6 +335,18 @@ function inlineStyles() {
             .lcp-diff-to { display: block; color: #1e6f3a; padding-left: 12px; word-break: break-all; }
             .lcp-diff-field-more { color: #555; font-style: italic; padding: 2px 0 0 6px; }
             .lcp-diff-empty { color: #555; font-style: italic; }
+            .lcp-diff-row > details > summary { cursor: pointer; list-style: revert; }
+            .lcp-diff-full {
+                margin: 4px 0 6px 16px; padding: 6px 8px;
+                background: #1c1c1c; color: #ddd;
+                border-radius: 3px; font-size: 11px;
+                max-height: 300px; overflow: auto;
+                white-space: pre-wrap; word-break: break-word;
+            }
+            .lcp-diff-full-toggle { cursor: pointer; color: #555; font-size: 11px; padding: 2px 0 2px 16px; font-style: italic; }
+            .lcp-diff-full-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-left: 16px; }
+            .lcp-diff-full-pair .lcp-diff-full { margin-left: 0; }
+            .lcp-diff-full-label { font-weight: bold; font-size: 11px; color: #444; padding: 2px 0; }
             .lcp-diff-pickers { display: flex; gap: 12px; margin-bottom: 8px; }
             .lcp-diff-pickers > label { flex: 1; }
             .lcp-diff-pickers input[type=file] { width: 100%; }
@@ -302,7 +384,8 @@ class LcpDebugDiffApp extends Application {
                 <label>LCP B<input type="file" class="lcp-diff-b" accept=".lcp,application/zip"></label>
             </div>
             <div class="lcp-diff-actions flex0" style="display:flex;gap:6px;margin:6px 0 10px;flex-wrap:wrap;align-items:flex-start;">
-                <button type="button" class="lcp-diff-run" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-not-equal"></i> Compare</button>
+                <button type="button" class="lcp-diff-run" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Diff parsed content pack (translator output)"><i class="fas fa-not-equal"></i> Compare (Parsed)</button>
+                <button type="button" class="lcp-diff-run-sim" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Run a real importCP through patched globals — diff what would land in compendia. No write."><i class="fas fa-vial"></i> Compare (Import Sim)</button>
                 <button type="button" class="lcp-diff-log" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-terminal"></i> Log to Console</button>
                 <button type="button" class="lcp-diff-export" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-file-export"></i> Export Both (JSON)</button>
             </div>
@@ -335,8 +418,10 @@ class LcpDebugDiffApp extends Application {
                 return;
             e.preventDefault();
             e.stopPropagation();
-            if (btn.classList.contains("lcp-diff-run"))
-                await this._runCompare();
+            if (btn.classList.contains("lcp-diff-run-sim"))
+                await this._runCompare("simulated");
+            else if (btn.classList.contains("lcp-diff-run"))
+                await this._runCompare("parsed");
             else if (btn.classList.contains("lcp-diff-log"))
                 this._logToConsole();
             else if (btn.classList.contains("lcp-diff-export"))
@@ -348,7 +433,7 @@ class LcpDebugDiffApp extends Application {
         return this.element[0]?.querySelector(".lcp-diff-output");
     }
 
-    async _runCompare() {
+    async _runCompare(mode = "parsed") {
         const out = this._outEl();
         if (!out)
             return;
@@ -356,17 +441,17 @@ class LcpDebugDiffApp extends Application {
             out.innerHTML = '<span style="color:#d56565">Pick both files first.</span>';
             return;
         }
-        out.innerHTML = "<em>Translating + parsing…</em>";
+        const label = mode === "simulated" ? "Simulating import (no compendium write)…" : "Translating + parsing…";
+        out.innerHTML = `<em>${label}</em>`;
         try {
-            const [a, b] = await Promise.all([
-                loadLcpAsBuckets(this._pickedA),
-                loadLcpAsBuckets(this._pickedB)
-            ]);
+            const a = await loadLcpAsBuckets(this._pickedA, mode);
+            const b = await loadLcpAsBuckets(this._pickedB, mode);
             this._lastA = a;
             this._lastB = b;
+            this._lastMode = mode;
             this._lastDiff = diffBuckets(a.buckets, b.buckets);
-            out.innerHTML = renderDiffHtml(a.manifest, b.manifest, this._lastDiff);
-            console.log("[lcp-debug-diff] result", { a, b, diff: this._lastDiff });
+            out.innerHTML = renderDiffHtml(a.manifest, b.manifest, this._lastDiff, mode);
+            console.log(`[lcp-debug-diff] result (${mode})`, { a, b, diff: this._lastDiff });
         } catch (e) {
             console.error("[lcp-debug-diff]", e);
             out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;

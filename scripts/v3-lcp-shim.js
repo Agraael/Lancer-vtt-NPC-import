@@ -1192,7 +1192,7 @@ export async function translateV3LcpBlob(inputBlob) {
 // Dynamically resolve the Lancer system's main bundle (hashed filename varies per release)
 // and grab parseContentPack + importCP so we can import the translated LCP in-place.
 let _lancerApi = null;
-async function getLancerApi() {
+export async function getLancerApi() {
     if (_lancerApi)
         return _lancerApi;
     const entrySrc = await fetch("/systems/lancer/lancer.mjs").then(r => r.text());
