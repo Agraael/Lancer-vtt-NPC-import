@@ -26,6 +26,7 @@ export function patchPilotImportReserves() {
             await _importReserves(this.actor, pilotData.reserves);
         if (pilotData?.orgs?.length > 0)
             await _importOrganizations(this.actor, pilotData.orgs);
+        await _backfillBondState(this.actor, pilotData);
         await _refillResources(this.actor);
     };
     console.log('lancer-npc-import | Patched pilot import to include reserves & organizations');
@@ -131,6 +132,48 @@ export async function _importOrganizations(pilot, orgs) {
         await pilot.createEmbeddedDocuments('Item', toCreate);
         console.log(`lancer-npc-import | Imported ${toCreate.length} organization(s) for ${pilot.name}`);
     }
+}
+
+// Backfills bond_state from the v3 pilot fields when importCC didn't.
+export async function _backfillBondState(pilot, pilotData) {
+    if (!pilot || !pilotData)
+        return;
+    const hasBurdens = Array.isArray(pilotData.burdens) && pilotData.burdens.length > 0;
+    const hasClocks = Array.isArray(pilotData.clocks) && pilotData.clocks.length > 0;
+    const hasAnswers = Array.isArray(pilotData.bondAnswers) && pilotData.bondAnswers.some(a => a);
+    const hasMinor = !!pilotData.minorIdeal;
+    if (!hasBurdens && !hasClocks && !hasAnswers && !hasMinor)
+        return;
+
+    const sanitizeLid = (id) => {
+        const s = String(id ?? "").replace(/[^a-zA-Z0-9_]/g, "_");
+        return /^[a-zA-Z]/.test(s) ? s : `b_${s}`;
+    };
+    const toCounter = (entry, prefix) => ({
+        lid: sanitizeLid(entry.id ?? `${prefix}_${entry.title ?? "x"}`),
+        name: entry.title ?? prefix,
+        min: 0,
+        max: Number.isFinite(entry.segments) ? entry.segments : 6,
+        value: Number.isFinite(entry.progress) ? entry.progress : 0,
+        default_value: 0
+    });
+
+    const update = {};
+    const cur = pilot.system?.bond_state ?? {};
+
+    if (hasBurdens && (!Array.isArray(cur.burdens) || cur.burdens.length === 0))
+        update["system.bond_state.burdens"] = pilotData.burdens.map(b => toCounter(b, "burden"));
+    if (hasClocks && (!Array.isArray(cur.clocks) || cur.clocks.length === 0))
+        update["system.bond_state.clocks"] = pilotData.clocks.map(c => toCounter(c, "clock"));
+    if (hasAnswers && (!Array.isArray(cur.answers) || cur.answers.every(a => !a)))
+        update["system.bond_state.answers"] = pilotData.bondAnswers;
+    if (hasMinor && !cur.minor_ideal)
+        update["system.bond_state.minor_ideal"] = pilotData.minorIdeal;
+
+    if (Object.keys(update).length === 0)
+        return;
+    await pilot.update(update);
+    console.log(`lancer-npc-import | Backfilled bond_state for ${pilot.name}`, update);
 }
 
 // Fill HP/structure/stress/repairs to max, zero heat/burn/overshield.

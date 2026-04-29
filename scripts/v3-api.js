@@ -131,11 +131,37 @@ export function normalizePilotData(pilotData) {
         });
     }
 
-    // Bonds: v3 uses snake_case (bond_id / bond_powers), Lancer's importCC reads camelCase.
+    const b = pilotData.bond;
+    if (b && typeof b === "object") {
+        if (pilotData.bondId === undefined)
+            pilotData.bondId = b.bondId ?? b.data?.id;
+        if (!Array.isArray(pilotData.bondPowers))
+            pilotData.bondPowers = Array.isArray(b.bondPowers) ? b.bondPowers : [];
+        if (!Array.isArray(pilotData.burdens))
+            pilotData.burdens = Array.isArray(b.burdens) ? b.burdens : [];
+        if (!Array.isArray(pilotData.clocks))
+            pilotData.clocks = Array.isArray(b.clocks) ? b.clocks : [];
+        if (!Array.isArray(pilotData.bondAnswers))
+            pilotData.bondAnswers = Array.isArray(b.bondAnswers) ? b.bondAnswers : [];
+        if (pilotData.minorIdeal === undefined)
+            pilotData.minorIdeal = b.minorIdeal ?? "";
+        if (pilotData.xp === undefined)
+            pilotData.xp = b.xp ?? 0;
+        if (pilotData.stress === undefined)
+            pilotData.stress = b.stress ?? 0;
+    }
     if (pilotData.bondId === undefined && pilotData.bond_id !== undefined)
         pilotData.bondId = pilotData.bond_id;
     if (!Array.isArray(pilotData.bondPowers) && Array.isArray(pilotData.bond_powers))
         pilotData.bondPowers = pilotData.bond_powers;
+    if (pilotData.bondId) {
+        pilotData.burdens = Array.isArray(pilotData.burdens) ? pilotData.burdens : [];
+        pilotData.clocks = Array.isArray(pilotData.clocks) ? pilotData.clocks : [];
+        pilotData.bondAnswers = Array.isArray(pilotData.bondAnswers) ? pilotData.bondAnswers : [];
+        pilotData.minorIdeal = pilotData.minorIdeal ?? "";
+        pilotData.xp = pilotData.xp ?? 0;
+        pilotData.stress = pilotData.stress ?? 0;
+    }
 
     // Mechs kept as-is: frame is already a string LID; wrapping it breaks
     // Lancer's compendium lookup.
