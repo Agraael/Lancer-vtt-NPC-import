@@ -108,16 +108,31 @@ function stableStringify(value) {
     return `{${keys.map(k => JSON.stringify(k) + ":" + stableStringify(value[k])).join(",")}}`;
 }
 
-function fieldDiff(a, b) {
-    const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
-    const diffs = [];
-    for (const k of keys) {
-        const sa = stableStringify(a?.[k]);
-        const sb = stableStringify(b?.[k]);
-        if (sa !== sb)
-            diffs.push({ key: k, a: a?.[k], b: b?.[k] });
+function _isPlainObj(v) {
+    return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function fieldDiff(a, b, path = "", out = []) {
+    if (stableStringify(a) === stableStringify(b))
+        return out;
+    // Both sides plain objects: recurse so each leaf diff lands on its own line.
+    if (_isPlainObj(a) && _isPlainObj(b)) {
+        const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+        for (const k of keys) {
+            const subPath = path ? `${path}.${k}` : k;
+            fieldDiff(a[k], b[k], subPath, out);
+        }
+        return out;
     }
-    return diffs;
+    // Both sides arrays of equal length: recurse per index. Different lengths or
+    // mixed types fall through to leaf-level (whole array shown).
+    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+        for (let i = 0; i < a.length; i++)
+            fieldDiff(a[i], b[i], `${path}[${i}]`, out);
+        return out;
+    }
+    out.push({ key: path, a, b });
+    return out;
 }
 
 function diffBuckets(a, b) {

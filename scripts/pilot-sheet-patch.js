@@ -4,6 +4,7 @@
 
 import { getV2ShareApiPrimary, getV2ShareApiKey } from "./v3-api.js";
 import { _importReserves, _importOrganizations, _refillResources } from "./pilot-reserves-patch.js";
+import { uploadPortraitToServer } from "./npc-import-ui.js";
 
 export function installPilotSheetPatch() {
     Hooks.on('renderActorSheet', _onRenderPilotSheet);
@@ -61,6 +62,26 @@ export function _onRenderPilotSheet(app, html) {
             if (pilotData?.orgs?.length > 0)
                 await _importOrganizations(app.actor, pilotData.orgs);
             await _refillResources(app.actor);
+
+            // Pilot portrait. Mirror the NPC flow: optionally upload to the server
+            // (uses the same `defaultDownloadPortrait` setting), otherwise just point
+            // actor.img at the cloud URL.
+            const cloudPortrait = pilotData?.cloud_portrait || pilotData?.img?.cloud_portrait || '';
+            if (cloudPortrait) {
+                let finalImg = cloudPortrait;
+                if (game.settings.get("lancer-npc-import", "defaultDownloadPortrait")) {
+                    try {
+                        const local = await uploadPortraitToServer(cloudPortrait, pilotData.name || pilot.name);
+                        if (local) finalImg = local;
+                    } catch (e) {
+                        console.warn("[V3] Pilot portrait upload failed, falling back to cloud URL:", e);
+                    }
+                }
+                await pilot.update({
+                    "img": finalImg,
+                    "prototypeToken.texture.src": finalImg,
+                });
+            }
         } catch (error) {
             ui.notifications.error("Error importing from v3 share code: " + error.message);
             console.error("[V3] Share code import error:", error);
