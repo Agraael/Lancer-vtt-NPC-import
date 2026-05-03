@@ -47,13 +47,25 @@ async function simulateImport(file) {
         captureInto(data ?? []);
         return data ?? [];
     };
+    const stubActor = (d) => {
+        const id = d._id ?? foundry.utils.randomID();
+        return {
+            id,
+            ...d,
+            items: [],
+            npcClassSwapPromises: [],
+            removeClassFeatures: async () => {},
+            deleteEmbeddedDocuments: async () => [],
+            quickOwn: async () => null
+        };
+    };
     ActorCls.createDocuments = async function (data) {
         captureInto(data ?? []);
-        return (data ?? []).map(d => ({ id: d._id ?? foundry.utils.randomID(), ...d }));
+        return (data ?? []).map(stubActor);
     };
     ActorCls.updateDocuments = async function (data) {
         captureInto(data ?? []);
-        return data ?? [];
+        return (data ?? []).map(stubActor);
     };
     Folder.create = async function (data) {
         return { id: foundry.utils.randomID(), getFlag: () => null, ...data };
@@ -401,6 +413,7 @@ class LcpDebugDiffApp extends Application {
             <div class="lcp-diff-actions flex0" style="display:flex;gap:6px;margin:6px 0 10px;flex-wrap:wrap;align-items:flex-start;">
                 <button type="button" class="lcp-diff-run" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Diff parsed content pack (translator output)"><i class="fas fa-not-equal"></i> Compare (Parsed)</button>
                 <button type="button" class="lcp-diff-run-sim" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Run a real importCP through patched globals — diff what would land in compendia. No write."><i class="fas fa-vial"></i> Compare (Import Sim)</button>
+                <button type="button" class="lcp-diff-run-single" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Single LCP (slot A only): diff parseContentPack output vs simulated import output. Reveals what importCP transforms or drops."><i class="fas fa-search"></i> Single (Parsed vs Sim)</button>
                 <button type="button" class="lcp-diff-log" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-terminal"></i> Log to Console</button>
                 <button type="button" class="lcp-diff-export" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-file-export"></i> Export Both (JSON)</button>
             </div>
@@ -433,7 +446,9 @@ class LcpDebugDiffApp extends Application {
                 return;
             e.preventDefault();
             e.stopPropagation();
-            if (btn.classList.contains("lcp-diff-run-sim"))
+            if (btn.classList.contains("lcp-diff-run-single"))
+                await this._runCompareSingle();
+            else if (btn.classList.contains("lcp-diff-run-sim"))
                 await this._runCompare("simulated");
             else if (btn.classList.contains("lcp-diff-run"))
                 await this._runCompare("parsed");
@@ -467,6 +482,36 @@ class LcpDebugDiffApp extends Application {
             this._lastDiff = diffBuckets(a.buckets, b.buckets);
             out.innerHTML = renderDiffHtml(a.manifest, b.manifest, this._lastDiff, mode);
             console.log(`[lcp-debug-diff] result (${mode})`, { a, b, diff: this._lastDiff });
+        } catch (e) {
+            console.error("[lcp-debug-diff]", e);
+            out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;
+        }
+    }
+
+    async _runCompareSingle() {
+        const out = this._outEl();
+        if (!out)
+            return;
+        const file = this._pickedA ?? this._pickedB;
+        if (!file) {
+            out.innerHTML = '<span style="color:#d56565">Pick at least one LCP (slot A) first.</span>';
+            return;
+        }
+        out.innerHTML = `<em>Parsing then simulating import on ${escapeHtml(file.name)}…</em>`;
+        try {
+            const parsed = await parsePackOnly(file);
+            const simulated = await simulateImport(file);
+            this._lastA = parsed;
+            this._lastB = simulated;
+            this._lastMode = "single";
+            this._lastDiff = diffBuckets(parsed.buckets, simulated.buckets);
+            out.innerHTML = renderDiffHtml(parsed.manifest, simulated.manifest, this._lastDiff, "simulated");
+            console.log("[lcp-debug-diff] single-file (parsed vs sim)", {
+                file: file.name,
+                parsed,
+                simulated,
+                diff: this._lastDiff
+            });
         } catch (e) {
             console.error("[lcp-debug-diff]", e);
             out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;

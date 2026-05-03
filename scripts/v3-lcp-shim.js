@@ -644,9 +644,106 @@ function translateNpcTemplate(t, droppedAE) {
     stripNested(t, droppedAE);
 }
 
+function renderTierVal(v) {
+    if (Array.isArray(v))
+        return v.join("/");
+    if (v === null || v === undefined)
+        return "";
+    return String(v);
+}
+
+function renderRangeList(ranges) {
+    if (!Array.isArray(ranges) || !ranges.length)
+        return "";
+    return ranges.map(r => {
+        if (!r || typeof r !== "object")
+            return "";
+        const t = r.type ?? "";
+        const v = r.val !== undefined ? renderTierVal(r.val) : "";
+        return v !== "" ? `${t} ${v}` : t;
+    }).filter(Boolean).join(", ");
+}
+
+function renderDamageList(damages) {
+    if (!Array.isArray(damages) || !damages.length)
+        return "";
+    return damages.map(d => {
+        if (!d || typeof d !== "object")
+            return "";
+        const v = renderTierVal(d.val ?? d.damage);
+        return v ? `${v} ${d.type ?? ""}`.trim() : (d.type ?? "");
+    }).filter(Boolean).join(" + ");
+}
+
+function renderStatusList(statuses) {
+    if (!Array.isArray(statuses) || !statuses.length)
+        return "";
+    return statuses.map(s => {
+        if (!s)
+            return "";
+        if (typeof s === "string")
+            return s;
+        const id = s.id ?? s.name ?? "";
+        if (!id)
+            return "";
+        return s.save ? `${id} (${s.save} save)` : id;
+    }).filter(Boolean).join(", ");
+}
+
+function renderNpcActionsAsHtml(actions) {
+    if (!Array.isArray(actions) || !actions.length)
+        return "";
+    const blocks = [];
+    for (const a of actions) {
+        if (!a || typeof a !== "object")
+            continue;
+        const meta = [];
+        if (a.activation)
+            meta.push(a.activation);
+        if (a.frequency)
+            meta.push(a.frequency);
+        const range = renderRangeList(a.range);
+        if (range)
+            meta.push(range);
+        const dmg = renderDamageList(a.damage);
+        if (dmg)
+            meta.push(dmg);
+        const header = `<strong>${a.name ?? "Action"}</strong>`
+            + (meta.length ? ` <em>(${meta.join(", ")})</em>` : "");
+        const parts = [header];
+        const detail = typeof a.detail === "string" ? a.detail
+            : (a.detail ? coerceOnHookString(a.detail) : "");
+        if (detail)
+            parts.push(detail);
+        if (a.trigger)
+            parts.push(`<strong>Trigger:</strong> ${typeof a.trigger === "string" ? a.trigger : coerceOnHookString(a.trigger)}`);
+        const statuses = renderStatusList(a.add_status);
+        if (statuses)
+            parts.push(`<em>Applies status:</em> ${statuses}`);
+        const conditions = renderStatusList(a.add_condition);
+        if (conditions)
+            parts.push(`<em>Applies condition:</em> ${conditions}`);
+        blocks.push(parts.join("<br>"));
+    }
+    return blocks.join("<br><br>");
+}
+
 function translateNpcFeatureCommon(f, droppedAE) {
     if (!f)
         return;
+    if (Array.isArray(f.actions) && f.actions.length) {
+        if (f.type === "Reaction" && !f.trigger) {
+            const firstTrigger = f.actions.find(a => a?.trigger)?.trigger;
+            if (firstTrigger)
+                f.trigger = typeof firstTrigger === "string" ? firstTrigger : coerceOnHookString(firstTrigger);
+        }
+        const html = renderNpcActionsAsHtml(f.actions);
+        if (html) {
+            const existing = typeof f.effect === "string" ? f.effect : "";
+            f.effect = existing ? `${existing}<br><br>${html}` : html;
+        }
+        delete f.actions;
+    }
     // Lancer NPC feature only has `on_hit` as HTML (NpcFeatureModel:35331).
     // v3 NpcWeapon also carries `on_attack` / `on_crit` (compcon NpcWeapon.ts:22-24).
     // Coerce each to a string, then merge on_attack/on_crit into the feature's `effect`
