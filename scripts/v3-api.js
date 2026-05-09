@@ -4,7 +4,40 @@
 
 import { normalizeNpcData } from "./npc-import-core.js";
 
-export const CORS_PROXY = "https://corsproxy.io/?";
+export const CORS_PROXIES = [
+    { name: "corsproxy.io",   wrap: u => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+    { name: "allorigins.win", wrap: u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+    { name: "codetabs.com",   wrap: u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
+];
+
+let _proxyIdx = 0;
+
+// Tries each proxy; falls through on network error, 403, or 5xx.
+export async function corsProxyFetch(targetUrl, init) {
+    const fetcher = _originalFetch || window.fetch;
+    let lastErr = null;
+    for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
+        const idx = (_proxyIdx + attempt) % CORS_PROXIES.length;
+        const proxy = CORS_PROXIES[idx];
+        try {
+            const resp = await fetcher.call(window, proxy.wrap(targetUrl), init);
+            if (resp.status === 403 || resp.status >= 500) {
+                console.warn(`[V3] CORS proxy ${proxy.name} returned ${resp.status}, trying next`);
+                lastErr = new Error(`Proxy ${proxy.name} returned ${resp.status}`);
+                continue;
+            }
+            if (idx !== _proxyIdx) {
+                console.log(`[V3] CORS proxy switched to ${proxy.name}`);
+                _proxyIdx = idx;
+            }
+            return resp;
+        } catch (e) {
+            console.warn(`[V3] CORS proxy ${proxy.name} failed:`, e?.message || e);
+            lastErr = e;
+        }
+    }
+    throw lastErr || new Error("All CORS proxies failed");
+}
 
 // Settings accessors with hardcoded fallbacks for early-boot reads.
 function _setting(key, fallback) {
@@ -177,8 +210,7 @@ export async function v3ApiFetch(path) {
         headers["Authorization"] = jwt;
 
     const targetUrl = `${v3Base}${path}`;
-    const fetcher = _originalFetch || window.fetch;
-    const resp = await fetcher.call(window, CORS_PROXY + encodeURIComponent(targetUrl), { method: "GET", headers });
+    const resp = await corsProxyFetch(targetUrl, { method: "GET", headers });
     if (!resp.ok)
         throw new Error(`V3 API ${resp.status} ${resp.statusText}`);
     return resp.json();
@@ -322,7 +354,7 @@ export function installFetchPatch() {
                         v3Headers["Authorization"] = jwt;
 
                     const v3Url = `${getV3ApiBase()}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
-                    const v3Response = await _originalFetch.call(window, CORS_PROXY + encodeURIComponent(v3Url), {
+                    const v3Response = await corsProxyFetch(v3Url, {
                         method: "GET",
                         headers: v3Headers
                     });

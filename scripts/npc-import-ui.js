@@ -1,6 +1,6 @@
 // UI dialogs: source selection, progress, and NPC selection from Comp/Con.
 
-import { CORS_PROXY } from "./v3-api.js";
+import { corsProxyFetch } from "./v3-api.js";
 import { importFromFiles } from "./npc-import-files.js";
 import { importFromCompCon } from "./npc-import-compcon.js";
 import {
@@ -517,7 +517,6 @@ export async function uploadPortraitToServer(url, npcName) {
 
     const subFolder = game.settings.get("lancer-npc-import", "portraitStoragePath");
     const folderPath = `modules/lancer-npc-import/${subFolder}`;
-    const proxyUrl = CORS_PROXY;
 
     try {
         // 1. Créer le dossier s'il n'existe pas
@@ -526,7 +525,7 @@ export async function uploadPortraitToServer(url, npcName) {
         } catch (e) { /* existe déjà */ }
 
         // 2. Récupérer l'image via le proxy
-        const response = await fetch(proxyUrl + encodeURIComponent(url));
+        const response = await corsProxyFetch(url);
         const blob = await response.blob();
 
         // 3. Préparer le fichier

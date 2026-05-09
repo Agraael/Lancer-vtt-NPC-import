@@ -1,7 +1,7 @@
 // Import from Comp/Con cloud flow.
 
 import {
-    CORS_PROXY,
+    corsProxyFetch,
     getV3ApiBase,
     getV3ApiKey,
     getV3Cdn,
@@ -81,12 +81,12 @@ export async function fetchNPCsViaV3API(Auth) {
 
     let data;
     const changedUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=changed&since=0`;
-    const changedResp = await fetch(CORS_PROXY + encodeURIComponent(changedUrl), { method: "GET", headers });
+    const changedResp = await corsProxyFetch(changedUrl, { method: "GET", headers });
     if (changedResp.ok) {
         data = await changedResp.json();
     } else {
         const allUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=all`;
-        const allResp = await fetch(CORS_PROXY + encodeURIComponent(allUrl), { method: "GET", headers });
+        const allResp = await corsProxyFetch(allUrl, { method: "GET", headers });
         if (!allResp.ok)
             throw new Error(`V3 API ${allResp.status} ${allResp.statusText}`);
         data = await allResp.json();
