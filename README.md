@@ -17,6 +17,7 @@ Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC impo
 - **Pilot share code patch**: the codes that the new Comp/Con hands out work in the pilot sheet again.
 - **Pilot cloud sync patch**: the pilot dropdown in the Lancer system pulls from the new Comp/Con.
 - **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one.
+- **Refresh items from LCPs**: re-pull compendium item data into existing actors after an LCP update, with a per-item diff preview and per-row opt-in.
 
 The three pilot-side patches run automatically as long as the V3 setting is on (it is, by default).
 
@@ -55,6 +56,14 @@ Stuff v3 has that Lancer doesn't:
 - Eidolons → each layer becomes an NPC template + features in an `Eidolons` folder. Apply the template you want on the Eidolon actor manually. No layer-swap.
 - `active_effects` → lifted into bonuses/actions where possible, rest appended to the item's effect text.
 - `add_status` / `add_resist` → appended as text. Lancer doesn't apply statuses from LCPs.
+
+
+## Refresh items from LCPs
+
+After an LCP update, the compendium gets the new item versions but actors keep the old data. This tool re-pulls compendium items onto existing actors with a per-item diff and opt-in.
+
+Per actor: **Refresh** button in the actor sheet title bar.
+Bulk: **Refresh actors** button in the Actors sidebar.
 
 
 ## V3 LCP diff tool

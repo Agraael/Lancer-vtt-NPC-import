@@ -15,7 +15,7 @@ const VOLATILE_SYSTEM_KEYS = new Set([
     "maxUses", "isUsed", "selected_profile_index"
 ]);
 
-function stripVolatile(obj) {
+export function stripVolatile(obj) {
     if (obj === null || obj === undefined)
         return obj;
     if (Array.isArray(obj))

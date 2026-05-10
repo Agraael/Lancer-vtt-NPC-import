@@ -10,6 +10,8 @@ import { installPilotSheetPatch } from "./pilot-sheet-patch.js";
 import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
 import { NPCImportDialog } from "./npc-import-ui.js";
 import { LcpDebugDiffMenu } from "./lcp-debug-diff.js";
+import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
+import { isRefreshableActor } from "./refresh/refresh-core.js";
 
 export async function ImportNPC() {
     new NPCImportDialog().render(true);
@@ -125,6 +127,29 @@ Hooks.once('init', () => {
         default: ""
     });
 
+    // Refresh tool: persisted pack selections. null/[] means "first run, default to all".
+    game.settings.register("lancer-npc-import", "refreshItemPacks", {
+        scope: "client",
+        config: false,
+        type: Array,
+        default: []
+    });
+
+    game.settings.register("lancer-npc-import", "refreshActorPacks", {
+        scope: "client",
+        config: false,
+        type: Array,
+        default: []
+    });
+
+    // Saved as array of folder ids; sentinel "__nofolder__" represents world actors with no folder.
+    game.settings.register("lancer-npc-import", "refreshFolders", {
+        scope: "client",
+        config: false,
+        type: Array,
+        default: []
+    });
+
     // Install Storage + fetch patches during init so they're ready before
     // the Lancer system's configureAmplify() calls populatePilotCache()
     if (game.system.id === 'lancer' && game.settings.get("lancer-npc-import", "useV3Endpoint")) {
@@ -173,4 +198,32 @@ Hooks.on('renderActorDirectory', (_app, html) => {
         ImportNPC();
     });
     headerActions.append(importButton);
+
+    const refreshButton = $(`
+        <button class="refresh-actors-button" title="Refresh actor items from compendium LCPs">
+            <i class="fas fa-sync"></i> Refresh actors
+        </button>
+    `);
+    refreshButton.click(async () => {
+        const dlg = await RefreshItemsDialog.forAllActors();
+        if (dlg) dlg.render(true);
+    });
+    headerActions.append(refreshButton);
+});
+
+// Per-actor "Refresh items" header button on actor sheets.
+Hooks.on('getActorSheetHeaderButtons', (app, buttons) => {
+    if (game.system.id !== 'lancer') return;
+    const actor = app.actor;
+    if (!isRefreshableActor(actor)) return;
+    if (!actor.isOwner) return;
+    buttons.unshift({
+        class: 'lancer-refresh-items-btn',
+        icon: 'fas fa-sync',
+        label: 'Refresh',
+        onclick: async () => {
+            const dlg = await RefreshItemsDialog.forActor(actor);
+            if (dlg) dlg.render(true);
+        }
+    });
 });
