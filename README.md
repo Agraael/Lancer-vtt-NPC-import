@@ -74,6 +74,14 @@ Open **Module Settings → Lancer NPC Import → Open LCP Diff Tool**, pick two 
 
 Mainly useful for LCP authors who want to sanity-check that their v3 pack translates the way they expect, but it also gives me something concrete to look at when someone reports a bad import.
 
+
+## A note on CORS
+
+The V3 Comp/Con API doesn't allow direct browser calls, so the module routes a couple of endpoints (NPC list, share codes) through a CORS proxy. There's a free public one (corsproxy.io) that handles localhost setups, and behind it a small Cloudflare Worker I run that handles everyone else. Most users end up on my Worker because corsproxy.io's free tier is limited to localhost-style origins.
+
+If you ever see a red notification saying the Worker isn't responding, it most likely means the daily limit has been reached. Try again in a few hours.
+
+
 <details>
 <summary>Advanced: endpoint overrides</summary>
 
@@ -86,3 +94,17 @@ If Massif rotates keys or moves hosts, five world settings let you update things
 - `V2 Share API Key`
 
 </details>
+
+
+---
+
+<details>
+<summary>patreon...</summary>
+
+Well, project became bigger, now there's more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
+
+In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
+
+</details>
+
+Check out my other modules and tools: [List of stuff](https://www.patreon.com/posts/list-of-stuff-149377511)

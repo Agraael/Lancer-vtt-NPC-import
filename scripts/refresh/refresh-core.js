@@ -1,5 +1,3 @@
-// Re-pull actor items from compendium LCPs by system.lid.
-
 import { stripVolatile } from "../compendium-snapshot.js";
 
 const SUPPORTED_ACTOR_TYPES = new Set(["npc", "mech", "pilot", "deployable"]);
@@ -8,8 +6,6 @@ export function isRefreshableActor(actor) {
     return !!actor && SUPPORTED_ACTOR_TYPES.has(actor.type);
 }
 
-// Index lid -> [{pack, _id, type}, ...]. One pass per Item pack.
-// `packs` (optional) restricts the index to a chosen subset.
 export async function buildLidIndex(progress = null, packs = null) {
     const index = new Map();
     const itemPacks = packs ?? game.packs.filter(p => p.metadata.type === "Item");
@@ -47,8 +43,6 @@ function packDocKey(entry) {
     return `${entry.pack.collection}/${entry._id}`;
 }
 
-// Walk every actor once and collect the set of pack docs we will need.
-// Returns Map<key, {pack, _id, type}> with no duplicates.
 export function collectNeededPackDocs(actors, lidIndex, lidWhitelist = null) {
     const needed = new Map();
     for (const actor of actors) {
@@ -65,7 +59,6 @@ export function collectNeededPackDocs(actors, lidIndex, lidWhitelist = null) {
     return needed;
 }
 
-// Fetch all needed compendium docs in parallel batches. Returns Map<key, Document>.
 export async function prefetchPackDocs(needed, progress = null, concurrency = 16) {
     const cache = new Map();
     const entries = Array.from(needed.entries());
@@ -91,10 +84,6 @@ export async function prefetchPackDocs(needed, progress = null, concurrency = 16
     return cache;
 }
 
-// Pour chaque embedded item, retourne une classification.
-// status: "synced" | "modified" | "unlinked" | "missing"
-// Pass `cache` (from prefetchPackDocs) to skip per-item compendium fetches.
-// Pass `lidWhitelist` (Set) to restrict to specific LIDs (e.g. from a loaded LCP file).
 export async function classifyActorItems(actor, lidIndex, cache = null, lidWhitelist = null) {
     const out = [];
     for (const item of actor.items) {
@@ -166,7 +155,6 @@ function walkDiff(prefix, a, b, out) {
     if (a !== b) out.push({ path: prefix, actor: a, pack: b });
 }
 
-// selections: [{actorItem, packDoc, action: "update" | "replace"}]
 export async function applyRefresh(actor, selections) {
     const updates = [];
     const replacements = [];
@@ -192,7 +180,7 @@ export async function applyRefresh(actor, selections) {
         }
     }
 
-    // Delete + create per item: id changes, mech loadout slots may need re-link.
+    // delete+create changes the embedded id; mech loadout slots may need re-link
     for (const r of replacements) {
         try {
             const oldId = r.actorItem.id;

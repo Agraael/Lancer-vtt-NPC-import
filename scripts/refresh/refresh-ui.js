@@ -1,5 +1,3 @@
-// Refresh items dialog: per-actor preview + bulk preview share the same dialog.
-
 import {
     applyRefresh,
     buildLidIndex,
@@ -73,12 +71,9 @@ class RefreshProgressDialog {
     }
 }
 
-// Yield to the browser so the progress dialog repaints between heavy steps.
+// yield so the progress dialog can repaint
 async function tick() { return new Promise(r => setTimeout(r, 0)); }
 
-// Pack picker: pick which compendiums to scan. Persists to client settings.
-// mode: "actor" (item packs only) or "all" (item + actor packs).
-// Returns { itemPacks: Pack[], actorPacks: Pack[] } or null if cancelled.
 class RefreshPackPicker {
     static SETTING_ITEM = "refreshItemPacks";
     static SETTING_ACTOR = "refreshActorPacks";
@@ -125,7 +120,6 @@ class RefreshPackPicker {
                 </div>
             `;
 
-            // Build a flat ordered list of Actor folders (parents before children) with depth info.
             const actorFolders = mode === "all"
                 ? game.folders.filter(f => f.type === "Actor")
                 : [];
@@ -349,7 +343,6 @@ class RefreshPackPicker {
 
 export class RefreshItemsDialog {
     constructor(targets) {
-        // targets: [{actor, items, locked}]
         this.targets = targets;
         this.dialog = null;
     }
@@ -401,7 +394,6 @@ export class RefreshItemsDialog {
         try {
             const lidIndex = await buildLidIndex(progress, picked.itemPacks);
 
-            // Phase 1: collect every actor we'll classify (world folders + each chosen pack).
             const folderSet = new Set(picked.folderIds);
             const includeNoFolder = folderSet.has(RefreshPackPicker.NOFOLDER_ID);
             const worldActors = game.actors.filter(a => {
@@ -411,7 +403,7 @@ export class RefreshItemsDialog {
             });
             const actorPacks = picked.actorPacks;
 
-            const allActors = []; // [{actor, locked}]
+            const allActors = [];
             for (const a of worldActors) allActors.push({ actor: a, locked: false });
 
             for (let pi = 0; pi < actorPacks.length; pi++) {
@@ -430,12 +422,10 @@ export class RefreshItemsDialog {
                 }
             }
 
-            // Phase 2: dedupe pack docs needed across every actor and fetch in parallel.
             const actors = allActors.map(a => a.actor);
             const needed = collectNeededPackDocs(actors, lidIndex, picked.lcpLids);
             const cache = await prefetchPackDocs(needed, progress);
 
-            // Phase 3: classify (sync, all pack docs already cached).
             const targets = [];
             const total = allActors.length;
             for (let i = 0; i < total; i++) {
@@ -501,7 +491,6 @@ export class RefreshItemsDialog {
             search.addEventListener("input", () => this.#applyFilter(root, search.value));
         }
 
-        // Click on row summary or section summary -> toggle expand.
         root.addEventListener("click", ev => {
             const target = ev.target.closest('[data-act]');
             if (!target) return;
@@ -558,7 +547,6 @@ export class RefreshItemsDialog {
             let itemMatches = 0;
             section.querySelectorAll(".refresh-row").forEach(row => {
                 const name = row.querySelector(".refresh-row-name")?.textContent?.toLowerCase() || "";
-                // If the actor name matches, every row in the section is shown.
                 const show = !query || actorMatches || name.includes(query);
                 row.style.display = show ? "" : "none";
                 if (show && query && !actorMatches) itemMatches++;

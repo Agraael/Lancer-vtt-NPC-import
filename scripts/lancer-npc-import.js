@@ -10,6 +10,7 @@ import { installPilotSheetPatch } from "./pilot-sheet-patch.js";
 import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
 import { NPCImportDialog } from "./npc-import-ui.js";
 import { LcpDebugDiffMenu } from "./lcp-debug-diff.js";
+import { ShareCodeTestMenu } from "./share-code-test.js";
 import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
 import { isRefreshableActor } from "./refresh/refresh-core.js";
 
@@ -109,6 +110,15 @@ Hooks.once('init', () => {
         restricted: true
     });
 
+    game.settings.registerMenu("lancer-npc-import", "shareCodeTest", {
+        name: "Share Code Test",
+        label: "Open Share Code Test",
+        hint: "Tests a v3 share code against each CORS proxy and shows the raw JSON response.",
+        icon: "fas fa-vial",
+        type: ShareCodeTestMenu,
+        restricted: true
+    });
+
     game.settings.register("lancer-npc-import", "v3Debug", {
         name: "V3 debug logging",
         hint: "Logs V3 /code response, CDN payload, unwrap/normalize steps to console.",
@@ -127,7 +137,6 @@ Hooks.once('init', () => {
         default: ""
     });
 
-    // Refresh tool: persisted pack selections. null/[] means "first run, default to all".
     game.settings.register("lancer-npc-import", "refreshItemPacks", {
         scope: "client",
         config: false,
@@ -142,7 +151,7 @@ Hooks.once('init', () => {
         default: []
     });
 
-    // Saved as array of folder ids; sentinel "__nofolder__" represents world actors with no folder.
+    // "__nofolder__" sentinel = world actors with no folder
     game.settings.register("lancer-npc-import", "refreshFolders", {
         scope: "client",
         config: false,
@@ -211,7 +220,6 @@ Hooks.on('renderActorDirectory', (_app, html) => {
     headerActions.append(refreshButton);
 });
 
-// Per-actor "Refresh items" header button on actor sheets.
 Hooks.on('getActorSheetHeaderButtons', (app, buttons) => {
     if (game.system.id !== 'lancer') return;
     const actor = app.actor;

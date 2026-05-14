@@ -558,19 +558,15 @@
 .status-filter-btn[data-status="unlinked"].active { background: #9C27B0 !important; color: #fff; }
 
 
-/* ============================================================
-   REFRESH ITEMS DIALOG
-   ============================================================ */
+/* === Refresh items dialog === */
 
-/* Inside the refresh dialog every status badge stays inline.
-   The base .npc-status-badge uses position:absolute which makes orphans float to the window corner. */
+/* base .npc-status-badge is position:absolute - keep them inline here */
 .lancer-refresh-dialog .npc-status-badge {
     position: static !important;
     top: auto !important;
     right: auto !important;
 }
 
-/* Flex column layout so toolbar stays at top and dialog-buttons stay at bottom while the list scrolls. */
 .lancer-refresh-dialog .window-content {
     padding: 0 !important;
     display: flex !important;
@@ -845,13 +841,10 @@
 .refresh-val-missing { color: #999; }
 .refresh-val-trunc { cursor: help; border-bottom: 1px dotted #999; }
 
-/* Actor directory header refresh button */
 .refresh-actors-button { white-space: nowrap; }
 
 
-/* ============================================================
-   REFRESH PROGRESS DIALOG
-   ============================================================ */
+/* === Refresh progress dialog === */
 
 .lancer-refresh-progress-dialog .window-content {
     color: var(--color-text-dark-primary);
@@ -893,9 +886,89 @@
 }
 
 
-/* ============================================================
-   REFRESH PACK PICKER
-   ============================================================ */
+/* === Share code test === */
+
+.lancer-share-code-test .window-content { color: var(--color-text-dark-primary); }
+
+.sct-root { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.sct-hint { font-size: 12px; opacity: 0.75; margin: 0; }
+.sct-input-row { display: flex; gap: 6px; align-items: center; }
+
+.lancer-share-code-test input.sct-code {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    padding: 4px 8px !important;
+    font-family: var(--font-mono, monospace) !important;
+    font-size: 12px !important;
+    height: 28px !important;
+    border: 1px solid rgba(0, 0, 0, 0.3) !important;
+    border-radius: 3px !important;
+    background: #fff !important;
+    color: #222 !important;
+}
+
+.lancer-share-code-test button.sct-go {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    padding: 0 16px !important;
+    height: 28px !important;
+    line-height: 26px !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    background: var(--primary-color, #d99828) !important;
+    color: var(--light-text, #fff) !important;
+    border: 1px solid rgba(0, 0, 0, 0.25) !important;
+    border-radius: 3px !important;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.lancer-share-code-test button.sct-go:hover { filter: brightness(1.1); }
+
+.sct-output { display: flex; flex-direction: column; gap: 8px; max-height: 440px; overflow-y: auto; }
+.sct-info, .sct-error { font-size: 12px; padding: 4px 6px; }
+.sct-error { color: #c0392b; }
+
+.sct-summary .sct-ok-pill,
+.sct-summary .sct-fail-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.sct-ok-pill { background: #4CAF50; color: #fff; }
+.sct-fail-pill { background: #c0392b; color: #fff; }
+
+.sct-proxy, .sct-cdn {
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+.sct-proxy.sct-ok, .sct-cdn.sct-ok { border-left: 3px solid #4CAF50; }
+.sct-proxy.sct-fail, .sct-cdn.sct-fail { border-left: 3px solid #c0392b; }
+
+.sct-proxy-head { display: flex; align-items: center; gap: 8px; }
+.sct-status { font-family: var(--font-mono, monospace); opacity: 0.7; }
+.sct-verdict { margin-left: auto; font-weight: 600; }
+
+.sct-json, .sct-raw {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 6px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    margin: 4px 0 0 0;
+    max-height: 240px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+
+/* === Refresh pack picker === */
 
 .lancer-refresh-pack-dialog .window-content {
     color: var(--color-text-dark-primary);

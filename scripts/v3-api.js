@@ -5,15 +5,28 @@
 import { normalizeNpcData } from "./npc-import-core.js";
 
 export const CORS_PROXIES = [
-    { name: "corsproxy.io",   wrap: u => `https://corsproxy.io/?${encodeURIComponent(u)}` },
-    { name: "allorigins.win", wrap: u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
-    { name: "codetabs.com",   wrap: u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
+    { name: "corsproxy.io",         wrap: u => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+    { name: "lasossis-lancer-cors", wrap: u => `https://lasossis-lancer-cors.m-cescutti.workers.dev/?url=${encodeURIComponent(u)}` },
 ];
 
 let _proxyIdx = 0;
+let _workerDownWarned = false;
+const WORKER_PROXY_NAME = "lasossis-lancer-cors";
 
-// Tries each proxy; falls through on network error, 403, or 5xx.
-export async function corsProxyFetch(targetUrl, init) {
+function _maybeWarnWorkerDown(proxyName) {
+    if (proxyName !== WORKER_PROXY_NAME || _workerDownWarned) {
+        return;
+    }
+    _workerDownWarned = true;
+    ui.notifications?.error(
+        "My CORS Worker isn't responding. It's probably hit the free-tier daily limit, try again in a few hours.",
+        { permanent: true }
+    );
+}
+
+// `{ json: true }` rotates proxies on 200 + non-JSON body (proxy error pages)
+export async function corsProxyFetch(targetUrl, init, options = {}) {
+    const expectJson = !!options.json;
     const fetcher = _originalFetch || window.fetch;
     let lastErr = null;
     for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
@@ -21,10 +34,31 @@ export async function corsProxyFetch(targetUrl, init) {
         const proxy = CORS_PROXIES[idx];
         try {
             const resp = await fetcher.call(window, proxy.wrap(targetUrl), init);
-            if (resp.status === 403 || resp.status >= 500) {
+            if (resp.status === 403 || resp.status === 429 || resp.status >= 500) {
                 console.warn(`[V3] CORS proxy ${proxy.name} returned ${resp.status}, trying next`);
                 lastErr = new Error(`Proxy ${proxy.name} returned ${resp.status}`);
+                _maybeWarnWorkerDown(proxy.name);
                 continue;
+            }
+            if (expectJson) {
+                const text = await resp.text();
+                try {
+                    JSON.parse(text);
+                } catch (parseErr) {
+                    const preview = (text || "").slice(0, 80);
+                    console.warn(`[V3] CORS proxy ${proxy.name} returned non-JSON body (${preview}...), trying next`);
+                    lastErr = parseErr;
+                    _maybeWarnWorkerDown(proxy.name);
+                    continue;
+                }
+                if (idx !== _proxyIdx) {
+                    console.log(`[V3] CORS proxy switched to ${proxy.name}`);
+                    _proxyIdx = idx;
+                }
+                return new Response(text, {
+                    status: resp.status,
+                    headers: { "Content-Type": "application/json" }
+                });
             }
             if (idx !== _proxyIdx) {
                 console.log(`[V3] CORS proxy switched to ${proxy.name}`);
@@ -34,6 +68,7 @@ export async function corsProxyFetch(targetUrl, init) {
         } catch (e) {
             console.warn(`[V3] CORS proxy ${proxy.name} failed:`, e?.message || e);
             lastErr = e;
+            _maybeWarnWorkerDown(proxy.name);
         }
     }
     throw lastErr || new Error("All CORS proxies failed");
@@ -210,7 +245,7 @@ export async function v3ApiFetch(path) {
         headers["Authorization"] = jwt;
 
     const targetUrl = `${v3Base}${path}`;
-    const resp = await corsProxyFetch(targetUrl, { method: "GET", headers });
+    const resp = await corsProxyFetch(targetUrl, { method: "GET", headers }, { json: true });
     if (!resp.ok)
         throw new Error(`V3 API ${resp.status} ${resp.statusText}`);
     return resp.json();
@@ -357,7 +392,7 @@ export function installFetchPatch() {
                     const v3Response = await corsProxyFetch(v3Url, {
                         method: "GET",
                         headers: v3Headers
-                    });
+                    }, { json: true });
 
                     if (!v3Response.ok) {
                         console.warn(`[V3] /code returned ${v3Response.status}, trying v2`);
