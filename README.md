@@ -76,9 +76,11 @@ Mainly useful for LCP authors who want to sanity-check that their v3 pack transl
 
 ## A note on CORS
 
-The V3 Comp/Con API doesn't allow direct browser calls, so the module routes a couple of endpoints (NPC list, share codes) through a CORS proxy. There's a free public one (corsproxy.io) that handles localhost setups, and behind it a small Cloudflare Worker I run that handles everyone else. Most users end up on my Worker because corsproxy.io's free tier is limited to localhost-style origins.
+The V3 Comp/Con API doesn't allow direct browser calls, so the module routes calls through a CORS proxy: corsproxy.io for localhost, my Cloudflare Worker for everyone else.
 
-If you ever see a red notification saying the Worker isn't responding, it most likely means the daily limit has been reached. Try again in a few hours.
+If a red notification says the Worker isn't responding, it's hit its daily limit. Try again in a few hours.
+
+**Bonus:** the Lancer v2.12 system's own pilot share-code button hits `api.compcon.app/v3/code` directly and gets blocked by the same CORS rule. Installing this module silently routes that call through the proxy too, so the system's native share-code import starts working again. Real fix would be Comp/Con adding `Access-Control-Allow-Origin: *` on `/v3/code` and `/share`.
 
 
 <details>

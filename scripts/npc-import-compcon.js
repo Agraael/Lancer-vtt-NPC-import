@@ -7,10 +7,8 @@ import {
     getV3Cdn,
     unwrapData
 } from "./v3-api.js";
-import { NPCSelectionDialog } from "./npc-import-ui.js";
 import { normalizeNpcData } from "./npc-import-core.js";
-import { getValidJwt, getUserSub, isLoggedIn } from "./auth/cognito-auth.js";
-import { CompconLoginDialog } from "./auth/login-dialog.js";
+import { getValidJwt, getUserSub } from "./auth/cognito-auth.js";
 
 async function _getV3AuthHeaders() {
     const jwt = await getValidJwt();
@@ -73,11 +71,13 @@ export function npcFromV3Json(json, key) {
     };
 }
 
-export async function fetchNPCsViaV3API() {
+export async function fetchNPCsViaV3API(progressUpdate) {
     const v3Base = getV3ApiBase();
     const { headers, userId } = await _getV3AuthHeaders();
 
-    ui.notifications.info("Fetching NPC list from Comp/Con v3...");
+    const externalProgress = typeof progressUpdate === "function";
+    if (!externalProgress)
+        ui.notifications.info("Fetching NPC list from Comp/Con v3...");
 
     let data;
     const changedUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=changed&since=0`;
@@ -101,31 +101,37 @@ export async function fetchNPCsViaV3API() {
 
     console.log(`[V3] ${npcItems.length} NPC(s) found`);
 
-    const loadingDialog = new Dialog({
-        title: "Loading NPCs",
-        content: `
-            <div style="text-align:center; padding: 20px;">
-                <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING NPC DATA</div>
-                <div style="margin: 15px 0;">
-                    <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
-                        <div id="v3-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
+    let loadingDialog = null;
+    if (!externalProgress) {
+        loadingDialog = new Dialog({
+            title: "Loading NPCs",
+            content: `
+                <div style="text-align:center; padding: 20px;">
+                    <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING NPC DATA</div>
+                    <div style="margin: 15px 0;">
+                        <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
+                            <div id="v3-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
+                        </div>
+                        <div id="v3-loading-text" style="margin-top: 8px; color: #444;">0 / ${npcItems.length}</div>
                     </div>
-                    <div id="v3-loading-text" style="margin-top: 8px; color: #444;">0 / ${npcItems.length}</div>
                 </div>
-            </div>
-        `,
-        buttons: {},
-        close: () => {}
-    }, {
-        width: 350,
-        classes: ["lancer-dialog-base", "lancer-no-title"]
-    });
-    loadingDialog.render(true);
+            `,
+            buttons: {},
+            close: () => {}
+        }, {
+            width: 350,
+            classes: ["lancer-dialog-base", "lancer-no-title"]
+        });
+        loadingDialog.render(true);
+    }
 
     const v3Cdn = getV3Cdn();
     const npcs = [];
     let loaded = 0;
     const BATCH_SIZE = 10;
+
+    if (externalProgress)
+        progressUpdate(0, npcItems.length);
 
     for (let i = 0; i < npcItems.length; i += BATCH_SIZE) {
         const batch = npcItems.slice(i, i + BATCH_SIZE).filter(item => item.uri);
@@ -148,45 +154,21 @@ export async function fetchNPCsViaV3API() {
         }
 
         loaded += batch.length;
-        const pct = Math.round((loaded / npcItems.length) * 100);
-        if (loadingDialog.element) {
+        if (externalProgress) {
+            progressUpdate(loaded, npcItems.length);
+        } else if (loadingDialog?.element) {
+            const pct = Math.round((loaded / npcItems.length) * 100);
             loadingDialog.element.find('#v3-loading-bar').css('width', pct + '%');
             loadingDialog.element.find('#v3-loading-text').text(`${loaded} / ${npcItems.length}`);
         }
     }
 
-    loadingDialog.close();
+    loadingDialog?.close();
+    npcs.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
     return npcs;
 }
 
-async function _ensureLoginThenFetch() {
-    if (!isLoggedIn()) {
-        const signedIn = await new Promise((resolve) => {
-            new CompconLoginDialog(success => resolve(!!success)).render(true);
-        });
-        if (!signedIn)
-            return null;
-    }
-    return fetchNPCsViaV3API();
-}
-
 export async function importFromCompCon() {
-    try {
-        const validNPCs = await _ensureLoginThenFetch();
-        if (validNPCs === null)
-            return;
-
-        if (!validNPCs || validNPCs.length === 0) {
-            ui.notifications.warn("No NPCs found in Comp/Con roster");
-            return;
-        }
-        new NPCSelectionDialog(validNPCs).render(true);
-    } catch (error) {
-        if (error.message === "NOT_LOGGED_IN") {
-            ui.notifications.warn("Sign in to Comp/Con to browse cloud NPCs.");
-            return;
-        }
-        console.error("Error fetching NPCs from Comp/Con:", error);
-        ui.notifications.error(`Error: ${error.message}`);
-    }
+    const { openCloudActorImport } = await import("./actor-cloud-import-ui.js");
+    return openCloudActorImport();
 }

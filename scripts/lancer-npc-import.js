@@ -2,18 +2,23 @@ import { checkModuleUpdate } from "./version-check.js";
 import { registerV3LcpShim } from "./v3-lcp-shim.js";
 import { registerSnapshotApi } from "./compendium-snapshot.js";
 import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
-import { NPCImportDialog } from "./npc-import-ui.js";
+import { ActorImportDialog } from "./npc-import-ui.js";
 import { LcpDebugDiffMenu } from "./lcp-debug-diff.js";
 import { ShareCodeTestMenu } from "./share-code-test.js";
 import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
 import { isRefreshableActor } from "./refresh/refresh-core.js";
 import { COGNITO_SETTINGS_KEYS } from "./auth/cognito-auth.js";
+import { installV3CodeFetchPatch } from "./v3-api.js";
 
-export async function ImportNPC() {
-    new NPCImportDialog().render(true);
+export async function ImportActor() {
+    new ActorImportDialog().render(true);
 }
+export const ImportNPC = ImportActor;
 
 Hooks.once('init', () => {
+    if (game.system?.id === 'lancer')
+        installV3CodeFetchPatch();
+
     game.settings.register("lancer-npc-import", "defaultDownloadPortrait", {
         name: "Download portraits by default",
         hint: "If enabled, the portrait download checkbox will be checked by default in the import dialog.",
@@ -177,12 +182,12 @@ Hooks.on('renderActorDirectory', (_app, html) => {
         return;
 
     const importButton = $(`
-        <button class="import-npc-button" title="Import NPCs from Comp/Con or JSON files">
-            <i class="fas fa-file-import"></i> Import NPCs
+        <button class="import-npc-button" title="Import pilots or NPCs from Comp/Con or JSON files">
+            <i class="fas fa-file-import"></i> Import Actor
         </button>
     `);
     importButton.click(() => {
-        ImportNPC();
+        ImportActor();
     });
     headerActions.append(importButton);
 

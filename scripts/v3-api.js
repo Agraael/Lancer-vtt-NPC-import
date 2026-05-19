@@ -7,6 +7,7 @@ export const CORS_PROXIES = [
 
 let _proxyIdx = 0;
 let _workerDownWarned = false;
+let _originalFetch = null;
 const WORKER_PROXY_NAME = "lasossis-lancer-cors";
 
 function _maybeWarnWorkerDown(proxyName) {
@@ -22,12 +23,13 @@ function _maybeWarnWorkerDown(proxyName) {
 // `{ json: true }` rotates proxies on 200 + non-JSON body.
 export async function corsProxyFetch(targetUrl, init, options = {}) {
     const expectJson = !!options.json;
+    const fetcher = _originalFetch || window.fetch;
     let lastErr = null;
     for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
         const idx = (_proxyIdx + attempt) % CORS_PROXIES.length;
         const proxy = CORS_PROXIES[idx];
         try {
-            const resp = await window.fetch(proxy.wrap(targetUrl), init);
+            const resp = await fetcher.call(window, proxy.wrap(targetUrl), init);
             if (resp.status === 403 || resp.status === 429 || resp.status >= 500) {
                 console.warn(`[V3] CORS proxy ${proxy.name} returned ${resp.status}, trying next`);
                 lastErr = new Error(`Proxy ${proxy.name} returned ${resp.status}`);
@@ -203,4 +205,31 @@ export function sanitizeName(name) {
 export async function getJwtTokenFromV5Auth() {
     const { getValidJwt } = await import("./auth/cognito-auth.js");
     return getValidJwt();
+}
+
+// Intercept window.fetch so the Lancer v2.12 native share-code import goes
+// through our CORS proxy. The system calls api.compcon.app/v3/code directly,
+// which the API only allows from compcon.app origin, breaking everyone else.
+const V3_CODE_HOST_MATCH = /^https?:\/\/api\.compcon\.app\/v3\/code(\?|$)/i;
+
+export function installV3CodeFetchPatch() {
+    if (_originalFetch)
+        return;
+    _originalFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init) {
+        const url = typeof input === "string"
+            ? input
+            : (input?.url || (input instanceof URL ? input.href : ""));
+        if (url && V3_CODE_HOST_MATCH.test(url)) {
+            try {
+                v3Log("v3/code intercept -> CORS proxy", url);
+                return await corsProxyFetch(url, init || { method: "GET" }, { json: true });
+            } catch (e) {
+                console.warn("[V3] CORS proxy failed for v3/code, falling back to direct:", e?.message || e);
+            }
+        }
+        return _originalFetch(input, init);
+    };
+    console.log("[V3] window.fetch patched: api.compcon.app/v3/code routed through CORS proxy");
 }

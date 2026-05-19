@@ -29,7 +29,7 @@ function _loginStatusHtml() {
         </div>`;
 }
 
-export class NPCImportDialog extends Dialog {
+export class ActorImportDialog extends Dialog {
     constructor() {
         const loggedIn = isLoggedIn();
         const cloudCardClass = loggedIn ? "lancer-item-card" : "lancer-item-card lancer-item-card--disabled";
@@ -40,8 +40,8 @@ export class NPCImportDialog extends Dialog {
             content: `
                 <div class="lancer-dialog-base">
                     <div class="lancer-dialog-header">
-                        <div class="lancer-dialog-title">NPC IMPORT // SOURCE SELECTION</div>
-                        <div class="lancer-dialog-subtitle">Choose your import method</div>
+                        <div class="lancer-dialog-title">ACTOR IMPORT // SOURCE SELECTION</div>
+                        <div class="lancer-dialog-subtitle">Pilots and NPCs, JSON or Comp/Con cloud</div>
                     </div>
                     <div class="compcon-auth-row">${_loginStatusHtml()}</div>
                     <div class="lancer-items-grid">
@@ -49,14 +49,14 @@ export class NPCImportDialog extends Dialog {
                             <div class="lancer-item-icon"><i class="fas fa-file-upload"></i></div>
                             <div class="lancer-item-content">
                                 <div class="lancer-item-name">Import from JSON File(s)</div>
-                                <div class="lancer-item-details">Always creates new NPCs</div>
+                                <div class="lancer-item-details">Auto-detects pilot or NPC per file</div>
                             </div>
                         </div>
                         <div class="${cloudCardClass}" data-action="compcon" ${cloudCardTitle}>
                             <div class="lancer-item-icon"><i class="fas fa-cloud-download-alt"></i></div>
                             <div class="lancer-item-content">
                                 <div class="lancer-item-name">Import from Comp/Con</div>
-                                <div class="lancer-item-details">Can update existing NPCs</div>
+                                <div class="lancer-item-details">Pilots + NPCs in one tabbed view</div>
                             </div>
                         </div>
                     </div>
@@ -83,9 +83,8 @@ export class NPCImportDialog extends Dialog {
             event.preventDefault();
             event.stopPropagation();
             new CompconLoginDialog(() => {
-                // re-render this dialog so status + cloud card update
                 this.close();
-                new NPCImportDialog().render(true);
+                new ActorImportDialog().render(true);
             }).render(true);
         });
 
@@ -212,15 +211,12 @@ export class ImportProgressDialog {
     }
 }
 
-export class NPCSelectionDialog extends Dialog {
-    constructor(npcs) {
-        const isDownloadChecked = game.settings.get("lancer-npc-import", "defaultDownloadPortrait") ? "checked" : "";
-        const content = `
+// Builds the NPC selection panel HTML + listener binder so a tabbed parent
+// can host it. NPCSelectionDialog stays as a wrapper for the standalone use.
+export function buildNPCSelectionPanel(npcs) {
+    const isDownloadChecked = game.settings.get("lancer-npc-import", "defaultDownloadPortrait") ? "checked" : "";
+    const html = `
             <div class="lancer-dialog-base">
-                <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">COMP/CON IMPORT // NPC SELECTION</div>
-                    <div class="lancer-dialog-subtitle">Select NPCs to import from your Comp/Con roster (${npcs.length} available)</div>
-                </div>
                 <div class="npc-import-options">
                     <div class="npc-import-options-left">
                         <div class="lancer-section-title">Import Mode:</div>
@@ -360,50 +356,7 @@ export class NPCSelectionDialog extends Dialog {
             </div>
         `;
 
-        super({
-            title: "Select NPCs to Import",
-            content: content,
-            buttons: {
-                import: {
-                    icon: '<i class="fas fa-download"></i>',
-                    label: "Import Selected",
-                    callback: async (html) => {
-                        const selectedIndices = [];
-                        html.find('.npc-checkbox:checked').each(function() {
-                            selectedIndices.push(parseInt($(this).data('index')));
-                        });
-
-                        if (selectedIndices.length === 0) {
-                            ui.notifications.warn("No NPCs selected");
-                            return;
-                        }
-
-                        const updateExisting = html.find('#update-existing').val() === 'true';
-                        const manualReplace = html.find('#manual-replace').val() === 'true';
-                        const customTierMode = html.find('#custom-tier-mode').val();
-                        const downloadPortraits = html.find('#download-portraits-check').prop('checked');
-                        const selectedNPCs = selectedIndices.map(i => npcs[i]);
-                        await importSelectedNPCs(selectedNPCs, updateExisting, customTierMode, manualReplace, downloadPortraits);
-                    }
-                },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel"
-                }
-            },
-            default: "import"
-        }, {
-            width: 850,
-            height: "auto",
-            classes: ["npc-import-dialog", "lancer-dialog-base", "lancer-no-title"]
-        });
-
-        this.npcs = npcs;
-    }
-
-    activateListeners(html) {
-        super.activateListeners(html);
-
+    function activate(html, opts = {}) {
         html.find('.lancer-toggle-card').click(function() {
             const setting = $(this).data('setting');
             const isActive = $(this).hasClass('active');
@@ -507,7 +460,7 @@ export class NPCSelectionDialog extends Dialog {
         html.find('#link-actors').click(async () => {
             const selectedIndices = [];
             html.find('.npc-checkbox:checked').each(function() {
-                selectedIndices.push(parseInt($(this).data('index')));
+                selectedIndices.push(Number.parseInt($(this).data('index')));
             });
 
             if (selectedIndices.length === 0) {
@@ -515,7 +468,7 @@ export class NPCSelectionDialog extends Dialog {
                 return;
             }
 
-            const selectedNPCs = selectedIndices.map(i => this.npcs[i]);
+            const selectedNPCs = selectedIndices.map(i => npcs[i]);
             const unlinkedNPCs = selectedNPCs.filter(npc => {
                 const existingActors = findExistingNPCsByLID(npc.json);
                 const comparison = compareNPCWithActor(npc.json, existingActors);
@@ -541,10 +494,72 @@ export class NPCSelectionDialog extends Dialog {
             }
 
             ui.notifications.info(`✓ Linked ${linkedCount} actor(s)`);
+            if (typeof opts.onRefresh === "function")
+                opts.onRefresh();
+        });
+    }
 
-            // Rafraîchir la dialog pour mettre à jour les badges
-            this.close();
-            new NPCSelectionDialog(this.npcs).render(true);
+    function getSelected(html) {
+        const out = [];
+        html.find('.npc-checkbox:checked').each(function() {
+            const i = Number.parseInt($(this).data('index'));
+            if (!Number.isNaN(i) && npcs[i]) out.push(npcs[i]);
+        });
+        return out;
+    }
+
+    function getOptions(html) {
+        return {
+            updateExisting: html.find('#update-existing').val() === 'true',
+            manualReplace: html.find('#manual-replace').val() === 'true',
+            customTierMode: html.find('#custom-tier-mode').val(),
+            downloadPortraits: html.find('#download-portraits-check').prop('checked')
+        };
+    }
+
+    return { html, activate, getSelected, getOptions };
+}
+
+export class NPCSelectionDialog extends Dialog {
+    constructor(npcs) {
+        const panel = buildNPCSelectionPanel(npcs);
+        super({
+            title: "Select NPCs to Import",
+            content: panel.html,
+            buttons: {
+                import: {
+                    icon: '<i class="fas fa-download"></i>',
+                    label: "Import Selected",
+                    callback: async (html) => {
+                        const selected = panel.getSelected(html);
+                        if (selected.length === 0) {
+                            ui.notifications.warn("No NPCs selected");
+                            return;
+                        }
+                        const o = panel.getOptions(html);
+                        await importSelectedNPCs(selected, o.updateExisting, o.customTierMode, o.manualReplace, o.downloadPortraits);
+                    }
+                },
+                cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
+            },
+            default: "import"
+        }, {
+            width: 850,
+            height: "auto",
+            classes: ["npc-import-dialog", "lancer-dialog-base", "lancer-no-title"]
+        });
+        this.npcs = npcs;
+        this._panel = panel;
+    }
+
+    activateListeners(html) {
+        super.activateListeners(html);
+        const npcs = this.npcs;
+        this._panel.activate(html, {
+            onRefresh: () => {
+                this.close();
+                new NPCSelectionDialog(npcs).render(true);
+            }
         });
     }
 }
@@ -579,3 +594,5 @@ export async function uploadPortraitToServer(url, npcName) {
         return null;
     }
 }
+
+export { ActorImportDialog as NPCImportDialog };

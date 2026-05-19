@@ -1221,3 +1221,200 @@
     padding: 6px 8px;
     font-size: 0.95em;
 }
+
+.cloud-import-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--primary-color, #991e2a);
+    margin: 8px 0 12px;
+}
+
+.cloud-import-tab {
+    flex: 0 0 auto;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--primary-color, #991e2a);
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    font-weight: bold;
+    color: var(--primary-color, #991e2a);
+    cursor: pointer;
+    width: auto;
+    line-height: 1.4;
+}
+
+.cloud-import-tab.active {
+    background: var(--primary-color, #991e2a);
+    color: var(--light-text, #fff);
+}
+
+.cloud-tab-count {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.12);
+    font-size: 0.85em;
+}
+
+.cloud-import-tab.active .cloud-tab-count {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.lancer-hidden {
+    display: none !important;
+}
+
+.lancer-list.pilot-list {
+    grid-template-columns: 1fr;
+}
+
+.pilot-row {
+    display: block;
+    padding: 0;
+    border-radius: 4px;
+    min-height: 0;
+    max-height: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pilot-row.selected {
+    border-color: var(--primary-color, #991e2a);
+    background: color-mix(in srgb, var(--primary-color, #991e2a) 8%, transparent);
+}
+
+.pilot-row > summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.pilot-row > summary::-webkit-details-marker {
+    display: none;
+}
+
+.pilot-row > summary::before {
+    content: "\f105";
+    font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+    font-weight: 900;
+    width: 12px;
+    transition: transform 0.15s ease;
+    opacity: 0.6;
+    color: var(--primary-color, #991e2a);
+}
+
+.pilot-row[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.pilot-row > summary:hover {
+    background: color-mix(in srgb, var(--primary-color, #991e2a) 10%, transparent);
+}
+
+.pilot-row > summary .npc-status-badge {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    flex: 0 0 auto;
+    font-size: 10px;
+    padding: 2px 6px;
+}
+
+.pilot-row > summary .npc-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.pilot-row .callsign {
+    font-style: italic;
+    opacity: 0.75;
+    margin-left: 4px;
+}
+
+
+.mech-sub-list {
+    padding: 4px 10px 10px 28px;
+    background: rgba(0, 0, 0, 0.04);
+    border-top: 1px solid var(--primary-color, #991e2a);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mech-sub-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mech-sub-row:hover {
+    background: color-mix(in srgb, var(--primary-color, #991e2a) 6%, rgba(255,255,255,0.6));
+}
+
+.mech-sub-row.selected {
+    border-color: var(--primary-color, #991e2a);
+    background: color-mix(in srgb, var(--primary-color, #991e2a) 10%, transparent);
+}
+
+.mech-sub-row .mech-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.mech-sub-row .mech-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mech-sub-row .mech-frame {
+    opacity: 0.75;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85em;
+}
+
+.mech-sub-row .npc-status-badge {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    flex: 0 0 auto;
+    font-size: 10px;
+    padding: 2px 6px;
+}
+
+/* Left-border accent for mech rows, mirrors the pilot rows */
+.mech-sub-row[data-status="synced"]   { border-left: 3px solid #4CAF50; }
+.mech-sub-row[data-status="modified"] { border-left: 3px solid #FF9800; }
+.mech-sub-row[data-status="new"]      { border-left: 3px solid #2196F3; }
+
+.mech-sub-row .mech-checkbox {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.mech-sub-row .mech-portrait {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+
+.mech-sub-empty {
+    font-style: italic;
+    opacity: 0.5;
+    padding: 6px 8px;
+}

@@ -1,8 +1,25 @@
-// Import from local JSON files flow.
+// JSON file import. Auto-detects pilot vs NPC per file.
 
 import { unwrapData } from "./v3-api.js";
 import { ImportProgressDialog } from "./npc-import-ui.js";
 import { normalizeNpcData, importNPCFromCompCon } from "./npc-import-core.js";
+import { importOnePilot } from "./pilot-import-core.js";
+
+export function detectActorKind(json) {
+    if (!json || typeof json !== "object")
+        return null;
+    const hasPilotMarkers = json.callsign !== undefined
+        || Array.isArray(json.mechs)
+        || Array.isArray(json.loadouts)
+        || json.cloudID !== undefined;
+    if (hasPilotMarkers)
+        return "pilot";
+    const hasNpcMarkers = (json.class !== undefined)
+        && (json.combat_data !== undefined || json.tier !== undefined);
+    if (hasNpcMarkers)
+        return "npc";
+    return null;
+}
 
 export async function importFromFiles() {
     let updateExisting = true;
@@ -213,25 +230,41 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
             return;
 
         const npcsToImport = [];
+        const pilotsToImport = [];
         for (const file of files) {
             try {
                 const text = await file.text();
-                const npcData = normalizeNpcData(unwrapData(JSON.parse(text)));
+                const raw = unwrapData(JSON.parse(text));
+                const kind = detectActorKind(raw);
 
-                if (!npcData.class || !npcData.name) {
-                    ui.notifications.error(`Invalid NPC JSON: ${file.name} - missing required fields`);
-                    continue;
+                if (kind === "pilot") {
+                    if (!raw.name) {
+                        ui.notifications.error(`Invalid pilot JSON: ${file.name} - missing name`);
+                        continue;
+                    }
+                    pilotsToImport.push({ name: raw.name, json: raw });
+                } else if (kind === "npc") {
+                    const npcData = normalizeNpcData(raw);
+                    if (!npcData.class || !npcData.name) {
+                        ui.notifications.error(`Invalid NPC JSON: ${file.name} - missing required fields`);
+                        continue;
+                    }
+                    npcsToImport.push(npcData);
+                } else {
+                    ui.notifications.warn(`Skipped ${file.name}: not a recognized pilot or NPC JSON`);
                 }
-
-                npcsToImport.push(npcData);
             } catch (error) {
                 console.error(`Error parsing ${file.name}:`, error);
                 ui.notifications.error(`Failed to parse ${file.name}: ${error.message}`);
             }
         }
 
+        if (pilotsToImport.length > 0)
+            await _importPilotFiles(pilotsToImport, updateExisting);
+
         if (npcsToImport.length === 0) {
-            ui.notifications.warn("No valid NPCs to import");
+            if (pilotsToImport.length === 0)
+                ui.notifications.warn("No valid actors to import");
             return;
         }
 
@@ -310,4 +343,33 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
     };
 
     input.click();
+}
+
+async function _importPilotFiles(pilots, updateExisting) {
+    const progress = new ImportProgressDialog(pilots.length);
+    progress.render(true);
+    progress.addLog(`Starting import of ${pilots.length} pilot(s)...`, "info");
+    let created = 0, updated = 0, failed = 0;
+    for (const p of pilots) {
+        try {
+            progress.addLog(`Importing: ${p.name}...`, "info");
+            const r = await importOnePilot(p.json, { updateExisting });
+            if (r.updated) { updated++; progress.addLog(`✓ Updated: ${p.name}`, "success"); }
+            else           { created++; progress.addLog(`✓ Created: ${p.name}`, "success"); }
+        } catch (e) {
+            console.error(`pilot import failed for ${p.name}:`, e);
+            progress.addLog(`✗ Failed: ${p.name} - ${e.message}`, "error");
+            failed++;
+        }
+        progress.incrementProgress();
+    }
+    const parts = [];
+    if (created) parts.push(`${created} created`);
+    if (updated) parts.push(`${updated} updated`);
+    if (failed)  parts.push(`${failed} failed`);
+    progress.addLog(`Pilot import done: ${parts.join(", ")}`, failed ? "warning" : "success");
+    if (created + updated > 0)
+        ui.notifications.info(`✓ Imported ${created + updated} pilot(s)`);
+    if (failed > 0)
+        ui.notifications.warn(`✗ ${failed} pilot(s) failed`);
 }
