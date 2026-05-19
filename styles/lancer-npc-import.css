@@ -1158,3 +1158,66 @@
     padding: 8px;
     text-align: center;
 }
+
+.compcon-auth-row {
+    margin: 8px 0 12px;
+}
+
+.compcon-auth-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 0.92em;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.compcon-auth-status--in {
+    border-color: rgba(34, 139, 34, 0.4);
+    background: rgba(34, 139, 34, 0.08);
+}
+
+.compcon-auth-status--in i {
+    color: #228B22;
+}
+
+.compcon-auth-status--out i {
+    color: #991e2a;
+}
+
+.compcon-auth-status span {
+    flex: 1;
+}
+
+.compcon-auth-btn {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 0.9em;
+    background: #991e2a;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    line-height: 1.4;
+    width: auto;
+}
+
+.compcon-auth-btn:hover {
+    background: #7a1822;
+}
+
+.lancer-item-card--disabled {
+    opacity: 0.45;
+    pointer-events: none;
+    filter: grayscale(0.6);
+}
+
+.compcon-login-body input[type="email"],
+.compcon-login-body input[type="password"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 0.95em;
+}

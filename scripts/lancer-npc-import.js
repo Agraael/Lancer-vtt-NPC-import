@@ -1,25 +1,19 @@
 import { checkModuleUpdate } from "./version-check.js";
 import { registerV3LcpShim } from "./v3-lcp-shim.js";
 import { registerSnapshotApi } from "./compendium-snapshot.js";
-import {
-    installStoragePatch,
-    installFetchPatch,
-    loadLancerAwsModules
-} from "./v3-api.js";
-import { installPilotSheetPatch } from "./pilot-sheet-patch.js";
 import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
 import { NPCImportDialog } from "./npc-import-ui.js";
 import { LcpDebugDiffMenu } from "./lcp-debug-diff.js";
 import { ShareCodeTestMenu } from "./share-code-test.js";
 import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
 import { isRefreshableActor } from "./refresh/refresh-core.js";
+import { COGNITO_SETTINGS_KEYS } from "./auth/cognito-auth.js";
 
 export async function ImportNPC() {
     new NPCImportDialog().render(true);
 }
 
 Hooks.once('init', () => {
-    // Option pour cocher la case par défaut
     game.settings.register("lancer-npc-import", "defaultDownloadPortrait", {
         name: "Download portraits by default",
         hint: "If enabled, the portrait download checkbox will be checked by default in the import dialog.",
@@ -29,7 +23,6 @@ Hooks.once('init', () => {
         default: false
     });
 
-    // Chemin du dossier de stockage
     game.settings.register("lancer-npc-import", "portraitStoragePath", {
         name: "Portrait Storage Path",
         hint: "The folder inside 'User Data' where portraits will be saved.",
@@ -39,21 +32,10 @@ Hooks.once('init', () => {
         default: "compcon_img"
     });
 
-    // Patch to V3 endpoint
-    game.settings.register("lancer-npc-import", "useV3Endpoint", {
-        name: "Patch to V3 endpoint",
-        hint: "Use Comp/Con V3. Required since compcon.app is V3 and api.compcon.app/share is offline. Requires reload.",
-        scope: "client",
-        config: true,
-        type: Boolean,
-        default: true,
-        requiresReload: true
-    });
-
     // Endpoint overrides, editable without code release.
     game.settings.register("lancer-npc-import", "v3ApiBase", {
         name: "V3 API Base URL",
-        hint: "V3 API Gateway URL, no trailing slash.",
+        hint: "V3 API Gateway URL for NPC list/user data, no trailing slash.",
         scope: "world",
         config: true,
         type: String,
@@ -63,7 +45,7 @@ Hooks.once('init', () => {
 
     game.settings.register("lancer-npc-import", "v3ApiKey", {
         name: "V3 API Key",
-        hint: "x-api-key header for V3.",
+        hint: "x-api-key header for the V3 API Gateway.",
         scope: "world",
         config: true,
         type: String,
@@ -81,24 +63,41 @@ Hooks.once('init', () => {
         requiresReload: true
     });
 
+    // Kept for the share-code-test diagnostic tool; not used in normal flow.
     game.settings.register("lancer-npc-import", "v2ShareApi", {
-        name: "V2 Share API URL",
-        hint: "V2 share hosts intercepted by the V3 redirect. Comma-separated.",
+        name: "V2 Share API URL (diagnostic)",
+        hint: "Hosts for the legacy share API. Comma-separated. Used only by Share Code Test.",
         scope: "world",
-        config: true,
+        config: false,
         type: String,
-        default: "https://api.compcon.app/share,https://ujgatmvzlg.execute-api.us-east-1.amazonaws.com/prod/share",
-        requiresReload: true
+        default: "https://api.compcon.app/share,https://ujgatmvzlg.execute-api.us-east-1.amazonaws.com/prod/share"
     });
 
     game.settings.register("lancer-npc-import", "v2ShareApiKey", {
-        name: "V2 Share API Key",
-        hint: "x-api-key header for V2 share endpoint.",
+        name: "V2 Share API Key (diagnostic)",
+        hint: "x-api-key header used by Share Code Test.",
         scope: "world",
-        config: true,
+        config: false,
         type: String,
-        default: "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf",
-        requiresReload: true
+        default: "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf"
+    });
+
+    // Comp/Con sign-in token storage. Hidden from the settings UI; manipulated
+    // through the Sign In / Sign Out buttons in the NPC import dialog.
+    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.email, {
+        scope: "client", config: false, type: String, default: ""
+    });
+    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.idToken, {
+        scope: "client", config: false, type: String, default: ""
+    });
+    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.refreshToken, {
+        scope: "client", config: false, type: String, default: ""
+    });
+    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.expiry, {
+        scope: "client", config: false, type: Number, default: 0
+    });
+    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.sub, {
+        scope: "client", config: false, type: String, default: ""
     });
 
     game.settings.registerMenu("lancer-npc-import", "lcpDebugDiff", {
@@ -127,7 +126,6 @@ Hooks.once('init', () => {
         type: Boolean,
         default: false
     });
-
 
     game.settings.register("lancer-npc-import", "lastNotifiedVersion", {
         name: "Last Notified Version",
@@ -158,18 +156,6 @@ Hooks.once('init', () => {
         type: Array,
         default: []
     });
-
-    // Install Storage + fetch patches during init so they're ready before
-    // the Lancer system's configureAmplify() calls populatePilotCache()
-    if (game.system.id === 'lancer' && game.settings.get("lancer-npc-import", "useV3Endpoint")) {
-        loadLancerAwsModules().then(() => {
-            installStoragePatch();
-            installFetchPatch();
-            console.log("[V3] Storage + fetch patches active (init)");
-        }).catch(e => {
-            console.error("[V3] Failed to install patches during init:", e);
-        });
-    }
 });
 
 Hooks.once('ready', async () => {
@@ -180,14 +166,6 @@ Hooks.once('ready', async () => {
     patchPilotImportReserves();
     registerV3LcpShim();
     registerSnapshotApi();
-
-    if (!game.settings.get("lancer-npc-import", "useV3Endpoint"))
-        return;
-
-    // Storage + fetch patches already installed during init.
-    // Pilot sheet hook needs the DOM so it goes here.
-    installPilotSheetPatch();
-    ui.notifications.info("NPC Import: V3 patch active");
 });
 
 Hooks.on('renderActorDirectory', (_app, html) => {

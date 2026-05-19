@@ -1,31 +1,34 @@
-// Import from Comp/Con cloud flow.
+// Comp/Con cloud NPC import.
 
 import {
     corsProxyFetch,
     getV3ApiBase,
     getV3ApiKey,
     getV3Cdn,
-    setCachedAuth,
     unwrapData
 } from "./v3-api.js";
 import { NPCSelectionDialog } from "./npc-import-ui.js";
 import { normalizeNpcData } from "./npc-import-core.js";
+import { getValidJwt, getUserSub, isLoggedIn } from "./auth/cognito-auth.js";
+import { CompconLoginDialog } from "./auth/login-dialog.js";
 
-export async function getV3AuthHeaders(Auth) {
-    const session = await Auth.currentSession();
-    const idToken = session.getIdToken().getJwtToken();
-    const userId = session.getIdToken().payload.sub;
+async function _getV3AuthHeaders() {
+    const jwt = await getValidJwt();
+    if (!jwt)
+        throw new Error("NOT_LOGGED_IN");
+    const userId = getUserSub();
+    if (!userId)
+        throw new Error("NO_USER_SUB");
     return {
         headers: {
             "Content-Type": "application/json",
             "x-api-key": getV3ApiKey(),
-            "Authorization": idToken
+            "Authorization": jwt
         },
         userId
     };
 }
 
-// Check if any tier's stats differ from class base stats
 export function detectCustomStats(json) {
     const classStats = json.class?.data?.stats;
     const npcStats = json.combat_data?.stats?.max;
@@ -51,10 +54,7 @@ export function npcFromV3Json(json, key) {
     if (!json || !json.name)
         return null;
 
-    // Detect custom stats before normalizing (needs full class object)
     const hasCustomStats = json.tier === 'custom' || detectCustomStats(json);
-
-    // Normalize with shared function
     normalizeNpcData(json);
 
     const classId = typeof json.class === 'string' ? json.class : 'Unknown';
@@ -73,9 +73,9 @@ export function npcFromV3Json(json, key) {
     };
 }
 
-export async function fetchNPCsViaV3API(Auth) {
+export async function fetchNPCsViaV3API() {
     const v3Base = getV3ApiBase();
-    const { headers, userId } = await getV3AuthHeaders(Auth);
+    const { headers, userId } = await _getV3AuthHeaders();
 
     ui.notifications.info("Fetching NPC list from Comp/Con v3...");
 
@@ -101,7 +101,6 @@ export async function fetchNPCsViaV3API(Auth) {
 
     console.log(`[V3] ${npcItems.length} NPC(s) found`);
 
-    // Show a loading dialog while downloading NPC data from CDN
     const loadingDialog = new Dialog({
         title: "Loading NPCs",
         content: `
@@ -160,222 +159,33 @@ export async function fetchNPCsViaV3API(Auth) {
     return npcs;
 }
 
+async function _ensureLoginThenFetch() {
+    if (!isLoggedIn()) {
+        const signedIn = await new Promise((resolve) => {
+            new CompconLoginDialog(success => resolve(!!success)).render(true);
+        });
+        if (!signedIn)
+            return null;
+    }
+    return fetchNPCsViaV3API();
+}
+
 export async function importFromCompCon() {
     try {
-        ui.notifications.info("Connecting to Comp/Con...");
-
-        let Auth, Storage, awsConfig;
-
-        const lancerPath = game.system.id === "lancer" ? "systems/lancer" : null;
-        if (!lancerPath) {
-            throw new Error("Lancer system not found");
-        }
-
-        const tryImportModules = async (basePath) => {
-            try {
-                console.log("Auto-detecting AWS module files...");
-
-                const lancerResponse = await fetch(`/${basePath}/lancer.mjs`);
-                if (!lancerResponse.ok) {
-                    throw new Error("Could not fetch lancer.mjs");
-                }
-
-                const lancerContent = await lancerResponse.text();
-
-                const lancerHashMatch = lancerContent.match(/import\s+["']\.\/lancer-([a-f0-9]+)\.mjs["']/);
-                if (!lancerHashMatch) {
-                    throw new Error("Could not find lancer-HASH.mjs reference in lancer.mjs");
-                }
-
-                const lancerHashFile = `lancer-${lancerHashMatch[1]}.mjs`;
-                console.log(`Found main file: ${lancerHashFile}`);
-
-                const lancerHashResponse = await fetch(`/${basePath}/${lancerHashFile}`);
-                if (!lancerHashResponse.ok) {
-                    throw new Error(`Could not fetch ${lancerHashFile}`);
-                }
-
-                const lancerHashContent = await lancerHashResponse.text();
-
-                const awsConfigMatch = lancerHashContent.match(/await import\(["']\.\/aws-exports-([a-f0-9]+)\.mjs["']\)/);
-                const authMatch = lancerHashContent.match(/\{\s*Auth\s*\}\s*=\s*await import\(["']\.\/index-([a-f0-9]+)\.mjs["']\)/);
-                const storageMatch = lancerHashContent.match(/\{\s*Storage\s*\}\s*=\s*await import\(["']\.\/index-([a-f0-9]+)\.mjs["']\)/);
-
-                if (!awsConfigMatch || !authMatch || !storageMatch) {
-                    throw new Error("Could not parse AWS module file names from lancer-HASH.mjs");
-                }
-
-                const configFile = `aws-exports-${awsConfigMatch[1]}.mjs`;
-                const authFile = `index-${authMatch[1]}.mjs`;
-                const storageFile = `index-${storageMatch[1]}.mjs`;
-
-                console.log(`Detected AWS files: ${authFile}, ${storageFile}, ${configFile}`);
-
-                const [authModule, storageModule, configModule] = await Promise.all([
-                    import(`/${basePath}/${authFile}`),
-                    import(`/${basePath}/${storageFile}`),
-                    import(`/${basePath}/${configFile}`)
-                ]);
-
-                if (authModule.Auth && storageModule.Storage && configModule.default) {
-                    Auth = authModule.Auth;
-                    Storage = storageModule.Storage;
-                    awsConfig = configModule.default;
-                    console.log(`✓ Successfully auto-loaded AWS modules`);
-                    return true;
-                }
-
-                return false;
-            } catch (e) {
-                console.warn("Could not auto-detect AWS modules, trying fallback...", e);
-
-                const possibleHashes = [
-                    { auth: "index-5139827c.mjs", storage: "index-66abcef7.mjs", config: "aws-exports-1e808d22.mjs" },
-                ];
-
-                for (const combo of possibleHashes) {
-                    try {
-                        const [authModule, storageModule, configModule] = await Promise.all([
-                            import(`/${basePath}/${combo.auth}`),
-                            import(`/${basePath}/${combo.storage}`),
-                            import(`/${basePath}/${combo.config}`)
-                        ]);
-
-                        Auth = authModule.Auth;
-                        Storage = storageModule.Storage;
-                        awsConfig = configModule.default;
-
-                        if (Auth && Storage && awsConfig) {
-                            console.log(`✓ Successfully loaded AWS modules using fallback`);
-                            return true;
-                        }
-                    } catch (e) {
-                        continue;
-                    }
-                }
-
-                return false;
-            }
-        };
-
-        const loaded = await tryImportModules(lancerPath);
-
-        if (!loaded || !Auth || !Storage || !awsConfig) {
-            throw new Error("Could not load AWS modules.");
-        }
-
-        Auth.configure(awsConfig);
-        Storage.configure(awsConfig);
-
-        // Cache Auth for the V3 fetch interceptor to use
-        setCachedAuth(Auth);
-
-        try {
-            await Auth.currentSession();
-        } catch (e) {
-            ui.notifications.error("Not logged into Comp/Con. Go to Settings → System Settings → COMP/CON Login");
+        const validNPCs = await _ensureLoginThenFetch();
+        if (validNPCs === null)
             return;
-        }
 
-        ui.notifications.info("Fetching NPCs from Comp/Con...");
-
-        const useV3 = game.settings.get("lancer-npc-import", "useV3Endpoint");
-        let validNPCs = [];
-
-        if (useV3) {
-            // V3 path: use the v3 API Gateway directly
-            validNPCs = await fetchNPCsViaV3API(Auth);
-        } else {
-            // V2 path: legacy direct S3 via Amplify Storage
-            const res = await Storage.list("npc", {
-                level: "protected",
-                cacheControl: "no-cache",
-                pageSize: 1000
-            });
-
-            const active = res.results.filter(x => x.key?.endsWith("--active"));
-
-            if (active.length === 0) {
-                ui.notifications.warn("No NPCs found in Comp/Con roster");
-                return;
-            }
-
-            const v2LoadingDialog = new Dialog({
-                title: "Loading NPCs",
-                content: `
-                    <div style="text-align:center; padding: 20px;">
-                        <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING NPC DATA</div>
-                        <div style="margin: 15px 0;">
-                            <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
-                                <div id="v2-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
-                            </div>
-                            <div id="v2-loading-text" style="margin-top: 8px; color: #444;">0 / ${active.length}</div>
-                        </div>
-                    </div>
-                `,
-                buttons: {},
-                close: () => {}
-            }, {
-                width: 350,
-                classes: ["lancer-dialog-base", "lancer-no-title"]
-            });
-            v2LoadingDialog.render(true);
-
-            let v2Loaded = 0;
-            const allNPCs = [];
-            const V2_BATCH = 10;
-
-            for (let i = 0; i < active.length; i += V2_BATCH) {
-                const batch = active.slice(i, i + V2_BATCH);
-
-                const results = await Promise.allSettled(
-                    batch.map(async (item) => {
-                        const data = await Storage.get(item.key, {
-                            level: "protected",
-                            download: true,
-                            cacheControl: "no-cache"
-                        });
-                        const text = await data.Body.text();
-                        const json = JSON.parse(text);
-                        return {
-                            key: item.key,
-                            json: json,
-                            name: json.name || 'Unnamed',
-                            class: json.class || 'Unknown',
-                            tier: json.tier || '?',
-                            tag: json.tag || '',
-                            id: json.id || ''
-                        };
-                    })
-                );
-
-                for (let j = 0; j < results.length; j++) {
-                    if (results[j].status === 'fulfilled')
-                        allNPCs.push(results[j].value);
-                    else
-                        console.error(`Error loading ${batch[j].key}:`, results[j].reason);
-                }
-
-                v2Loaded += batch.length;
-                const pct = Math.round((v2Loaded / active.length) * 100);
-                if (v2LoadingDialog.element) {
-                    v2LoadingDialog.element.find('#v2-loading-bar').css('width', pct + '%');
-                    v2LoadingDialog.element.find('#v2-loading-text').text(`${v2Loaded} / ${active.length}`);
-                }
-            }
-
-            v2LoadingDialog.close();
-            validNPCs = allNPCs;
-        }
-
-        if (validNPCs.length === 0) {
+        if (!validNPCs || validNPCs.length === 0) {
             ui.notifications.warn("No NPCs found in Comp/Con roster");
             return;
         }
-
         new NPCSelectionDialog(validNPCs).render(true);
-
     } catch (error) {
+        if (error.message === "NOT_LOGGED_IN") {
+            ui.notifications.warn("Sign in to Comp/Con to browse cloud NPCs.");
+            return;
+        }
         console.error("Error fetching NPCs from Comp/Con:", error);
         ui.notifications.error(`Error: ${error.message}`);
     }

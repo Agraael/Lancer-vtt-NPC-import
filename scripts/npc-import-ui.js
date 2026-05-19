@@ -8,9 +8,33 @@ import {
     findExistingNPCsByLID,
     compareNPCWithActor
 } from "./npc-import-core.js";
+import { isLoggedIn, getEmail } from "./auth/cognito-auth.js";
+import { CompconLoginDialog } from "./auth/login-dialog.js";
+
+function _loginStatusHtml() {
+    if (isLoggedIn()) {
+        const email = foundry.utils.escapeHTML?.(getEmail()) ?? getEmail();
+        return `
+            <div class="compcon-auth-status compcon-auth-status--in">
+                <i class="fas fa-check-circle"></i>
+                <span>Signed in as <strong>${email}</strong></span>
+                <button type="button" class="compcon-auth-btn" data-action="auth">Change account</button>
+            </div>`;
+    }
+    return `
+        <div class="compcon-auth-status compcon-auth-status--out">
+            <i class="fas fa-sign-in-alt"></i>
+            <span>Sign in to browse your Comp/Con cloud NPCs.</span>
+            <button type="button" class="compcon-auth-btn" data-action="auth">Sign in</button>
+        </div>`;
+}
 
 export class NPCImportDialog extends Dialog {
     constructor() {
+        const loggedIn = isLoggedIn();
+        const cloudCardClass = loggedIn ? "lancer-item-card" : "lancer-item-card lancer-item-card--disabled";
+        const cloudCardTitle = loggedIn ? "" : 'title="Sign in to enable cloud import"';
+
         super({
             title: "NPC Import",
             content: `
@@ -19,6 +43,7 @@ export class NPCImportDialog extends Dialog {
                         <div class="lancer-dialog-title">NPC IMPORT // SOURCE SELECTION</div>
                         <div class="lancer-dialog-subtitle">Choose your import method</div>
                     </div>
+                    <div class="compcon-auth-row">${_loginStatusHtml()}</div>
                     <div class="lancer-items-grid">
                         <div class="lancer-item-card" data-action="files">
                             <div class="lancer-item-icon"><i class="fas fa-file-upload"></i></div>
@@ -27,7 +52,7 @@ export class NPCImportDialog extends Dialog {
                                 <div class="lancer-item-details">Always creates new NPCs</div>
                             </div>
                         </div>
-                        <div class="lancer-item-card" data-action="compcon">
+                        <div class="${cloudCardClass}" data-action="compcon" ${cloudCardTitle}>
                             <div class="lancer-item-icon"><i class="fas fa-cloud-download-alt"></i></div>
                             <div class="lancer-item-content">
                                 <div class="lancer-item-name">Import from Comp/Con</div>
@@ -54,8 +79,21 @@ export class NPCImportDialog extends Dialog {
     activateListeners(html) {
         super.activateListeners(html);
 
+        html.find('.compcon-auth-btn').click((event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            new CompconLoginDialog(() => {
+                // re-render this dialog so status + cloud card update
+                this.close();
+                new NPCImportDialog().render(true);
+            }).render(true);
+        });
+
         html.find('.lancer-item-card').click(async (event) => {
-            const action = $(event.currentTarget).data('action');
+            const $card = $(event.currentTarget);
+            if ($card.hasClass('lancer-item-card--disabled'))
+                return;
+            const action = $card.data('action');
             this.close();
 
             if (action === 'files') {

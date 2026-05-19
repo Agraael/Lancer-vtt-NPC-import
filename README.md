@@ -13,13 +13,12 @@ Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC impo
 ## What it does
 
 - **NPC import** from Comp/Con cloud or JSON files, with tier scaling and update-in-place.
-- **Pilot import patch**: makes the built-in Lancer pilot import also bring in reserves and organizations (the system drops those by default).
-- **Pilot share code patch**: the codes that the new Comp/Con hands out work in the pilot sheet again.
-- **Pilot cloud sync patch**: the pilot dropdown in the Lancer system pulls from the new Comp/Con.
+- **Comp/Con sign in**: Lancer v2.12 dropped the built-in login, so we talk to AWS Cognito directly. Only a refresh token is stored, never your password.
+- **Pilot import patch**: brings in organizations, fills bonds, and refills HP/structure/stress on import. Reserves are deduped by LID so the new system's native reserves import doesn't double up.
 - **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one.
 - **Refresh items from LCPs**: re-pull compendium item data into existing actors after an LCP update, with a per-item diff preview and per-row opt-in.
 
-The three pilot-side patches run automatically as long as the V3 setting is on (it is, by default).
+Pilot share codes and pilot cloud sync are now handled by the Lancer system itself.
 
 ## Install
 
@@ -30,14 +29,14 @@ https://github.com/Agraael/Lancer-vtt-NPC-import-Macro/releases/latest/download/
 ```
 
 Requires:
-- [Lancer system](https://foundryvtt.com/packages/lancer) v2.0.0+
+- [Lancer system](https://foundryvtt.com/packages/lancer) v2.12.0+
 - [Lancer Style Library](https://github.com/Agraael/lancer-style-library)
 
 ## Using it
 
 Click **Import NPCs** in the Actors sidebar.
 
-- **From the cloud**: log in under Settings > Lancer System Settings > COMP/CON Login, then pick NPCs and a scaling mode.
+- **From the cloud**: hit **Sign in** in the dialog, enter your Comp/Con credentials, then pick NPCs and a scaling mode.
 - **From JSON**: export from Comp/Con, pick the files, pick a scaling mode. Both v2 and v3 export formats are handled.
 
 For NPCs with custom tiers:
@@ -90,8 +89,6 @@ If Massif rotates keys or moves hosts, five world settings let you update things
 - `V3 API Base URL`
 - `V3 API Key`
 - `V3 CDN Base URL`
-- `V2 Share API URL` (comma-separated; covers both the old `api.compcon.app/share` and the `ujgatmvzlg` gateway `old.compcon.app` uses)
-- `V2 Share API Key`
 
 </details>
 
