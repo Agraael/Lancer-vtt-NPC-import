@@ -225,9 +225,9 @@ export function buildNPCSelectionPanel(npcs) {
                             <div class="lancer-toggle-card-text">Update existing NPCs</div>
                             <input type="hidden" id="update-existing" value="true">
                         </div>
-                        <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card-cc">
+                        <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card-cc" title="Pick which actor each NPC overwrites instead of matching by LID. Optionally keep the actor's name.">
                             <div class="lancer-toggle-card-icon"><i class="fas fa-times"></i></div>
-                            <div class="lancer-toggle-card-text">Manual replace mode</div>
+                            <div class="lancer-toggle-card-text">Pick target actor per NPC</div>
                             <input type="hidden" id="manual-replace" value="false">
                         </div>
                     </div>
@@ -458,6 +458,8 @@ export function buildNPCSelectionPanel(npcs) {
         });
 
         html.find('#link-actors').click(async () => {
+            const { showLinkChooser, applyLink, applyUnlink } = await import("./npc-link-chooser.js");
+
             const selectedIndices = [];
             html.find('.npc-checkbox:checked').each(function() {
                 selectedIndices.push(Number.parseInt($(this).data('index')));
@@ -469,31 +471,34 @@ export function buildNPCSelectionPanel(npcs) {
             }
 
             const selectedNPCs = selectedIndices.map(i => npcs[i]);
-            const unlinkedNPCs = selectedNPCs.filter(npc => {
-                const existingActors = findExistingNPCsByLID(npc.json);
-                const comparison = compareNPCWithActor(npc.json, existingActors);
-                return comparison.status === 'unlinked';
-            });
-
-            if (unlinkedNPCs.length === 0) {
-                ui.notifications.info("No unlinked NPCs selected");
-                return;
-            }
-
             let linkedCount = 0;
-            for (const npc of unlinkedNPCs) {
+            let unlinkedCount = 0;
+
+            for (const npc of selectedNPCs) {
+                const alreadyLinked = findExistingNPCsByLID(npc.json);
                 const nameLower = npc.json.name.toLowerCase();
-                const actorsByName = game.actors.filter(a =>
+                const sameName = game.actors.filter(a =>
                     a.type === 'npc' && a.name.toLowerCase() === nameLower
                 );
 
-                for (const actor of actorsByName) {
-                    await actor.update({ 'system.lid': npc.json.id });
-                    linkedCount++;
+                const onlyOneSameName = alreadyLinked.length === 0 && sameName.length === 1;
+                if (onlyOneSameName) {
+                    linkedCount += await applyLink(sameName, npc.json.id);
+                    continue;
                 }
+
+                const result = await showLinkChooser(npc, alreadyLinked);
+                if (result === null) break;
+                if (result.toLink.length === 0 && result.toUnlink.length === 0) continue;
+                linkedCount += await applyLink(result.toLink, npc.json.id);
+                unlinkedCount += await applyUnlink(result.toUnlink);
             }
 
-            ui.notifications.info(`✓ Linked ${linkedCount} actor(s)`);
+            const parts = [];
+            if (linkedCount > 0) parts.push(`linked ${linkedCount}`);
+            if (unlinkedCount > 0) parts.push(`unlinked ${unlinkedCount}`);
+            if (parts.length === 0) parts.push("no changes");
+            ui.notifications.info(`✓ ${parts.join(", ")}`);
             if (typeof opts.onRefresh === "function")
                 opts.onRefresh();
         });

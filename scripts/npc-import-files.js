@@ -39,9 +39,9 @@ export async function importFromFiles() {
                         <div class="lancer-toggle-card-text">Update existing NPCs (keep token image & settings)</div>
                         <input type="hidden" id="update-existing-files" value="true">
                     </div>
-                    <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card">
+                    <div class="lancer-toggle-card" data-setting="manual-replace" id="manual-replace-card" title="Pick which actor each NPC overwrites instead of matching by LID. Optionally keep the actor's name.">
                         <div class="lancer-toggle-card-icon"><i class="fas fa-times"></i></div>
-                        <div class="lancer-toggle-card-text">Manual replace mode (choose target actor for each NPC)</div>
+                        <div class="lancer-toggle-card-text">Pick target actor per NPC</div>
                         <input type="hidden" id="manual-replace-files" value="false">
                     </div>
                 </div>

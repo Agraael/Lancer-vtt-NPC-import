@@ -254,41 +254,46 @@ export function compareNPCWithActor(npcData, actors) {
         return { status: 'new', count: 0, reasons: [] };
     }
 
-    const actor = actors[0];
+    const allReasons = [];
+    let anyModified = false;
+
+    for (const actor of actors) {
+        const perActorReasons = _compareNpcSingleActor(npcData, actor);
+        if (perActorReasons.length === 0)
+            continue;
+        anyModified = true;
+        const prefix = actors.length > 1 ? `[${actor.name}] ` : '';
+        for (const r of perActorReasons)
+            allReasons.push(`${prefix}${r}`);
+    }
+
+    if (anyModified)
+        return { status: 'modified', count: actors.length, reasons: allReasons };
+    return { status: 'synced', count: actors.length, reasons: [] };
+}
+
+function _compareNpcSingleActor(npcData, actor) {
     const reasons = [];
 
-    // Note: On ne compare PAS le nom - il est préservé lors des updates
-
-    // Comparer le TIER (sauf custom)
     const npcTier = parseTier(npcData.tier);
-    if (npcData.tier !== 'custom' && npcTier !== actor.system.tier) {
+    if (npcData.tier !== 'custom' && npcTier !== actor.system.tier)
         reasons.push(`tier changed: ${actor.system.tier} → ${npcTier}`);
-    }
 
-    // Comparer les ITEMS par type (Class, Templates, Features)
-
-    // 1. Comparer la CLASSE
     const actorClass = actor.items.find(i => i.type === 'npc_class');
     const actorClassLid = actorClass?.system.lid;
-    if (npcData.class !== actorClassLid) {
+    if (npcData.class !== actorClassLid)
         reasons.push(`class: ${actorClassLid || 'none'} → ${npcData.class || 'none'}`);
-    }
 
-    // 2. Comparer les TEMPLATES
     const npcTemplates = (npcData.templates || []).filter(lid => lid).sort();
     const actorTemplates = actor.items
         .filter(i => i.type === 'npc_template')
         .map(i => i.system.lid)
         .filter(lid => lid)
         .sort();
-
-    // Différence neutre - on ne sait pas lequel est "l'original"
-    if (npcTemplates.length !== actorTemplates.length ||
-        !npcTemplates.every((lid, i) => lid === actorTemplates[i])) {
+    if (npcTemplates.length !== actorTemplates.length
+        || !npcTemplates.every((lid, i) => lid === actorTemplates[i]))
         reasons.push(`templates: ${actorTemplates.length} → ${npcTemplates.length}`);
-    }
 
-    // 3. Comparer les FEATURES
     const npcFeatures = (npcData.items || [])
         .map(item => item.itemID)
         .filter(lid => lid)
@@ -298,27 +303,16 @@ export function compareNPCWithActor(npcData, actors) {
         .map(i => i.system.lid)
         .filter(lid => lid)
         .sort();
-
-    // Différence neutre
-    if (npcFeatures.length !== actorFeatures.length ||
-        !npcFeatures.every((lid, i) => lid === actorFeatures[i])) {
+    if (npcFeatures.length !== actorFeatures.length
+        || !npcFeatures.every((lid, i) => lid === actorFeatures[i]))
         reasons.push(`features: ${actorFeatures.length} → ${npcFeatures.length}`);
-    }
 
-    // Comparer les STATS de BASE de la classe (pas les stats totales de l'acteur qui incluent les bonus d'items)
     const stats = npcData.stats || {};
-
-    // Trouver la classe NPC
     const npcClass = actor.items.find(i => i.type === 'npc_class');
-
     if (npcClass && npcClass.system.base_stats) {
-        // Déterminer le tier à utiliser pour la comparaison
-        // Custom tier = toujours tier 0 (index 0)
-        // Autres tiers = tier actuel (tier 1 = index 0, tier 2 = index 1, tier 3 = index 2)
         const isCustomTier = npcData.tier === 'custom';
         const tierIndex = isCustomTier ? 0 : Math.max(0, actor.system.tier - 1);
         const baseStats = npcClass.system.base_stats[tierIndex];
-
         if (baseStats) {
             const statChecks = [
                 ['hp', 'hp', 'HP'],
@@ -338,29 +332,16 @@ export function compareNPCWithActor(npcData, actors) {
                 ['structure', 'structure', 'Structure'],
                 ['stress', 'stress', 'Stress']
             ];
-
             for (const [ccKey, baseStatKey, displayName] of statChecks) {
-                if (stats[ccKey] !== undefined) {
-                    // Skip size comparison if it's custom (> 4) - we preserve custom sizes
-                    if (ccKey === 'size' && actor.system.size > 4) {
-                        continue;
-                    }
-
-                    const baseValue = baseStats[baseStatKey];
-
-                    if (baseValue != stats[ccKey]) {
-                        reasons.push(`${displayName}: ${baseValue} → ${stats[ccKey]}`);
-                    }
-                }
+                if (stats[ccKey] === undefined) continue;
+                if (ccKey === 'size' && actor.system.size > 4) continue; // custom sizes preserved
+                const baseValue = baseStats[baseStatKey];
+                if (baseValue != stats[ccKey])
+                    reasons.push(`${displayName}: ${baseValue} → ${stats[ccKey]}`);
             }
         }
     }
-
-    if (reasons.length > 0) {
-        return { status: 'modified', count: actors.length, reasons };
-    }
-
-    return { status: 'synced', count: actors.length, reasons: [] };
+    return reasons;
 }
 
 // Normalize any comp/con JSON format (v2 full objects or v3 strings) into the format

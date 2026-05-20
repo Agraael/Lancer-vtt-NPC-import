@@ -48,9 +48,16 @@ export function detectCustomStats(json) {
     return false;
 }
 
-export function npcFromV3Json(json, key) {
-    if (!json || !json.name)
+export function npcFromV3Json(json, key, fallbackName) {
+    if (!json)
         return null;
+    if (!json.name && fallbackName)
+        json.name = fallbackName;
+    if (!json.name) {
+        const cls = json.class?.data?.name || (typeof json.class === 'string' ? json.class : '');
+        const tag = json.tag || '';
+        json.name = [cls, tag].filter(Boolean).join(' ').trim() || 'Unnamed NPC';
+    }
 
     const hasCustomStats = json.tier === 'custom' || detectCustomStats(json);
     normalizeNpcData(json);
@@ -138,17 +145,26 @@ export async function fetchNPCsViaV3API(progressUpdate) {
 
         const results = await Promise.allSettled(
             batch.map(async (item) => {
-                const resp = await fetch(`${v3Cdn}/${item.uri}`);
+                // ?cb= busts CloudFront's per-Origin cache.
+                const resp = await fetch(`${v3Cdn}/${item.uri}?cb=${Date.now()}`, { cache: "no-store" });
                 if (!resp.ok)
                     throw new Error(`CDN ${resp.status}`);
-                const npcJson = unwrapData(await resp.json());
-                return npcFromV3Json(npcJson, item.sortkey || item.uri);
+                let npcJson;
+                try {
+                    npcJson = unwrapData(await resp.json());
+                } catch (e) {
+                    console.warn(`[V3] JSON parse failed for "${item.name}" (sortkey ${item.sortkey}):`, e.message);
+                    return null;
+                }
+                return npcFromV3Json(npcJson, item.sortkey || item.uri, item.name);
             })
         );
 
         for (let j = 0; j < results.length; j++) {
             if (results[j].status === 'fulfilled' && results[j].value)
                 npcs.push(results[j].value);
+            else if (results[j].status === 'fulfilled')
+                console.warn(`[V3] Skipped "${batch[j].name || '(no name)'}" (sortkey ${batch[j].sortkey || '?'}): null payload`);
             else if (results[j].status === 'rejected')
                 console.warn(`[V3] Failed to load "${batch[j].name}":`, results[j].reason);
         }

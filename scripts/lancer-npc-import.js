@@ -40,7 +40,7 @@ Hooks.once('init', () => {
     // Endpoint overrides, editable without code release.
     game.settings.register("lancer-npc-import", "v3ApiBase", {
         name: "V3 API Base URL",
-        hint: "V3 API Gateway URL for NPC list/user data, no trailing slash.",
+        hint: "Comp/Con API gateway, no trailing slash. Matches what compcon.app itself uses.",
         scope: "world",
         config: true,
         type: String,
@@ -50,7 +50,7 @@ Hooks.once('init', () => {
 
     game.settings.register("lancer-npc-import", "v3ApiKey", {
         name: "V3 API Key",
-        hint: "x-api-key header for the V3 API Gateway.",
+        hint: "x-api-key header for the Comp/Con API.",
         scope: "world",
         config: true,
         type: String,

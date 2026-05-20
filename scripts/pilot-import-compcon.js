@@ -6,9 +6,7 @@ import {
     getV3ApiKey,
     getV3Cdn,
     unwrapData,
-    normalizePilotData,
-    v3Log,
-    v3DebugEnabled
+    normalizePilotData
 } from "./v3-api.js";
 import { getValidJwt, getUserSub } from "./auth/cognito-auth.js";
 
@@ -69,22 +67,6 @@ export async function fetchPilotsViaV3API(progressUpdate) {
     }
 
     const items = Array.isArray(data) ? data : (data.items || data.Items || []);
-
-    if (v3DebugEnabled()) {
-        const prefixSet = new Map();
-        for (const it of items) {
-            const sk = (it.SortKey || it.sortkey || it.sk || "");
-            const prefix = sk.replace(/[_-]?[0-9a-f]{6,}.*$/i, "_*");
-            prefixSet.set(prefix, (prefixSet.get(prefix) || 0) + 1);
-        }
-        v3Log("/user scope=all sortkey prefixes", Object.fromEntries(prefixSet));
-        const nonPilotNonUnit = items.filter(it => {
-            const sk = (it.SortKey || it.sortkey || it.sk || "").toLowerCase();
-            return !sk.startsWith("savedata_pilot_") && !sk.startsWith("savedata_unit_");
-        }).slice(0, 10);
-        v3Log("/user scope=all sample non-pilot/non-unit records (first 10)", nonPilotNonUnit);
-    }
-
     const pilotItems = items.filter(item => {
         const sk = (item.SortKey || item.sortkey || item.sk || "").toLowerCase();
         return sk.startsWith("savedata_pilot_");
@@ -95,22 +77,15 @@ export async function fetchPilotsViaV3API(progressUpdate) {
     let loaded = 0;
     const BATCH = 10;
 
-    let _loggedFirstPilotKeys = false;
     for (let i = 0; i < pilotItems.length; i += BATCH) {
         const batch = pilotItems.slice(i, i + BATCH).filter(it => it.uri);
         const results = await Promise.allSettled(
             batch.map(async (it) => {
-                const resp = await fetch(`${v3Cdn}/${it.uri}`);
+                // ?cb= busts CloudFront's per-Origin cache.
+                const resp = await fetch(`${v3Cdn}/${it.uri}?cb=${Date.now()}`, { cache: "no-store" });
                 if (!resp.ok)
                     throw new Error(`CDN ${resp.status}`);
                 const pilotJson = unwrapData(await resp.json());
-                if (v3DebugEnabled() && !_loggedFirstPilotKeys) {
-                    _loggedFirstPilotKeys = true;
-                    const keys = Object.keys(pilotJson || {}).sort();
-                    const folderish = keys.filter(k => /folder|group|tag|category|collection/i.test(k));
-                    v3Log("first pilot JSON top-level keys", keys);
-                    v3Log("first pilot folder-ish keys", folderish.length ? folderish.map(k => ({ [k]: pilotJson[k] })) : "(none)");
-                }
                 return pilotFromV3Json(pilotJson, it.sortkey || it.uri);
             })
         );

@@ -2,8 +2,7 @@ import {
     CORS_PROXIES,
     getV3ApiBase,
     getV3ApiKey,
-    getV3Cdn,
-    getJwtTokenFromV5Auth
+    getV3Cdn
 } from "./v3-api.js";
 
 async function testOne(proxy, v3Url, headers) {
@@ -29,9 +28,9 @@ async function testOne(proxy, v3Url, headers) {
 async function fetchCdnFromEntry(entry) {
     const uri = entry?.uri;
     if (!uri) return null;
-    const url = `${getV3Cdn()}/${uri}`;
+    const url = `${getV3Cdn()}/${uri}?cb=${Date.now()}`;
     try {
-        const resp = await fetch(url);
+        const resp = await fetch(url, { cache: "no-store" });
         const text = await resp.text();
         try {
             return { ok: resp.ok, status: resp.status, parsed: JSON.parse(text) };
@@ -51,11 +50,16 @@ function escapeHtml(s) {
         .replace(/"/g, "&quot;");
 }
 
+function copyBtn(label = "Copy JSON") {
+    return `<button type="button" class="sct-copy"><i class="fas fa-copy"></i> ${label}</button>`;
+}
+
 function renderProxyBlock(result) {
     const cls = result.ok ? "ok" : "fail";
     const status = result.status === null ? "(no response)" : result.status;
+    const jsonStr = result.parsed ? JSON.stringify(result.parsed, null, 2) : "";
     const detail = result.parsed
-        ? `<pre class="sct-json">${escapeHtml(JSON.stringify(result.parsed, null, 2))}</pre>`
+        ? `<pre class="sct-json" data-copy="${escapeHtml(jsonStr)}">${escapeHtml(jsonStr)}</pre>`
         : `<div class="sct-error">${escapeHtml(result.error || "")}</div>
            <details><summary>Raw body (first 500 chars)</summary><pre class="sct-raw">${escapeHtml(result.body.slice(0, 500))}</pre></details>`;
     return `
@@ -64,6 +68,7 @@ function renderProxyBlock(result) {
                 <strong>${escapeHtml(result.proxy)}</strong>
                 <span class="sct-status">HTTP ${status}</span>
                 <span class="sct-verdict">${result.ok ? "✓ JSON" : "✗"}</span>
+                ${result.parsed ? copyBtn() : ""}
             </div>
             ${detail}
         </div>
@@ -73,10 +78,15 @@ function renderProxyBlock(result) {
 function renderCdnBlock(cdn) {
     if (!cdn) return "";
     if (cdn.parsed) {
+        const jsonStr = JSON.stringify(cdn.parsed, null, 2);
         return `
             <div class="sct-cdn sct-ok">
-                <div class="sct-proxy-head"><strong>CDN payload</strong><span class="sct-status">HTTP ${cdn.status}</span></div>
-                <pre class="sct-json">${escapeHtml(JSON.stringify(cdn.parsed, null, 2))}</pre>
+                <div class="sct-proxy-head">
+                    <strong>CDN payload</strong>
+                    <span class="sct-status">HTTP ${cdn.status}</span>
+                    ${copyBtn("Copy CDN JSON")}
+                </div>
+                <pre class="sct-json" data-copy="${escapeHtml(jsonStr)}">${escapeHtml(jsonStr)}</pre>
             </div>
         `;
     }
@@ -89,21 +99,54 @@ function renderCdnBlock(cdn) {
     `;
 }
 
+function wireCopyButtons(rootEl) {
+    rootEl.querySelectorAll(".sct-copy").forEach(btn => {
+        btn.addEventListener("click", async (ev) => {
+            ev.preventDefault();
+            const head = btn.closest(".sct-proxy-head");
+            const pre = head?.parentElement?.querySelector("pre.sct-json[data-copy]");
+            const text = pre?.getAttribute("data-copy") || pre?.textContent || "";
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+                setTimeout(() => { btn.innerHTML = orig; }, 1200);
+            } catch (e) {
+                console.warn("[share-code-test] clipboard write failed:", e);
+                ui.notifications?.warn("Copy failed - select the JSON manually");
+            }
+        });
+    });
+}
+
+async function testDirect(url, headers) {
+    const out = { proxy: "direct (no proxy)", ok: false, status: null, body: "", parsed: null, error: null };
+    try {
+        const resp = await fetch(url, { method: "GET", headers, cache: "no-store" });
+        out.status = resp.status;
+        const text = await resp.text();
+        out.body = text;
+        try { out.parsed = JSON.parse(text); out.ok = resp.ok; }
+        catch (e) { out.error = `non-JSON body: ${e.message}`; }
+    } catch (e) {
+        out.error = e.message;
+    }
+    return out;
+}
+
 async function runTest(html, code) {
     const out = html.querySelector(".sct-output");
-    out.innerHTML = `<div class="sct-info">Querying ${CORS_PROXIES.length} proxies for share code "${escapeHtml(code)}"...</div>`;
+    out.innerHTML = `<div class="sct-info">Testing share code "${escapeHtml(code)}" (direct + ${CORS_PROXIES.length} proxies)...</div>`;
 
-    const v3Url = `${getV3ApiBase()}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}`;
+    const v3Url = `${getV3ApiBase()}/code?scope=item&codes=${encodeURIComponent(JSON.stringify([code]))}&_=${Date.now()}`;
     const headers = { "Content-Type": "application/json", "x-api-key": getV3ApiKey() };
-    try {
-        const jwt = await getJwtTokenFromV5Auth();
-        if (jwt) headers["Authorization"] = jwt;
-    } catch { /* not signed in */ }
 
-    const results = [];
-    for (const p of CORS_PROXIES) {
+    const directResult = await testDirect(v3Url, headers);
+
+    const results = [directResult];
+    for (const p of CORS_PROXIES)
         results.push(await testOne(p, v3Url, headers));
-    }
 
     const successful = results.find(r => r.ok && r.parsed);
     let cdnBlock = "";
@@ -117,11 +160,12 @@ async function runTest(html, code) {
 
     out.innerHTML = `
         <div class="sct-summary">
-            ${successful ? `<span class="sct-ok-pill">✓ ${escapeHtml(successful.proxy)} returned valid JSON</span>` : `<span class="sct-fail-pill">✗ No proxy returned valid JSON</span>`}
+            ${successful ? `<span class="sct-ok-pill">✓ ${escapeHtml(successful.proxy)} returned valid JSON</span>` : `<span class="sct-fail-pill">✗ Nothing returned valid JSON</span>`}
         </div>
         ${results.map(renderProxyBlock).join("")}
         ${cdnBlock}
     `;
+    wireCopyButtons(out);
 }
 
 export function openShareCodeTest() {

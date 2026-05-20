@@ -1418,3 +1418,88 @@
     opacity: 0.5;
     padding: 6px 8px;
 }
+
+.link-chooser .link-candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.link-candidate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+}
+
+.link-candidate-row:hover {
+    background: color-mix(in srgb, var(--primary-color, #991e2a) 8%, rgba(255,255,255,0.6));
+}
+
+.link-candidate-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.link-candidate-name {
+    font-weight: 600;
+}
+
+.link-candidate-meta {
+    font-size: 0.82em;
+    opacity: 0.7;
+    font-family: var(--font-mono, monospace);
+}
+
+.link-candidate-empty {
+    font-style: italic;
+    opacity: 0.6;
+    padding: 12px;
+    text-align: center;
+    border: 1px dashed rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.link-candidate-row.is-linked {
+    border-color: var(--primary-color, #991e2a);
+    background: color-mix(in srgb, var(--primary-color, #991e2a) 8%, transparent);
+}
+
+.link-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 9px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.link-tag--linked {
+    background: var(--primary-color, #991e2a);
+    color: var(--light-text, #fff);
+}
+
+.link-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.link-add-row select {
+    flex: 1;
+    min-width: 0;
+}
+
+.link-add-row .lancer-action-btn {
+    flex: 0 0 auto;
+    width: auto;
+}
