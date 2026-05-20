@@ -129,7 +129,7 @@ export async function selectActorMappings(npcsToImport) {
         const content = `
             <div class="lancer-dialog-base">
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">MANUAL REPLACE // TARGET MAPPING</div>
+                    <div class="lancer-dialog-title">PICK TARGET // ACTOR MAPPING</div>
                     <div class="lancer-dialog-subtitle">Choose target actors for ${npcsToImport.length} NPC(s)</div>
                 </div>
                 <div class="mapping-list">
