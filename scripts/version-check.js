@@ -1,73 +1,94 @@
 /*global game, console, fetch, Dialog, foundry, window */
 
-export async function checkModuleUpdate(moduleId) {
-    if (!game.user.isGM) {
+export async function checkModuleUpdate(moduleId)
+{
+    if (!game.user.isGM)
+    {
         return;
     }
 
     const module = game.modules.get(moduleId);
-    if (!module) {
+    if (!module)
+    {
         return;
     }
 
     let manifestUrl = module.manifest;
-    if (!manifestUrl) {
+    if (!manifestUrl)
+    {
         return;
     }
 
-    try {
+    try
+    {
         let remoteVersion;
         let releaseNotes = "";
 
-        if (manifestUrl.includes("github.com") && manifestUrl.includes("/releases/")) {
+        if (manifestUrl.includes("github.com") && manifestUrl.includes("/releases/"))
+        {
             const parts = manifestUrl.split("/");
             const owner = parts[3];
             const repo = parts[4];
             const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases`;
 
             const apiResponse = await fetch(apiUrl);
-            if (apiResponse.ok) {
+            if (apiResponse.ok)
+            {
                 const allReleases = await apiResponse.json();
-                const missed = allReleases.filter(r => {
+                const missed = allReleases.filter(r =>
+                {
                     const v = r.tag_name.replace(/^v/, "");
                     return foundry.utils.isNewerVersion(v, module.version);
                 });
-                if (missed.length > 0) {
+                if (missed.length > 0)
+                {
                     remoteVersion = missed[0].tag_name.replace(/^v/, "");
                     releaseNotes = missed
                         .map(r => `## ${r.tag_name}\n${r.body || ""}`)
                         .join("\n\n---\n\n");
                 }
-            } else {
+            }
+            else
+            {
                 const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/module.json`;
                 const rawResponse = await fetch(rawUrl);
-                if (rawResponse.ok) {
+                if (rawResponse.ok)
+                {
                     const remoteManifest = await rawResponse.json();
                     remoteVersion = remoteManifest.version;
                 }
             }
-        } else {
+        }
+        else
+        {
             const response = await fetch(manifestUrl);
-            if (response.ok) {
+            if (response.ok)
+            {
                 const remoteManifest = await response.json();
                 remoteVersion = remoteManifest.version;
             }
         }
 
-        if (remoteVersion && foundry.utils.isNewerVersion(remoteVersion, module.version)) {
+        if (remoteVersion && foundry.utils.isNewerVersion(remoteVersion, module.version))
+        {
             const lastNotified = game.settings.get(moduleId, 'lastNotifiedVersion');
-            if (lastNotified !== remoteVersion) {
+            if (lastNotified !== remoteVersion)
+            {
                 showUpdateDialog(module, remoteVersion, releaseNotes);
             }
         }
-    } catch (error) {
+    }
+    catch (error)
+    {
         console.error(`${moduleId} | Version check failed:`, error);
     }
 }
 
-function showUpdateDialog(module, newVersion, releaseNotes = "") {
+function showUpdateDialog(module, newVersion, releaseNotes = "")
+{
     let notesHtml = "";
-    if (releaseNotes) {
+    if (releaseNotes)
+    {
         const converter = new window.showdown.Converter();
         const htmlNotes = converter.makeHtml(releaseNotes);
         notesHtml = `
@@ -99,7 +120,8 @@ function showUpdateDialog(module, newVersion, releaseNotes = "") {
             dismiss: {
                 icon: '<i class="fas fa-times"></i>',
                 label: "Dismiss",
-                callback: () => {
+                callback: () =>
+                {
                     game.settings.set(module.id, 'lastNotifiedVersion', newVersion);
                 }
             },

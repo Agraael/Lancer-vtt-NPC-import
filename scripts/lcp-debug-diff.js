@@ -1,6 +1,7 @@
 import { translateV3LcpBlob, getLancerApi } from "./v3-lcp-shim.js";
 
-async function parsePackOnly(file) {
+async function parsePackOnly(file)
+{
     let blob = file;
     const translated = await translateV3LcpBlob(file);
     if (!translated.summary?.alreadyV2 && translated.blob)
@@ -11,7 +12,8 @@ async function parsePackOnly(file) {
     return { manifest: pack.manifest, packId: pack.id, buckets: pack.data };
 }
 
-async function simulateImport(file) {
+async function simulateImport(file)
+{
     let blob = file;
     const translated = await translateV3LcpBlob(file);
     if (!translated.summary?.alreadyV2 && translated.blob)
@@ -21,8 +23,10 @@ async function simulateImport(file) {
     const pack = await parseContentPack(arrayBuf);
 
     const captured = {};
-    const captureInto = (arr) => {
-        for (const d of arr) {
+    const captureInto = (arr) =>
+    {
+        for (const d of arr)
+        {
             const t = d.type ?? "unknown";
             (captured[t] ??= []).push(d);
         }
@@ -39,15 +43,18 @@ async function simulateImport(file) {
         settingsSet: game.settings.set.bind(game.settings)
     };
 
-    ItemCls.createDocuments = async function (data) {
+    ItemCls.createDocuments = async function (data)
+    {
         captureInto(data ?? []);
         return (data ?? []).map(d => ({ id: d._id ?? foundry.utils.randomID(), ...d }));
     };
-    ItemCls.updateDocuments = async function (data) {
+    ItemCls.updateDocuments = async function (data)
+    {
         captureInto(data ?? []);
         return data ?? [];
     };
-    const stubActor = (d) => {
+    const stubActor = (d) =>
+    {
         const id = d._id ?? foundry.utils.randomID();
         return {
             id,
@@ -59,26 +66,33 @@ async function simulateImport(file) {
             quickOwn: async () => null
         };
     };
-    ActorCls.createDocuments = async function (data) {
+    ActorCls.createDocuments = async function (data)
+    {
         captureInto(data ?? []);
         return (data ?? []).map(stubActor);
     };
-    ActorCls.updateDocuments = async function (data) {
+    ActorCls.updateDocuments = async function (data)
+    {
         captureInto(data ?? []);
         return (data ?? []).map(stubActor);
     };
-    Folder.create = async function (data) {
+    Folder.create = async function (data)
+    {
         return { id: foundry.utils.randomID(), getFlag: () => null, ...data };
     };
-    game.settings.set = async function (scope, key, value) {
+    game.settings.set = async function (scope, key, value)
+    {
         if (scope === game.system.id && typeof key === "string" && key.includes("tag_config"))
             return value;
         return orig.settingsSet(scope, key, value);
     };
 
-    try {
+    try
+    {
         await importCP(pack);
-    } finally {
+    }
+    finally
+    {
         ItemCls.createDocuments = orig.itemCreate;
         ItemCls.updateDocuments = orig.itemUpdate;
         ActorCls.createDocuments = orig.actorCreate;
@@ -90,16 +104,20 @@ async function simulateImport(file) {
     return { manifest: pack.manifest, packId: pack.id, buckets: captured };
 }
 
-async function loadLcpAsBuckets(file, mode) {
+async function loadLcpAsBuckets(file, mode)
+{
     return mode === "simulated" ? simulateImport(file) : parsePackOnly(file);
 }
 
-function indexBucket(arr) {
+function indexBucket(arr)
+{
     const map = new Map();
     let unkeyed = 0;
-    for (const item of arr) {
+    for (const item of arr)
+    {
         const key = item?.id ?? item?.lid ?? null;
-        if (key == null) {
+        if (key == null)
+        {
             map.set(`__unkeyed_${unkeyed++}__`, item);
             continue;
         }
@@ -111,7 +129,8 @@ function indexBucket(arr) {
     return map;
 }
 
-function stableStringify(value) {
+function stableStringify(value)
+{
     if (value === null || typeof value !== "object")
         return JSON.stringify(value);
     if (Array.isArray(value))
@@ -120,17 +139,21 @@ function stableStringify(value) {
     return `{${keys.map(k => JSON.stringify(k) + ":" + stableStringify(value[k])).join(",")}}`;
 }
 
-function _isPlainObj(v) {
+function _isPlainObj(v)
+{
     return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
-function fieldDiff(a, b, path = "", out = []) {
+function fieldDiff(a, b, path = "", out = [])
+{
     if (stableStringify(a) === stableStringify(b))
         return out;
     // Both sides plain objects: recurse so each leaf diff lands on its own line.
-    if (_isPlainObj(a) && _isPlainObj(b)) {
+    if (_isPlainObj(a) && _isPlainObj(b))
+    {
         const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-        for (const k of keys) {
+        for (const k of keys)
+        {
             const subPath = path ? `${path}.${k}` : k;
             fieldDiff(a[k], b[k], subPath, out);
         }
@@ -138,7 +161,8 @@ function fieldDiff(a, b, path = "", out = []) {
     }
     // Both sides arrays of equal length: recurse per index. Different lengths or
     // mixed types fall through to leaf-level (whole array shown).
-    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length)
+    {
         for (let i = 0; i < a.length; i++)
             fieldDiff(a[i], b[i], `${path}[${i}]`, out);
         return out;
@@ -147,10 +171,12 @@ function fieldDiff(a, b, path = "", out = []) {
     return out;
 }
 
-function diffBuckets(a, b) {
+function diffBuckets(a, b)
+{
     const allBuckets = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
     const out = {};
-    for (const bucket of allBuckets) {
+    for (const bucket of allBuckets)
+    {
         const ma = indexBucket(a?.[bucket] ?? []);
         const mb = indexBucket(b?.[bucket] ?? []);
         const added = [];
@@ -163,17 +189,20 @@ function diffBuckets(a, b) {
         for (const [k, v] of ma)
             if (!mb.has(k))
                 removed.push({ key: k, item: v });
-        for (const [k, va] of ma) {
+        for (const [k, va] of ma)
+        {
             if (!mb.has(k))
                 continue;
             const vb = mb.get(k);
-            if (stableStringify(va) === stableStringify(vb)) {
+            if (stableStringify(va) === stableStringify(vb))
+            {
                 unchanged.push({ key: k, item: va });
                 continue;
             }
             changed.push({ key: k, a: va, b: vb, fields: fieldDiff(va, vb) });
         }
-        if (added.length || removed.length || changed.length || unchanged.length || ma.size || mb.size) {
+        if (added.length || removed.length || changed.length || unchanged.length || ma.size || mb.size)
+        {
             out[bucket] = {
                 countA: ma.size,
                 countB: mb.size,
@@ -187,19 +216,24 @@ function diffBuckets(a, b) {
     return out;
 }
 
-function escapeHtml(s) {
+function escapeHtml(s)
+{
     return String(s).replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
     }[c]));
 }
 
-function previewValue(v) {
+function previewValue(v)
+{
     if (v === undefined)
         return "<em>undefined</em>";
     let s;
-    try {
+    try
+    {
         s = JSON.stringify(v);
-    } catch {
+    }
+    catch
+    {
         s = String(v);
     }
     if (s == null)
@@ -209,10 +243,12 @@ function previewValue(v) {
     return escapeHtml(s);
 }
 
-function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed") {
+function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed")
+{
     const sections = [];
     const totals = { added: 0, removed: 0, changed: 0, countA: 0, countB: 0 };
-    for (const info of Object.values(diff)) {
+    for (const info of Object.values(diff))
+    {
         totals.added += info.added.length;
         totals.removed += info.removed.length;
         totals.changed += info.changed.length;
@@ -237,7 +273,8 @@ function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed") {
         </div>
     `;
 
-    for (const [bucket, info] of Object.entries(diff)) {
+    for (const [bucket, info] of Object.entries(diff))
+    {
         const hasChanges = info.added.length || info.removed.length || info.changed.length;
         const unchangedCount = info.unchanged?.length ?? 0;
         const summary = `${bucket} (${info.countA} → ${info.countB}` +
@@ -264,7 +301,8 @@ function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed") {
                     </details>
                 </li>
             `);
-        for (const e of info.changed) {
+        for (const e of info.changed)
+        {
             const fields = e.fields.slice(0, 12).map(f => `
                 <li class="lcp-diff-field">
                     <code>${escapeHtml(f.key)}</code>
@@ -310,7 +348,8 @@ function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed") {
     return `<div class="lcp-diff-root">${head}${sections.join("")}</div>`;
 }
 
-function inlineStyles() {
+function inlineStyles()
+{
     return `
         <style>
             #lcp-debug-diff, #lcp-debug-diff * {
@@ -381,8 +420,10 @@ function inlineStyles() {
     `;
 }
 
-class LcpDebugDiffApp extends Application {
-    static get defaultOptions() {
+class LcpDebugDiffApp extends Application
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "lcp-debug-diff",
             title: "LCP Debug // Diff Two Imports",
@@ -394,7 +435,8 @@ class LcpDebugDiffApp extends Application {
         });
     }
 
-    constructor(...args) {
+    constructor(...args)
+    {
         super(...args);
         this._pickedA = null;
         this._pickedB = null;
@@ -403,7 +445,8 @@ class LcpDebugDiffApp extends Application {
         this._lastDiff = null;
     }
 
-    async _renderInner() {
+    async _renderInner()
+    {
         return $(`
             ${inlineStyles()}
             <div class="lcp-diff-pickers flex0">
@@ -423,14 +466,16 @@ class LcpDebugDiffApp extends Application {
         `);
     }
 
-    async _render(force, options) {
+    async _render(force, options)
+    {
         await super._render(force, options);
         const root = this.element[0];
         if (!root || root.dataset.lcpDiffWired === "1")
             return;
         root.dataset.lcpDiffWired = "1";
 
-        root.addEventListener("change", (e) => {
+        root.addEventListener("change", (e) =>
+        {
             const t = e.target;
             if (!(t instanceof HTMLInputElement) || t.type !== "file")
                 return;
@@ -440,7 +485,8 @@ class LcpDebugDiffApp extends Application {
                 this._pickedB = t.files?.[0] ?? null;
         });
 
-        root.addEventListener("click", async (e) => {
+        root.addEventListener("click", async (e) =>
+        {
             const btn = e.target.closest("button");
             if (!btn || !root.contains(btn))
                 return;
@@ -459,21 +505,25 @@ class LcpDebugDiffApp extends Application {
         });
     }
 
-    _outEl() {
+    _outEl()
+    {
         return this.element[0]?.querySelector(".lcp-diff-output");
     }
 
-    async _runCompare(mode = "parsed") {
+    async _runCompare(mode = "parsed")
+    {
         const out = this._outEl();
         if (!out)
             return;
-        if (!this._pickedA || !this._pickedB) {
+        if (!this._pickedA || !this._pickedB)
+        {
             out.innerHTML = '<span style="color:#d56565">Pick both files first.</span>';
             return;
         }
         const label = mode === "simulated" ? "Simulating import (no compendium write)…" : "Translating + parsing…";
         out.innerHTML = `<em>${label}</em>`;
-        try {
+        try
+        {
             const a = await loadLcpAsBuckets(this._pickedA, mode);
             const b = await loadLcpAsBuckets(this._pickedB, mode);
             this._lastA = a;
@@ -482,23 +532,28 @@ class LcpDebugDiffApp extends Application {
             this._lastDiff = diffBuckets(a.buckets, b.buckets);
             out.innerHTML = renderDiffHtml(a.manifest, b.manifest, this._lastDiff, mode);
             console.log(`[lcp-debug-diff] result (${mode})`, { a, b, diff: this._lastDiff });
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error("[lcp-debug-diff]", e);
             out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;
         }
     }
 
-    async _runCompareSingle() {
+    async _runCompareSingle()
+    {
         const out = this._outEl();
         if (!out)
             return;
         const file = this._pickedA ?? this._pickedB;
-        if (!file) {
+        if (!file)
+        {
             out.innerHTML = '<span style="color:#d56565">Pick at least one LCP (slot A) first.</span>';
             return;
         }
         out.innerHTML = `<em>Parsing then simulating import on ${escapeHtml(file.name)}…</em>`;
-        try {
+        try
+        {
             const parsed = await parsePackOnly(file);
             const simulated = await simulateImport(file);
             this._lastA = parsed;
@@ -512,14 +567,18 @@ class LcpDebugDiffApp extends Application {
                 simulated,
                 diff: this._lastDiff
             });
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error("[lcp-debug-diff]", e);
             out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;
         }
     }
 
-    _exportBoth() {
-        if (!this._lastA || !this._lastB) {
+    _exportBoth()
+    {
+        if (!this._lastA || !this._lastB)
+        {
             ui.notifications.warn("Run Compare first.");
             return;
         }
@@ -542,7 +601,8 @@ class LcpDebugDiffApp extends Application {
         const baseB = (this._pickedB?.name ?? "b").replace(/\.lcp$/i, "");
         const filename = `lcp-diff_${baseA}__VS__${baseB}.json`;
         const save = globalThis.saveDataToFile ?? foundry.utils?.saveDataToFile;
-        if (typeof save === "function") {
+        if (typeof save === "function")
+        {
             save(json, "application/json", filename);
             ui.notifications.info(`Exported ${filename}`);
             return;
@@ -559,8 +619,10 @@ class LcpDebugDiffApp extends Application {
         ui.notifications.info(`Exported ${filename}`);
     }
 
-    _logToConsole() {
-        if (!this._lastDiff) {
+    _logToConsole()
+    {
+        if (!this._lastDiff)
+        {
             ui.notifications.warn("Run Compare first.");
             return;
         }
@@ -571,12 +633,15 @@ class LcpDebugDiffApp extends Application {
     }
 }
 
-export async function openLcpDebugDiff() {
+export async function openLcpDebugDiff()
+{
     new LcpDebugDiffApp().render(true);
 }
 
-export class LcpDebugDiffMenu extends FormApplication {
-    static get defaultOptions() {
+export class LcpDebugDiffMenu extends FormApplication
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "lcp-debug-diff-menu",
             template: "templates/sidebar/dialog.html",
@@ -584,7 +649,8 @@ export class LcpDebugDiffMenu extends FormApplication {
             popOut: false
         });
     }
-    render(_force, _options) {
+    render(_force, _options)
+    {
         openLcpDebugDiff();
         return this;
     }

@@ -10,7 +10,8 @@ import {
 import { normalizeNpcData } from "./npc-import-core.js";
 import { getValidJwt, getUserSub } from "./auth/cognito-auth.js";
 
-async function _getV3AuthHeaders() {
+async function _getV3AuthHeaders()
+{
     const jwt = await getValidJwt();
     if (!jwt)
         throw new Error("NOT_LOGGED_IN");
@@ -27,7 +28,8 @@ async function _getV3AuthHeaders() {
     };
 }
 
-export function detectCustomStats(json) {
+export function detectCustomStats(json)
+{
     const classStats = json.class?.data?.stats;
     const npcStats = json.combat_data?.stats?.max;
     if (!classStats || !npcStats)
@@ -40,7 +42,8 @@ export function detectCustomStats(json) {
         'sensorRange', 'saveTarget', 'activations'
     ];
 
-    for (const stat of checks) {
+    for (const stat of checks)
+    {
         const base = Array.isArray(classStats[stat]) ? classStats[stat][tier] : classStats[stat];
         if (npcStats[stat] !== undefined && base !== undefined && npcStats[stat] !== base)
             return true;
@@ -48,12 +51,14 @@ export function detectCustomStats(json) {
     return false;
 }
 
-export function npcFromV3Json(json, key, fallbackName) {
+export function npcFromV3Json(json, key, fallbackName)
+{
     if (!json)
         return null;
     if (!json.name && fallbackName)
         json.name = fallbackName;
-    if (!json.name) {
+    if (!json.name)
+    {
         const cls = json.class?.data?.name || (typeof json.class === 'string' ? json.class : '');
         const tag = json.tag || '';
         json.name = [cls, tag].filter(Boolean).join(' ').trim() || 'Unnamed NPC';
@@ -78,7 +83,8 @@ export function npcFromV3Json(json, key, fallbackName) {
     };
 }
 
-export async function fetchNPCsViaV3API(progressUpdate) {
+export async function fetchNPCsViaV3API(progressUpdate)
+{
     const v3Base = getV3ApiBase();
     const { headers, userId } = await _getV3AuthHeaders();
 
@@ -89,9 +95,12 @@ export async function fetchNPCsViaV3API(progressUpdate) {
     let data;
     const changedUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=changed&since=0`;
     const changedResp = await corsProxyFetch(changedUrl, { method: "GET", headers }, { json: true });
-    if (changedResp.ok) {
+    if (changedResp.ok)
+    {
         data = await changedResp.json();
-    } else {
+    }
+    else
+    {
         const allUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=all`;
         const allResp = await corsProxyFetch(allUrl, { method: "GET", headers }, { json: true });
         if (!allResp.ok)
@@ -101,7 +110,8 @@ export async function fetchNPCsViaV3API(progressUpdate) {
 
     let items = Array.isArray(data) ? data : (data.items || data.Items || []);
 
-    const npcItems = items.filter(item => {
+    const npcItems = items.filter(item =>
+    {
         const sk = (item.SortKey || item.sortkey || item.sk || '').toLowerCase();
         return sk.startsWith('savedata_unit_');
     });
@@ -109,7 +119,8 @@ export async function fetchNPCsViaV3API(progressUpdate) {
     console.log(`[V3] ${npcItems.length} NPC(s) found`);
 
     let loadingDialog = null;
-    if (!externalProgress) {
+    if (!externalProgress)
+    {
         loadingDialog = new Dialog({
             title: "Loading NPCs",
             content: `
@@ -140,19 +151,24 @@ export async function fetchNPCsViaV3API(progressUpdate) {
     if (externalProgress)
         progressUpdate(0, npcItems.length);
 
-    for (let i = 0; i < npcItems.length; i += BATCH_SIZE) {
+    for (let i = 0; i < npcItems.length; i += BATCH_SIZE)
+    {
         const batch = npcItems.slice(i, i + BATCH_SIZE).filter(item => item.uri);
 
         const results = await Promise.allSettled(
-            batch.map(async (item) => {
+            batch.map(async (item) =>
+            {
                 // ?cb= busts CloudFront's per-Origin cache.
                 const resp = await fetch(`${v3Cdn}/${item.uri}?cb=${Date.now()}`, { cache: "no-store" });
                 if (!resp.ok)
                     throw new Error(`CDN ${resp.status}`);
                 let npcJson;
-                try {
+                try
+                {
                     npcJson = unwrapData(await resp.json());
-                } catch (e) {
+                }
+                catch (e)
+                {
                     console.warn(`[V3] JSON parse failed for "${item.name}" (sortkey ${item.sortkey}):`, e.message);
                     return null;
                 }
@@ -160,7 +176,8 @@ export async function fetchNPCsViaV3API(progressUpdate) {
             })
         );
 
-        for (let j = 0; j < results.length; j++) {
+        for (let j = 0; j < results.length; j++)
+        {
             if (results[j].status === 'fulfilled' && results[j].value)
                 npcs.push(results[j].value);
             else if (results[j].status === 'fulfilled')
@@ -170,9 +187,12 @@ export async function fetchNPCsViaV3API(progressUpdate) {
         }
 
         loaded += batch.length;
-        if (externalProgress) {
+        if (externalProgress)
+        {
             progressUpdate(loaded, npcItems.length);
-        } else if (loadingDialog?.element) {
+        }
+        else if (loadingDialog?.element)
+        {
             const pct = Math.round((loaded / npcItems.length) * 100);
             loadingDialog.element.find('#v3-loading-bar').css('width', pct + '%');
             loadingDialog.element.find('#v3-loading-text').text(`${loaded} / ${npcItems.length}`);
@@ -184,7 +204,8 @@ export async function fetchNPCsViaV3API(progressUpdate) {
     return npcs;
 }
 
-export async function importFromCompCon() {
+export async function importFromCompCon()
+{
     const { openCloudActorImport } = await import("./actor-cloud-import-ui.js");
     return openCloudActorImport();
 }

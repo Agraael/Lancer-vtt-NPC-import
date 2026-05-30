@@ -11,8 +11,10 @@ import {
 import { isLoggedIn, getEmail } from "./auth/cognito-auth.js";
 import { CompconLoginDialog } from "./auth/login-dialog.js";
 
-function _loginStatusHtml() {
-    if (isLoggedIn()) {
+function _loginStatusHtml()
+{
+    if (isLoggedIn())
+    {
         const email = foundry.utils.escapeHTML?.(getEmail()) ?? getEmail();
         return `
             <div class="compcon-auth-status compcon-auth-status--in">
@@ -29,8 +31,10 @@ function _loginStatusHtml() {
         </div>`;
 }
 
-export class ActorImportDialog extends Dialog {
-    constructor() {
+export class ActorImportDialog extends Dialog
+{
+    constructor()
+    {
         const loggedIn = isLoggedIn();
         const cloudCardClass = loggedIn ? "lancer-item-card" : "lancer-item-card lancer-item-card--disabled";
         const cloudCardTitle = loggedIn ? "" : 'title="Sign in to enable cloud import"';
@@ -76,36 +80,45 @@ export class ActorImportDialog extends Dialog {
         });
     }
 
-    activateListeners(html) {
+    activateListeners(html)
+    {
         super.activateListeners(html);
 
-        html.find('.compcon-auth-btn').click((event) => {
+        html.find('.compcon-auth-btn').click((event) =>
+        {
             event.preventDefault();
             event.stopPropagation();
-            new CompconLoginDialog(() => {
+            new CompconLoginDialog(() =>
+            {
                 this.close();
                 new ActorImportDialog().render(true);
             }).render(true);
         });
 
-        html.find('.lancer-item-card').click(async (event) => {
+        html.find('.lancer-item-card').click(async (event) =>
+        {
             const $card = $(event.currentTarget);
             if ($card.hasClass('lancer-item-card--disabled'))
                 return;
             const action = $card.data('action');
             this.close();
 
-            if (action === 'files') {
+            if (action === 'files')
+            {
                 await importFromFiles();
-            } else if (action === 'compcon') {
+            }
+            else if (action === 'compcon')
+            {
                 await importFromCompCon();
             }
         });
     }
 }
 
-export class ImportProgressDialog {
-    constructor(totalCount) {
+export class ImportProgressDialog
+{
+    constructor(totalCount)
+    {
         this.totalCount = totalCount;
         this.currentCount = 0;
         this.logs = [];
@@ -113,7 +126,8 @@ export class ImportProgressDialog {
         this.closeButton = null;
     }
 
-    render(force = false) {
+    render(force = false)
+    {
         const progress = Math.round((this.currentCount / this.totalCount) * 100);
 
         const content = `
@@ -141,12 +155,14 @@ export class ImportProgressDialog {
             }
         } : {};
 
-        if (!this.dialog) {
+        if (!this.dialog)
+        {
             this.dialog = new Dialog({
                 title: "NPC Import Progress",
                 content: content,
                 buttons: buttons,
-                close: () => {
+                close: () =>
+                {
                     this.dialog = null;
                 }
             }, {
@@ -156,28 +172,37 @@ export class ImportProgressDialog {
                 classes: ["lancer-import-progress-dialog", "lancer-dialog-base", "lancer-no-title"]
             });
             this.dialog.render(true);
-        } else {
-            if (this.dialog.element) {
+        }
+        else
+        {
+            if (this.dialog.element)
+            {
                 const contentDiv = this.dialog.element.find('.dialog-content')[0];
-                if (contentDiv) {
+                if (contentDiv)
+                {
                     const logContainer = this.dialog.element.find('#import-log')[0];
                     const wasAtBottom = logContainer ? (logContainer.scrollHeight - logContainer.scrollTop === logContainer.clientHeight) : true;
 
                     contentDiv.innerHTML = content;
 
-                    if (wasAtBottom) {
-                        setTimeout(() => {
+                    if (wasAtBottom)
+                    {
+                        setTimeout(() =>
+                        {
                             const newLogContainer = this.dialog.element.find('#import-log')[0];
-                            if (newLogContainer) {
+                            if (newLogContainer)
+                            {
                                 newLogContainer.scrollTop = newLogContainer.scrollHeight;
                             }
                         }, 0);
                     }
                 }
 
-                if (this.currentCount >= this.totalCount && !this.closeButton) {
+                if (this.currentCount >= this.totalCount && !this.closeButton)
+                {
                     const buttonDiv = this.dialog.element.find('.dialog-buttons')[0];
-                    if (buttonDiv) {
+                    if (buttonDiv)
+                    {
                         buttonDiv.innerHTML = `
                             <button class="dialog-button" data-button="close">
                                 <i class="fas fa-check"></i> Close
@@ -191,20 +216,24 @@ export class ImportProgressDialog {
         }
     }
 
-    addLog(message, type = 'info') {
+    addLog(message, type = 'info')
+    {
         const now = new Date();
         const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
         this.logs.push({ message, type, time });
         this.render(false);
     }
 
-    incrementProgress() {
+    incrementProgress()
+    {
         this.currentCount++;
         this.render(false);
     }
 
-    close() {
-        if (this.dialog) {
+    close()
+    {
+        if (this.dialog)
+        {
             this.dialog.close();
             this.dialog = null;
         }
@@ -213,7 +242,8 @@ export class ImportProgressDialog {
 
 // Builds the NPC selection panel HTML + listener binder so a tabbed parent
 // can host it. NPCSelectionDialog stays as a wrapper for the standalone use.
-export function buildNPCSelectionPanel(npcs) {
+export function buildNPCSelectionPanel(npcs)
+{
     const isDownloadChecked = game.settings.get("lancer-npc-import", "defaultDownloadPortrait") ? "checked" : "";
     const html = `
             <div class="lancer-dialog-base">
@@ -263,7 +293,8 @@ export function buildNPCSelectionPanel(npcs) {
                         <button type="button" class="status-filter-btn" data-status="unlinked">? Unlinked</button>
                     </div>
                     <div class="lancer-list">
-                        ${npcs.map((npc, index) => {
+                        ${npcs.map((npc, index) =>
+    {
         const imageUrl = npc.json.cloud_portrait || npc.json.img?.cloud_portrait || npc.json.localImage || '';
 
         const existingActors = findExistingNPCsByLID(npc.json);
@@ -274,9 +305,12 @@ export function buildNPCSelectionPanel(npcs) {
 
         // Récupérer la liste des acteurs (par LID ou par nom)
         let actorsList = [];
-        if (existingActors.length > 0) {
+        if (existingActors.length > 0)
+        {
             actorsList = existingActors;
-        } else if (status === 'unlinked' && npc.json.name) {
+        }
+        else if (status === 'unlinked' && npc.json.name)
+        {
             const nameLower = npc.json.name.toLowerCase();
             actorsList = game.actors.filter(a =>
                 a.type === 'npc' && a.name.toLowerCase() === nameLower
@@ -286,28 +320,38 @@ export function buildNPCSelectionPanel(npcs) {
         let badgeText = '';
         let badgeTooltip = '';
 
-        if (status === 'synced') {
+        if (status === 'synced')
+        {
             badgeText = count > 1 ? `✓ (×${count})` : '✓';
             badgeTooltip = count > 1
                 ? `NPC is up to date (${count} copies in world)`
                 : 'NPC is up to date';
-        } else if (status === 'modified') {
+        }
+        else if (status === 'modified')
+        {
             badgeText = count > 1 ? `⚠ (×${count})` : '⚠';
             const baseTooltip = count > 1
                 ? `NPC has changes (${count} copies in world)`
                 : 'NPC has changes';
 
             // Ajouter les raisons des modifications
-            if (reasons.length > 0) {
+            if (reasons.length > 0)
+            {
                 const reasonsList = reasons.map(r => "- " + r).join('\n');
                 badgeTooltip = `${baseTooltip}\nReasons:\n${reasonsList}`;
-            } else {
+            }
+            else
+            {
                 badgeTooltip = baseTooltip;
             }
-        } else if (status === 'new') {
+        }
+        else if (status === 'new')
+        {
             badgeText = '+';
             badgeTooltip = 'NPC does not exist in world';
-        } else if (status === 'unlinked') {
+        }
+        else if (status === 'unlinked')
+        {
             badgeText = count > 1 ? `? (×${count})` : '?';
             badgeTooltip = count > 1
                 ? `NPC with same name exists but not linked (${count} found)`
@@ -315,7 +359,8 @@ export function buildNPCSelectionPanel(npcs) {
         }
 
         // Ajouter la liste des acteurs au tooltip
-        if (actorsList.length > 0) {
+        if (actorsList.length > 0)
+        {
             const actorNames = actorsList.map(a => "- " + a.name).join('\n');
             badgeTooltip += '\nActors:\n' + actorNames;
         }
@@ -356,22 +401,28 @@ export function buildNPCSelectionPanel(npcs) {
             </div>
         `;
 
-    function activate(html, opts = {}) {
-        html.find('.lancer-toggle-card').click(function() {
+    function activate(html, opts = {})
+    {
+        html.find('.lancer-toggle-card').click(function()
+        {
             const setting = $(this).data('setting');
             const isActive = $(this).hasClass('active');
 
-            if (setting === 'update-existing' || setting === 'manual-replace') {
+            if (setting === 'update-existing' || setting === 'manual-replace')
+            {
                 const otherCard = setting === 'update-existing' ? '#manual-replace-card-cc' : '#update-existing-card-cc';
 
                 $(this).toggleClass('active');
                 const icon = $(this).find('.lancer-toggle-card-icon i');
                 const hiddenInput = $(this).find('input[type="hidden"]');
 
-                if (isActive) {
+                if (isActive)
+                {
                     icon.removeClass('fa-check').addClass('fa-times');
                     hiddenInput.val('false');
-                } else {
+                }
+                else
+                {
                     icon.removeClass('fa-times').addClass('fa-check');
                     hiddenInput.val('true');
 
@@ -382,19 +433,22 @@ export function buildNPCSelectionPanel(npcs) {
             }
         });
 
-        html.find('.lancer-scaling-card').click(function() {
+        html.find('.lancer-scaling-card').click(function()
+        {
             html.find('.lancer-scaling-card').removeClass('active');
             $(this).addClass('active');
             const mode = $(this).data('mode');
             html.find('#custom-tier-mode').val(mode);
         });
 
-        const updateCount = () => {
+        const updateCount = () =>
+        {
             const count = html.find('.npc-checkbox:checked').length;
             html.find('#selected-count').text(count);
         };
 
-        html.find('.npc-checkbox').on('change', function() {
+        html.find('.npc-checkbox').on('change', function()
+        {
             const $item = $(this).closest('.lancer-list-item');
             $item.toggleClass('selected', $(this).prop('checked'));
             updateCount();
@@ -403,10 +457,12 @@ export function buildNPCSelectionPanel(npcs) {
         // Fonction de filtre combinée (recherche + statut)
         let currentStatusFilter = 'all';
 
-        function applyFilters() {
+        function applyFilters()
+        {
             const searchTerm = html.find('#npc-search').val().toLowerCase().trim();
 
-            html.find('.lancer-list-item').each(function() {
+            html.find('.lancer-list-item').each(function()
+            {
                 const $item = $(this);
                 const name = $item.data('npc-name') || '';
                 const npcClass = $item.data('npc-class') || '';
@@ -433,7 +489,8 @@ export function buildNPCSelectionPanel(npcs) {
         html.find('#npc-search').on('input', applyFilters);
 
         // Boutons de filtre par statut
-        html.find('.status-filter-btn').on('click', function() {
+        html.find('.status-filter-btn').on('click', function()
+        {
             const status = $(this).data('status');
             html.find('.status-filter-btn').removeClass('active');
             $(this).addClass('active');
@@ -441,31 +498,38 @@ export function buildNPCSelectionPanel(npcs) {
             applyFilters();
         });
 
-        html.find('#select-all').click(() => {
-            html.find('.lancer-list-item:not(.lancer-hidden)').each(function() {
+        html.find('#select-all').click(() =>
+        {
+            html.find('.lancer-list-item:not(.lancer-hidden)').each(function()
+            {
                 $(this).find('.npc-checkbox').prop('checked', true);
                 $(this).addClass('selected');
             });
             updateCount();
         });
 
-        html.find('#deselect-all').click(() => {
-            html.find('.lancer-list-item:not(.lancer-hidden)').each(function() {
+        html.find('#deselect-all').click(() =>
+        {
+            html.find('.lancer-list-item:not(.lancer-hidden)').each(function()
+            {
                 $(this).find('.npc-checkbox').prop('checked', false);
                 $(this).removeClass('selected');
             });
             updateCount();
         });
 
-        html.find('#link-actors').click(async () => {
+        html.find('#link-actors').click(async () =>
+        {
             const { showLinkChooser, applyLink, applyUnlink } = await import("./npc-link-chooser.js");
 
             const selectedIndices = [];
-            html.find('.npc-checkbox:checked').each(function() {
+            html.find('.npc-checkbox:checked').each(function()
+            {
                 selectedIndices.push(Number.parseInt($(this).data('index')));
             });
 
-            if (selectedIndices.length === 0) {
+            if (selectedIndices.length === 0)
+            {
                 ui.notifications.warn("No NPCs selected");
                 return;
             }
@@ -474,7 +538,8 @@ export function buildNPCSelectionPanel(npcs) {
             let linkedCount = 0;
             let unlinkedCount = 0;
 
-            for (const npc of selectedNPCs) {
+            for (const npc of selectedNPCs)
+            {
                 const alreadyLinked = findExistingNPCsByLID(npc.json);
                 const nameLower = npc.json.name.toLowerCase();
                 const sameName = game.actors.filter(a =>
@@ -482,38 +547,48 @@ export function buildNPCSelectionPanel(npcs) {
                 );
 
                 const onlyOneSameName = alreadyLinked.length === 0 && sameName.length === 1;
-                if (onlyOneSameName) {
+                if (onlyOneSameName)
+                {
                     linkedCount += await applyLink(sameName, npc.json.id);
                     continue;
                 }
 
                 const result = await showLinkChooser(npc, alreadyLinked);
-                if (result === null) break;
-                if (result.toLink.length === 0 && result.toUnlink.length === 0) continue;
+                if (result === null)
+                    break;
+                if (result.toLink.length === 0 && result.toUnlink.length === 0)
+                    continue;
                 linkedCount += await applyLink(result.toLink, npc.json.id);
                 unlinkedCount += await applyUnlink(result.toUnlink);
             }
 
             const parts = [];
-            if (linkedCount > 0) parts.push(`linked ${linkedCount}`);
-            if (unlinkedCount > 0) parts.push(`unlinked ${unlinkedCount}`);
-            if (parts.length === 0) parts.push("no changes");
+            if (linkedCount > 0)
+                parts.push(`linked ${linkedCount}`);
+            if (unlinkedCount > 0)
+                parts.push(`unlinked ${unlinkedCount}`);
+            if (parts.length === 0)
+                parts.push("no changes");
             ui.notifications.info(`✓ ${parts.join(", ")}`);
             if (typeof opts.onRefresh === "function")
                 opts.onRefresh();
         });
     }
 
-    function getSelected(html) {
+    function getSelected(html)
+    {
         const out = [];
-        html.find('.npc-checkbox:checked').each(function() {
+        html.find('.npc-checkbox:checked').each(function()
+        {
             const i = Number.parseInt($(this).data('index'));
-            if (!Number.isNaN(i) && npcs[i]) out.push(npcs[i]);
+            if (!Number.isNaN(i) && npcs[i])
+                out.push(npcs[i]);
         });
         return out;
     }
 
-    function getOptions(html) {
+    function getOptions(html)
+    {
         return {
             updateExisting: html.find('#update-existing').val() === 'true',
             manualReplace: html.find('#manual-replace').val() === 'true',
@@ -525,8 +600,10 @@ export function buildNPCSelectionPanel(npcs) {
     return { html, activate, getSelected, getOptions };
 }
 
-export class NPCSelectionDialog extends Dialog {
-    constructor(npcs) {
+export class NPCSelectionDialog extends Dialog
+{
+    constructor(npcs)
+    {
         const panel = buildNPCSelectionPanel(npcs);
         super({
             title: "Select NPCs to Import",
@@ -535,9 +612,11 @@ export class NPCSelectionDialog extends Dialog {
                 import: {
                     icon: '<i class="fas fa-download"></i>',
                     label: "Import Selected",
-                    callback: async (html) => {
+                    callback: async (html) =>
+                    {
                         const selected = panel.getSelected(html);
-                        if (selected.length === 0) {
+                        if (selected.length === 0)
+                        {
                             ui.notifications.warn("No NPCs selected");
                             return;
                         }
@@ -557,11 +636,13 @@ export class NPCSelectionDialog extends Dialog {
         this._panel = panel;
     }
 
-    activateListeners(html) {
+    activateListeners(html)
+    {
         super.activateListeners(html);
         const npcs = this.npcs;
         this._panel.activate(html, {
-            onRefresh: () => {
+            onRefresh: () =>
+            {
                 this.close();
                 new NPCSelectionDialog(npcs).render(true);
             }
@@ -569,18 +650,22 @@ export class NPCSelectionDialog extends Dialog {
     }
 }
 
-export async function uploadPortraitToServer(url, npcName) {
+export async function uploadPortraitToServer(url, npcName)
+{
     if (!url)
         return null;
 
     const subFolder = game.settings.get("lancer-npc-import", "portraitStoragePath");
     const folderPath = `modules/lancer-npc-import/${subFolder}`;
 
-    try {
+    try
+    {
         // 1. Créer le dossier s'il n'existe pas
-        try {
+        try
+        {
             await FilePicker.createDirectory("data", folderPath);
-        } catch (e) { /* existe déjà */ }
+        }
+        catch (e) { /* existe déjà */ }
 
         // 2. Récupérer l'image via le proxy
         const response = await corsProxyFetch(url);
@@ -594,7 +679,9 @@ export async function uploadPortraitToServer(url, npcName) {
         // 4. Uploader sur Foundry
         const uploadResponse = await FilePicker.upload("data", folderPath, file);
         return uploadResponse.path;
-    } catch (error) {
+    }
+    catch (error)
+    {
         console.error("Failed to upload portrait:", error);
         return null;
     }

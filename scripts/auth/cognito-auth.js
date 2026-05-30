@@ -16,27 +16,34 @@ const SETTING_SUB           = "compconUserSub";
 
 const REFRESH_GRACE_MS = 60_000;
 
-function _getSetting(key) {
+function _getSetting(key)
+{
     try { return game.settings.get("lancer-npc-import", key); }
     catch { return ""; }
 }
-async function _setSetting(key, value) {
+async function _setSetting(key, value)
+{
     try { await game.settings.set("lancer-npc-import", key, value); }
     catch (e) { console.warn(`[cognito-auth] could not store ${key}:`, e); }
 }
 
-function _decodeJwtPayload(jwt) {
-    try {
+function _decodeJwtPayload(jwt)
+{
+    try
+    {
         const part = jwt.split(".")[1];
         const padded = part.replace(/-/g, "+").replace(/_/g, "/")
             + "===".slice((part.length + 3) % 4);
         return JSON.parse(atob(padded));
-    } catch {
+    }
+    catch
+    {
         return null;
     }
 }
 
-async function _cognitoCall(target, payload) {
+async function _cognitoCall(target, payload)
+{
     const init = {
         method: "POST",
         headers: {
@@ -47,17 +54,22 @@ async function _cognitoCall(target, payload) {
     };
 
     let resp;
-    try {
+    try
+    {
         resp = await fetch(COGNITO_IDP_URL, init);
-    } catch {
+    }
+    catch
+    {
         resp = await corsProxyFetch(COGNITO_IDP_URL, init, { json: true });
     }
 
     const text = await resp.text();
     let body = null;
-    try { body = text ? JSON.parse(text) : null; } catch { /* leave null */ }
+    try { body = text ? JSON.parse(text) : null; }
+    catch { /* leave null */ }
 
-    if (!resp.ok) {
+    if (!resp.ok)
+    {
         const code = body?.__type || `HTTP ${resp.status}`;
         const msg = body?.message || resp.statusText || "Unknown error";
         console.warn(`[cognito-auth] ${target} failed:`, { status: resp.status, body, rawText: text });
@@ -69,7 +81,8 @@ async function _cognitoCall(target, payload) {
     return body;
 }
 
-async function _storeAuthResult(authResult, emailIfSet) {
+async function _storeAuthResult(authResult, emailIfSet)
+{
     if (!authResult)
         return;
     const idToken = authResult.IdToken;
@@ -91,7 +104,8 @@ async function _storeAuthResult(authResult, emailIfSet) {
         await _setSetting(SETTING_EMAIL, emailIfSet);
 }
 
-export async function login(email, password) {
+export async function login(email, password)
+{
     const { a, A } = generateSrpA();
 
     const initBody = await _cognitoCall("InitiateAuth", {
@@ -108,7 +122,8 @@ export async function login(email, password) {
 
     const cp = initBody.ChallengeParameters || {};
     const { signatureB64, timestamp } = await computePasswordSignature({
-        a, A,
+        a,
+        A,
         srpBHex: cp.SRP_B,
         saltHex: cp.SALT,
         poolId: COGNITO_POOL_ID,
@@ -128,14 +143,16 @@ export async function login(email, password) {
         }
     });
 
-    if (verifyBody?.ChallengeName) {
+    if (verifyBody?.ChallengeName)
+    {
         throw new Error(`Additional Cognito challenge "${verifyBody.ChallengeName}" not supported. Sign in at compcon.app to clear it.`);
     }
     await _storeAuthResult(verifyBody?.AuthenticationResult, email);
     return true;
 }
 
-export async function refresh() {
+export async function refresh()
+{
     const refreshToken = _getSetting(SETTING_REFRESH_TOKEN);
     if (!refreshToken)
         throw new Error("No refresh token stored. Sign in again.");
@@ -152,23 +169,28 @@ export async function refresh() {
     return true;
 }
 
-export async function getValidJwt() {
+export async function getValidJwt()
+{
     const stored = _getSetting(SETTING_ID_TOKEN);
     const expiry = Number(_getSetting(SETTING_EXPIRY) || 0);
     if (stored && expiry > Date.now() + REFRESH_GRACE_MS)
         return stored;
     if (!_getSetting(SETTING_REFRESH_TOKEN))
         return null;
-    try {
+    try
+    {
         await refresh();
         return _getSetting(SETTING_ID_TOKEN) || null;
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.warn("[cognito-auth] refresh failed:", e.message);
         return null;
     }
 }
 
-export function getUserSub() {
+export function getUserSub()
+{
     const stored = _getSetting(SETTING_SUB);
     if (stored)
         return stored;
@@ -176,20 +198,27 @@ export function getUserSub() {
     return jwt ? (_decodeJwtPayload(jwt)?.sub || null) : null;
 }
 
-export function getEmail() {
+export function getEmail()
+{
     return _getSetting(SETTING_EMAIL) || "";
 }
 
-export function isLoggedIn() {
+export function isLoggedIn()
+{
     return !!_getSetting(SETTING_REFRESH_TOKEN);
 }
 
-export async function logout() {
+export async function logout()
+{
     const accessToken = _getSetting(SETTING_ID_TOKEN);
-    if (accessToken) {
-        try {
+    if (accessToken)
+    {
+        try
+        {
             await _cognitoCall("GlobalSignOut", { AccessToken: accessToken });
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn("[cognito-auth] GlobalSignOut failed:", e.message);
         }
     }

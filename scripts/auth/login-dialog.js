@@ -1,7 +1,9 @@
 import { login, logout, isLoggedIn, getEmail } from "./cognito-auth.js";
 
-export class CompconLoginDialog extends Dialog {
-    constructor(onSuccess) {
+export class CompconLoginDialog extends Dialog
+{
+    constructor(onSuccess)
+    {
         const loggedIn = isLoggedIn();
         const currentEmail = getEmail();
 
@@ -10,8 +12,8 @@ export class CompconLoginDialog extends Dialog {
                 <div class="lancer-dialog-header">
                     <div class="lancer-dialog-title">COMP/CON SIGN IN</div>
                     <div class="lancer-dialog-subtitle">${loggedIn
-                        ? `Signed in as <strong>${foundry.utils.escapeHTML?.(currentEmail) ?? currentEmail}</strong>`
-                        : "Sign in with your Comp/Con account to browse cloud NPCs"}</div>
+        ? `Signed in as <strong>${foundry.utils.escapeHTML?.(currentEmail) ?? currentEmail}</strong>`
+        : "Sign in with your Comp/Con account to browse cloud NPCs"}</div>
                 </div>
 
                 <div class="lancer-info-box">
@@ -40,11 +42,13 @@ export class CompconLoginDialog extends Dialog {
                 callback: () => {} // listener overrides so dialog stays open on error
             }
         };
-        if (loggedIn) {
+        if (loggedIn)
+        {
             buttons.signout = {
                 icon: '<i class="fas fa-sign-out-alt"></i>',
                 label: "Sign Out",
-                callback: async () => {
+                callback: async () =>
+                {
                     await logout();
                     ui.notifications.info("Signed out of Comp/Con");
                     if (typeof onSuccess === "function")
@@ -72,7 +76,8 @@ export class CompconLoginDialog extends Dialog {
         this._onSuccess = onSuccess;
     }
 
-    activateListeners(html) {
+    activateListeners(html)
+    {
         super.activateListeners(html);
 
         const $err = html.find('#compcon-login-error');
@@ -80,29 +85,36 @@ export class CompconLoginDialog extends Dialog {
         const $password = html.find('#compcon-password');
         const $signin = html.closest('.app').find('button[data-button="signin"]');
 
-        html.find('input').on('keydown', (e) => {
-            if (e.key === 'Enter') {
+        html.find('input').on('keydown', (e) =>
+        {
+            if (e.key === 'Enter')
+            {
                 e.preventDefault();
                 $signin.trigger('click');
             }
         });
 
-        $signin.off('click').on('click', async () => {
+        $signin.off('click').on('click', async () =>
+        {
             const email = String($email.val() || '').trim();
             const password = String($password.val() || '');
-            if (!email || !password) {
+            if (!email || !password)
+            {
                 $err.text("Email and password are required.");
                 return;
             }
             $err.text("");
             $signin.prop('disabled', true).text("Signing in...");
-            try {
+            try
+            {
                 await login(email, password);
                 ui.notifications.info(`Signed in to Comp/Con as ${email}`);
                 this.close();
                 if (typeof this._onSuccess === "function")
                     this._onSuccess(true);
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn("[compcon-login]", e);
                 const msg = _humanizeCognitoError(e);
                 $err.text(msg);
@@ -114,7 +126,8 @@ export class CompconLoginDialog extends Dialog {
     }
 }
 
-function _humanizeCognitoError(err) {
+function _humanizeCognitoError(err)
+{
     const t = err?.cognitoType || "";
     if (t.includes("NotAuthorizedException"))
         return "Incorrect email or password.";

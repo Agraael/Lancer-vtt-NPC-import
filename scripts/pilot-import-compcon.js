@@ -10,7 +10,8 @@ import {
 } from "./v3-api.js";
 import { getValidJwt, getUserSub } from "./auth/cognito-auth.js";
 
-async function _authHeaders() {
+async function _authHeaders()
+{
     const jwt = await getValidJwt();
     if (!jwt)
         throw new Error("NOT_LOGGED_IN");
@@ -27,7 +28,8 @@ async function _authHeaders() {
     };
 }
 
-export function pilotFromV3Json(json, key) {
+export function pilotFromV3Json(json, key)
+{
     if (!json || !json.name)
         return null;
     normalizePilotData(json);
@@ -49,16 +51,20 @@ export function pilotFromV3Json(json, key) {
     };
 }
 
-export async function fetchPilotsViaV3API(progressUpdate) {
+export async function fetchPilotsViaV3API(progressUpdate)
+{
     const v3Base = getV3ApiBase();
     const { headers, userId } = await _authHeaders();
 
     const changedUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=changed&since=0`;
     const changedResp = await corsProxyFetch(changedUrl, { method: "GET", headers }, { json: true });
     let data;
-    if (changedResp.ok) {
+    if (changedResp.ok)
+    {
         data = await changedResp.json();
-    } else {
+    }
+    else
+    {
         const allUrl = `${v3Base}/user?user_id=${encodeURIComponent(userId)}&scope=all`;
         const allResp = await corsProxyFetch(allUrl, { method: "GET", headers }, { json: true });
         if (!allResp.ok)
@@ -67,7 +73,8 @@ export async function fetchPilotsViaV3API(progressUpdate) {
     }
 
     const items = Array.isArray(data) ? data : (data.items || data.Items || []);
-    const pilotItems = items.filter(item => {
+    const pilotItems = items.filter(item =>
+    {
         const sk = (item.SortKey || item.sortkey || item.sk || "").toLowerCase();
         return sk.startsWith("savedata_pilot_");
     });
@@ -77,10 +84,12 @@ export async function fetchPilotsViaV3API(progressUpdate) {
     let loaded = 0;
     const BATCH = 10;
 
-    for (let i = 0; i < pilotItems.length; i += BATCH) {
+    for (let i = 0; i < pilotItems.length; i += BATCH)
+    {
         const batch = pilotItems.slice(i, i + BATCH).filter(it => it.uri);
         const results = await Promise.allSettled(
-            batch.map(async (it) => {
+            batch.map(async (it) =>
+            {
                 // ?cb= busts CloudFront's per-Origin cache.
                 const resp = await fetch(`${v3Cdn}/${it.uri}?cb=${Date.now()}`, { cache: "no-store" });
                 if (!resp.ok)
@@ -89,7 +98,8 @@ export async function fetchPilotsViaV3API(progressUpdate) {
                 return pilotFromV3Json(pilotJson, it.sortkey || it.uri);
             })
         );
-        for (let j = 0; j < results.length; j++) {
+        for (let j = 0; j < results.length; j++)
+        {
             if (results[j].status === "fulfilled" && results[j].value)
                 pilots.push(results[j].value);
             else if (results[j].status === "rejected")

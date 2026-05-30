@@ -5,44 +5,60 @@ import {
     getV3Cdn
 } from "./v3-api.js";
 
-async function testOne(proxy, v3Url, headers) {
+async function testOne(proxy, v3Url, headers)
+{
     const wrapped = proxy.wrap(v3Url);
     const out = { proxy: proxy.name, ok: false, status: null, body: "", parsed: null, error: null };
-    try {
+    try
+    {
         const resp = await fetch(wrapped, { method: "GET", headers });
         out.status = resp.status;
         const text = await resp.text();
         out.body = text;
-        try {
+        try
+        {
             out.parsed = JSON.parse(text);
             out.ok = resp.ok;
-        } catch (e) {
+        }
+        catch (e)
+        {
             out.error = `non-JSON body: ${e.message}`;
         }
-    } catch (e) {
+    }
+    catch (e)
+    {
         out.error = e.message;
     }
     return out;
 }
 
-async function fetchCdnFromEntry(entry) {
+async function fetchCdnFromEntry(entry)
+{
     const uri = entry?.uri;
-    if (!uri) return null;
+    if (!uri)
+        return null;
     const url = `${getV3Cdn()}/${uri}?cb=${Date.now()}`;
-    try {
+    try
+    {
         const resp = await fetch(url, { cache: "no-store" });
         const text = await resp.text();
-        try {
+        try
+        {
             return { ok: resp.ok, status: resp.status, parsed: JSON.parse(text) };
-        } catch (e) {
+        }
+        catch (e)
+        {
             return { ok: false, status: resp.status, error: `non-JSON: ${e.message}`, body: text.slice(0, 300) };
         }
-    } catch (e) {
+    }
+    catch (e)
+    {
         return { ok: false, error: e.message };
     }
 }
 
-function escapeHtml(s) {
+function escapeHtml(s)
+{
     return String(s ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -50,11 +66,13 @@ function escapeHtml(s) {
         .replace(/"/g, "&quot;");
 }
 
-function copyBtn(label = "Copy JSON") {
+function copyBtn(label = "Copy JSON")
+{
     return `<button type="button" class="sct-copy"><i class="fas fa-copy"></i> ${label}</button>`;
 }
 
-function renderProxyBlock(result) {
+function renderProxyBlock(result)
+{
     const cls = result.ok ? "ok" : "fail";
     const status = result.status === null ? "(no response)" : result.status;
     const jsonStr = result.parsed ? JSON.stringify(result.parsed, null, 2) : "";
@@ -75,9 +93,12 @@ function renderProxyBlock(result) {
     `;
 }
 
-function renderCdnBlock(cdn) {
-    if (!cdn) return "";
-    if (cdn.parsed) {
+function renderCdnBlock(cdn)
+{
+    if (!cdn)
+        return "";
+    if (cdn.parsed)
+    {
         const jsonStr = JSON.stringify(cdn.parsed, null, 2);
         return `
             <div class="sct-cdn sct-ok">
@@ -99,20 +120,27 @@ function renderCdnBlock(cdn) {
     `;
 }
 
-function wireCopyButtons(rootEl) {
-    rootEl.querySelectorAll(".sct-copy").forEach(btn => {
-        btn.addEventListener("click", async (ev) => {
+function wireCopyButtons(rootEl)
+{
+    rootEl.querySelectorAll(".sct-copy").forEach(btn =>
+    {
+        btn.addEventListener("click", async (ev) =>
+        {
             ev.preventDefault();
             const head = btn.closest(".sct-proxy-head");
             const pre = head?.parentElement?.querySelector("pre.sct-json[data-copy]");
             const text = pre?.getAttribute("data-copy") || pre?.textContent || "";
-            if (!text) return;
-            try {
+            if (!text)
+                return;
+            try
+            {
                 await navigator.clipboard.writeText(text);
                 const orig = btn.innerHTML;
                 btn.innerHTML = '<i class="fas fa-check"></i> Copied';
                 setTimeout(() => { btn.innerHTML = orig; }, 1200);
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn("[share-code-test] clipboard write failed:", e);
                 ui.notifications?.warn("Copy failed - select the JSON manually");
             }
@@ -120,22 +148,27 @@ function wireCopyButtons(rootEl) {
     });
 }
 
-async function testDirect(url, headers) {
+async function testDirect(url, headers)
+{
     const out = { proxy: "direct (no proxy)", ok: false, status: null, body: "", parsed: null, error: null };
-    try {
+    try
+    {
         const resp = await fetch(url, { method: "GET", headers, cache: "no-store" });
         out.status = resp.status;
         const text = await resp.text();
         out.body = text;
         try { out.parsed = JSON.parse(text); out.ok = resp.ok; }
         catch (e) { out.error = `non-JSON body: ${e.message}`; }
-    } catch (e) {
+    }
+    catch (e)
+    {
         out.error = e.message;
     }
     return out;
 }
 
-async function runTest(html, code) {
+async function runTest(html, code)
+{
     const out = html.querySelector(".sct-output");
     out.innerHTML = `<div class="sct-info">Testing share code "${escapeHtml(code)}" (direct + ${CORS_PROXIES.length} proxies)...</div>`;
 
@@ -150,9 +183,11 @@ async function runTest(html, code) {
 
     const successful = results.find(r => r.ok && r.parsed);
     let cdnBlock = "";
-    if (successful) {
+    if (successful)
+    {
         const entry = Array.isArray(successful.parsed) ? successful.parsed[0] : successful.parsed;
-        if (entry?.uri) {
+        if (entry?.uri)
+        {
             const cdn = await fetchCdnFromEntry(entry);
             cdnBlock = renderCdnBlock(cdn);
         }
@@ -168,7 +203,8 @@ async function runTest(html, code) {
     wireCopyButtons(out);
 }
 
-export function openShareCodeTest() {
+export function openShareCodeTest()
+{
     const content = `
         <div class="sct-root">
             <p class="sct-hint">Tests a share code against each CORS proxy. Shows raw responses and identifies which (if any) returns valid JSON.</p>
@@ -186,13 +222,16 @@ export function openShareCodeTest() {
             close: { icon: '<i class="fas fa-times"></i>', label: "Close" }
         },
         default: "close",
-        render: html => {
+        render: html =>
+        {
             const root = html instanceof HTMLElement ? html : html[0];
             const input = root.querySelector(".sct-code");
             const go = root.querySelector(".sct-go");
-            const fire = () => {
+            const fire = () =>
+            {
                 const code = (input.value || "").trim().toUpperCase();
-                if (!code) return;
+                if (!code)
+                    return;
                 runTest(root, code);
             };
             go.addEventListener("click", ev => { ev.preventDefault(); fire(); });
@@ -208,8 +247,10 @@ export function openShareCodeTest() {
     dlg.render(true);
 }
 
-export class ShareCodeTestMenu extends FormApplication {
-    static get defaultOptions() {
+export class ShareCodeTestMenu extends FormApplication
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "share-code-test-menu",
             template: "templates/sidebar/dialog.html",
@@ -217,7 +258,8 @@ export class ShareCodeTestMenu extends FormApplication {
             popOut: false
         });
     }
-    render(_force, _options) {
+    render(_force, _options)
+    {
         openShareCodeTest();
         return this;
     }

@@ -17,15 +17,18 @@ const STATUS_LABELS = {
 
 const ACTIONABLE = new Set(["modified", "unlinked"]);
 
-class RefreshProgressDialog {
-    constructor() {
+class RefreshProgressDialog
+{
+    constructor()
+    {
         this.dialog = null;
         this.label = "Working...";
         this.current = 0;
         this.total = 0;
     }
 
-    open(initialLabel = "Working...") {
+    open(initialLabel = "Working...")
+    {
         this.label = initialLabel;
         this.dialog = new Dialog({
             title: "Refresh: scanning",
@@ -40,27 +43,36 @@ class RefreshProgressDialog {
         this.dialog.render(true);
     }
 
-    update(current, total, label) {
+    update(current, total, label)
+    {
         this.current = current;
         this.total = total;
-        if (label) this.label = label;
+        if (label)
+            this.label = label;
         const root = this.dialog?.element?.[0];
-        if (!root) return;
+        if (!root)
+            return;
         const pct = total ? Math.round((current / total) * 100) : 0;
         const lbl = root.querySelector(".refresh-progress-label");
         const fill = root.querySelector(".refresh-progress-fill");
         const counts = root.querySelector(".refresh-progress-counts");
-        if (lbl) lbl.textContent = this.label;
-        if (fill) fill.style.width = pct + "%";
-        if (counts) counts.textContent = `${current} / ${total}`;
+        if (lbl)
+            lbl.textContent = this.label;
+        if (fill)
+            fill.style.width = pct + "%";
+        if (counts)
+            counts.textContent = `${current} / ${total}`;
     }
 
-    close() {
-        try { this.dialog?.close({ force: true }); } catch { /* ignore */ }
+    close()
+    {
+        try { this.dialog?.close({ force: true }); }
+        catch { /* ignore */ }
         this.dialog = null;
     }
 
-    #html() {
+    #html()
+    {
         return `
             <div class="refresh-progress">
                 <div class="refresh-progress-label">${escapeHtml(this.label)}</div>
@@ -74,14 +86,17 @@ class RefreshProgressDialog {
 // yield so the progress dialog can repaint
 async function tick() { return new Promise(r => setTimeout(r, 0)); }
 
-class RefreshPackPicker {
+class RefreshPackPicker
+{
     static SETTING_ITEM = "refreshItemPacks";
     static SETTING_ACTOR = "refreshActorPacks";
     static SETTING_FOLDERS = "refreshFolders";
     static NOFOLDER_ID = "__nofolder__";
 
-    static show(mode) {
-        return new Promise(resolve => {
+    static show(mode)
+    {
+        return new Promise(resolve =>
+        {
             const itemPacks = game.packs.filter(p => p.metadata.type === "Item");
             const actorPacks = mode === "all"
                 ? game.packs.filter(p => p.metadata.type === "Actor")
@@ -124,7 +139,8 @@ class RefreshPackPicker {
                 ? game.folders.filter(f => f.type === "Actor")
                 : [];
             const folderTree = [];
-            const visit = (folder, depth) => {
+            const visit = (folder, depth) =>
+            {
                 folderTree.push({ folder, depth });
                 actorFolders
                     .filter(f => f.folder?.id === folder.id)
@@ -136,8 +152,10 @@ class RefreshPackPicker {
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .forEach(f => visit(f, 0));
 
-            const countActorsInFolder = folderId => {
-                if (folderId === RefreshPackPicker.NOFOLDER_ID) {
+            const countActorsInFolder = folderId =>
+            {
+                if (folderId === RefreshPackPicker.NOFOLDER_ID)
+                {
                     return game.actors.filter(a => isRefreshableActor(a) && !a.folder).length;
                 }
                 return game.actors.filter(a => isRefreshableActor(a) && a.folder?.id === folderId).length;
@@ -146,7 +164,8 @@ class RefreshPackPicker {
             const folderRows = folderTree
                 .map(({ folder, depth }) => ({ folder, depth, count: countActorsInFolder(folder.id) }))
                 .filter(({ count }) => count > 0)
-                .map(({ folder, depth, count }) => {
+                .map(({ folder, depth, count }) =>
+                {
                     const checked = folderSelected.has(folder.id);
                     return `
                         <label class="refresh-pack-row refresh-folder-row" style="padding-left:${4 + depth * 14}px">
@@ -241,20 +260,23 @@ class RefreshPackPicker {
                     confirm: {
                         icon: '<i class="fas fa-check"></i>',
                         label: "Continue",
-                        callback: html => {
+                        callback: html =>
+                        {
                             const root = html instanceof HTMLElement ? html : html[0];
                             const itemColl = Array.from(root.querySelectorAll('[data-kind="item"] input[type="checkbox"]:checked'))
                                 .filter(i => i.dataset.collection)
                                 .map(i => i.dataset.collection);
                             let actorColl = [];
                             let folderIds = [];
-                            if (mode === "all") {
+                            if (mode === "all")
+                            {
                                 const checked = Array.from(root.querySelectorAll('[data-kind="actor"] input[type="checkbox"]:checked'));
                                 actorColl = checked.filter(i => i.dataset.collection).map(i => i.dataset.collection);
                                 folderIds = checked.filter(i => i.dataset.folder).map(i => i.dataset.folder);
                             }
                             game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_ITEM, itemColl);
-                            if (mode === "all") {
+                            if (mode === "all")
+                            {
                                 game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_ACTOR, actorColl);
                                 game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_FOLDERS, folderIds);
                             }
@@ -275,7 +297,11 @@ class RefreshPackPicker {
                     }
                 },
                 default: "confirm",
-                close: () => { if (!resolved) resolve(null); }
+                close: () =>
+                {
+                    if (!resolved)
+                        resolve(null);
+                }
             }, {
                 width: mode === "all" ? 880 : 560,
                 height: "auto",
@@ -285,11 +311,15 @@ class RefreshPackPicker {
 
             dlg.render(true);
 
-            Hooks.once("renderDialog", (app, html) => {
-                if (app !== dlg) return;
+            Hooks.once("renderDialog", (app, html) =>
+            {
+                if (app !== dlg)
+                    return;
                 const root = html instanceof HTMLElement ? html : html[0];
-                root.querySelectorAll('[data-bulk]').forEach(btn => {
-                    btn.addEventListener("click", ev => {
+                root.querySelectorAll('[data-bulk]').forEach(btn =>
+                {
+                    btn.addEventListener("click", ev =>
+                    {
                         ev.preventDefault();
                         const section = btn.closest('.refresh-pack-section');
                         const checked = btn.dataset.bulk === "all";
@@ -299,21 +329,27 @@ class RefreshPackPicker {
 
                 const fileInput = root.querySelector(".refresh-lcp-input");
                 const status = root.querySelector(".refresh-lcp-status");
-                const setStatus = (msg, ok) => {
+                const setStatus = (msg, ok) =>
+                {
                     status.textContent = msg;
                     status.classList.toggle("refresh-lcp-status-ok", !!ok);
                 };
-                root.querySelector('[data-act="lcp-pick"]')?.addEventListener("click", ev => {
+                root.querySelector('[data-act="lcp-pick"]')?.addEventListener("click", ev =>
+                {
                     ev.preventDefault();
                     fileInput?.click();
                 });
-                fileInput?.addEventListener("change", async ev => {
+                fileInput?.addEventListener("change", async ev =>
+                {
                     const file = ev.target.files?.[0];
-                    if (!file) return;
+                    if (!file)
+                        return;
                     setStatus(`Loading ${file.name}...`, false);
-                    try {
+                    try
+                    {
                         const r = await loadLcpFile(file);
-                        if (!r.lids.size) {
+                        if (!r.lids.size)
+                        {
                             lcpLids = null;
                             lcpLabel = null;
                             setStatus(`No LIDs found in ${file.name}.`, false);
@@ -322,16 +358,20 @@ class RefreshPackPicker {
                         lcpLids = r.lids;
                         lcpLabel = r.name + (r.version ? ` v${r.version}` : "");
                         setStatus(`Loaded "${lcpLabel}" - ${r.count} LID(s)`, true);
-                    } catch (err) {
+                    }
+                    catch (err)
+                    {
                         console.error("refresh: LCP load failed", err);
                         lcpLids = null;
                         lcpLabel = null;
                         setStatus(`Failed: ${err.message}`, false);
                     }
                 });
-                root.querySelector('[data-act="lcp-clear"]')?.addEventListener("click", ev => {
+                root.querySelector('[data-act="lcp-clear"]')?.addEventListener("click", ev =>
+                {
                     ev.preventDefault();
-                    if (fileInput) fileInput.value = "";
+                    if (fileInput)
+                        fileInput.value = "";
                     lcpLids = null;
                     lcpLabel = null;
                     setStatus("No LCP file loaded - scan covers every selected compendium item.", false);
@@ -341,20 +381,26 @@ class RefreshPackPicker {
     }
 }
 
-export class RefreshItemsDialog {
-    constructor(targets) {
+export class RefreshItemsDialog
+{
+    constructor(targets)
+    {
         this.targets = targets;
         this.dialog = null;
     }
 
-    static async forActor(actor) {
-        if (!isRefreshableActor(actor)) {
+    static async forActor(actor)
+    {
+        if (!isRefreshableActor(actor))
+        {
             ui.notifications.warn("This actor type is not supported by refresh.");
             return null;
         }
         const picked = await RefreshPackPicker.show("actor");
-        if (!picked) return null;
-        if (!picked.itemPacks.length) {
+        if (!picked)
+            return null;
+        if (!picked.itemPacks.length)
+        {
             ui.notifications.warn("Refresh: pick at least one item compendium - that's where the up-to-date item versions come from.");
             return null;
         }
@@ -362,7 +408,8 @@ export class RefreshItemsDialog {
         const progress = new RefreshProgressDialog();
         progress.open("Indexing item compendiums...");
         await tick();
-        try {
+        try
+        {
             const lidIndex = await buildLidIndex(progress, picked.itemPacks);
             const needed = collectNeededPackDocs([actor], lidIndex, picked.lcpLids);
             const cache = await prefetchPackDocs(needed, progress);
@@ -371,19 +418,25 @@ export class RefreshItemsDialog {
             const items = await classifyActorItems(actor, lidIndex, cache, picked.lcpLids);
             const locked = actor.pack ? !!game.packs.get(actor.pack)?.locked : false;
             return new RefreshItemsDialog([{ actor, items, locked }]);
-        } finally {
+        }
+        finally
+        {
             progress.close();
         }
     }
 
-    static async forAllActors() {
+    static async forAllActors()
+    {
         const picked = await RefreshPackPicker.show("all");
-        if (!picked) return null;
-        if (!picked.itemPacks.length) {
+        if (!picked)
+            return null;
+        if (!picked.itemPacks.length)
+        {
             ui.notifications.warn("Refresh: pick at least one item compendium - that's where the up-to-date item versions come from.");
             return null;
         }
-        if (!picked.folderIds.length && !picked.actorPacks.length) {
+        if (!picked.folderIds.length && !picked.actorPacks.length)
+        {
             ui.notifications.warn("Refresh: no actor source selected.");
             return null;
         }
@@ -391,34 +444,45 @@ export class RefreshItemsDialog {
         const progress = new RefreshProgressDialog();
         progress.open("Indexing item compendiums...");
         await tick();
-        try {
+        try
+        {
             const lidIndex = await buildLidIndex(progress, picked.itemPacks);
 
             const folderSet = new Set(picked.folderIds);
             const includeNoFolder = folderSet.has(RefreshPackPicker.NOFOLDER_ID);
-            const worldActors = game.actors.filter(a => {
-                if (!isRefreshableActor(a)) return false;
-                if (!a.folder) return includeNoFolder;
+            const worldActors = game.actors.filter(a =>
+            {
+                if (!isRefreshableActor(a))
+                    return false;
+                if (!a.folder)
+                    return includeNoFolder;
                 return folderSet.has(a.folder.id);
             });
             const actorPacks = picked.actorPacks;
 
             const allActors = [];
-            for (const a of worldActors) allActors.push({ actor: a, locked: false });
+            for (const a of worldActors)
+                allActors.push({ actor: a, locked: false });
 
-            for (let pi = 0; pi < actorPacks.length; pi++) {
+            for (let pi = 0; pi < actorPacks.length; pi++)
+            {
                 const pack = actorPacks[pi];
                 progress.update(pi, actorPacks.length, `Loading pack: ${pack.metadata.label}`);
                 await tick();
                 let docs;
-                try {
+                try
+                {
                     docs = await pack.getDocuments();
-                } catch (err) {
+                }
+                catch (err)
+                {
                     console.warn(`refresh: failed to load actors from ${pack.collection}`, err);
                     continue;
                 }
-                for (const a of docs) {
-                    if (isRefreshableActor(a)) allActors.push({ actor: a, locked: !!pack.locked });
+                for (const a of docs)
+                {
+                    if (isRefreshableActor(a))
+                        allActors.push({ actor: a, locked: !!pack.locked });
                 }
             }
 
@@ -428,27 +492,34 @@ export class RefreshItemsDialog {
 
             const targets = [];
             const total = allActors.length;
-            for (let i = 0; i < total; i++) {
+            for (let i = 0; i < total; i++)
+            {
                 const { actor, locked } = allActors[i];
-                if (i % 25 === 0) {
+                if (i % 25 === 0)
+                {
                     progress.update(i, total, `Comparing actors: ${i}/${total}`);
                     await tick();
                 }
                 const items = await classifyActorItems(actor, lidIndex, cache, picked.lcpLids);
-                if (items.some(it => ACTIONABLE.has(it.status))) {
+                if (items.some(it => ACTIONABLE.has(it.status)))
+                {
                     targets.push({ actor, items, locked });
                 }
             }
 
             progress.update(total, total, "Done");
             return new RefreshItemsDialog(targets);
-        } finally {
+        }
+        finally
+        {
             progress.close();
         }
     }
 
-    render(force = true) {
-        if (!this.targets.length) {
+    render(force = true)
+    {
+        if (!this.targets.length)
+        {
             ui.notifications.info("Refresh: no items differ from their compendium versions.");
             return;
         }
@@ -482,82 +553,113 @@ export class RefreshItemsDialog {
         this.dialog.render(force);
     }
 
-    #wireToolbar(html) {
+    #wireToolbar(html)
+    {
         const root = html instanceof HTMLElement ? html : html[0];
-        if (!root) return;
+        if (!root)
+            return;
 
         const search = root.querySelector(".refresh-search");
-        if (search) {
+        if (search)
+        {
             search.addEventListener("input", () => this.#applyFilter(root, search.value));
         }
 
-        root.addEventListener("click", ev => {
+        root.addEventListener("click", ev =>
+        {
             const target = ev.target.closest('[data-act]');
-            if (!target) return;
+            if (!target)
+                return;
             const act = target.dataset.act;
-            if (act === "toggle-row") {
+            if (act === "toggle-row")
+            {
                 ev.preventDefault();
                 const row = target.closest(".refresh-row");
-                if (!row) return;
-                if (row.querySelector(".refresh-row-body")) {
+                if (!row)
+                    return;
+                if (row.querySelector(".refresh-row-body"))
+                {
                     setRowExpanded(row, row.dataset.expanded !== "1");
                 }
-            } else if (act === "toggle-section") {
-                if (ev.target.closest("input, button, .npc-status-badge")) return;
+            }
+            else if (act === "toggle-section")
+            {
+                if (ev.target.closest("input, button, .npc-status-badge"))
+                    return;
                 ev.preventDefault();
                 const section = target.closest(".refresh-actor-section");
-                if (section) setSectionExpanded(section, section.dataset.expanded !== "1");
+                if (section)
+                    setSectionExpanded(section, section.dataset.expanded !== "1");
             }
         });
 
-        const handleClick = (sel, fn) => {
+        const handleClick = (sel, fn) =>
+        {
             const btn = root.querySelector(sel);
-            if (btn) btn.addEventListener("click", ev => { ev.preventDefault(); fn(root); });
+            if (btn)
+                btn.addEventListener("click", ev => { ev.preventDefault(); fn(root); });
         };
 
-        handleClick('[data-act="expand-all"]', r => {
+        handleClick('[data-act="expand-all"]', r =>
+        {
             r.querySelectorAll(".refresh-actor-section").forEach(s => setSectionExpanded(s, true));
             r.querySelectorAll(".refresh-row").forEach(row => setRowExpanded(row, true));
         });
-        handleClick('[data-act="collapse-all"]', r => {
+        handleClick('[data-act="collapse-all"]', r =>
+        {
             r.querySelectorAll(".refresh-row").forEach(row => setRowExpanded(row, false));
         });
-        handleClick('[data-act="check-all"]', r => {
-            r.querySelectorAll(".refresh-row").forEach(row => {
-                if (row.style.display === "none") return;
-                if (row.dataset.status !== "modified") return;
+        handleClick('[data-act="check-all"]', r =>
+        {
+            r.querySelectorAll(".refresh-row").forEach(row =>
+            {
+                if (row.style.display === "none")
+                    return;
+                if (row.dataset.status !== "modified")
+                    return;
                 const cb = row.querySelector("input.refresh-row-cb");
-                if (cb) cb.checked = true;
+                if (cb)
+                    cb.checked = true;
             });
         });
-        handleClick('[data-act="uncheck-all"]', r => {
-            r.querySelectorAll(".refresh-row").forEach(row => {
-                if (row.style.display === "none") return;
+        handleClick('[data-act="uncheck-all"]', r =>
+        {
+            r.querySelectorAll(".refresh-row").forEach(row =>
+            {
+                if (row.style.display === "none")
+                    return;
                 const cb = row.querySelector("input.refresh-row-cb");
-                if (cb) cb.checked = false;
+                if (cb)
+                    cb.checked = false;
             });
         });
     }
 
-    #applyFilter(root, q) {
+    #applyFilter(root, q)
+    {
         const query = (q || "").trim().toLowerCase();
-        root.querySelectorAll(".refresh-actor-section").forEach(section => {
+        root.querySelectorAll(".refresh-actor-section").forEach(section =>
+        {
             const actorName = section.querySelector(".refresh-actor-name")?.textContent?.toLowerCase() || "";
             const actorMatches = !query || actorName.includes(query);
             let itemMatches = 0;
-            section.querySelectorAll(".refresh-row").forEach(row => {
+            section.querySelectorAll(".refresh-row").forEach(row =>
+            {
                 const name = row.querySelector(".refresh-row-name")?.textContent?.toLowerCase() || "";
                 const show = !query || actorMatches || name.includes(query);
                 row.style.display = show ? "" : "none";
-                if (show && query && !actorMatches) itemMatches++;
+                if (show && query && !actorMatches)
+                    itemMatches++;
             });
             const sectionVisible = !query || actorMatches || itemMatches > 0;
             section.style.display = sectionVisible ? "" : "none";
-            if (query && sectionVisible) setSectionExpanded(section, true);
+            if (query && sectionVisible)
+                setSectionExpanded(section, true);
         });
     }
 
-    #renderContent() {
+    #renderContent()
+    {
         const sections = this.targets.map((t, ti) => this.#renderActorSection(t, ti)).join("");
         const totals = this.#totalsLine();
         return `
@@ -578,20 +680,29 @@ export class RefreshItemsDialog {
         `;
     }
 
-    #totalsLine() {
+    #totalsLine()
+    {
         const c = { modified: 0, unlinked: 0, synced: 0, missing: 0 };
-        for (const t of this.targets) {
-            for (const i of t.items) if (c[i.status] !== undefined) c[i.status]++;
+        for (const t of this.targets)
+        {
+            for (const i of t.items)
+                if (c[i.status] !== undefined)
+                    c[i.status]++;
         }
         const parts = [];
-        if (c.modified) parts.push(`<span class="npc-status-badge modified">${c.modified}</span>`);
-        if (c.unlinked) parts.push(`<span class="npc-status-badge unlinked">${c.unlinked}</span>`);
-        if (c.synced) parts.push(`<span class="npc-status-badge synced">${c.synced}</span>`);
-        if (c.missing) parts.push(`<span class="refresh-count-missing">${c.missing} miss</span>`);
+        if (c.modified)
+            parts.push(`<span class="npc-status-badge modified">${c.modified}</span>`);
+        if (c.unlinked)
+            parts.push(`<span class="npc-status-badge unlinked">${c.unlinked}</span>`);
+        if (c.synced)
+            parts.push(`<span class="npc-status-badge synced">${c.synced}</span>`);
+        if (c.missing)
+            parts.push(`<span class="refresh-count-missing">${c.missing} miss</span>`);
         return parts.join(" ");
     }
 
-    #renderActorSection(t, ti) {
+    #renderActorSection(t, ti)
+    {
         const counts = this.#countsLine(t.items);
         const lockedNote = t.locked
             ? `<div class="lancer-info-box refresh-locked"><i class="fas fa-lock"></i><span>Pack is locked. Unlock it to refresh actors inside.</span></div>`
@@ -614,18 +725,26 @@ export class RefreshItemsDialog {
         `;
     }
 
-    #countsLine(items) {
+    #countsLine(items)
+    {
         const c = { modified: 0, unlinked: 0, synced: 0, missing: 0 };
-        for (const i of items) if (c[i.status] !== undefined) c[i.status]++;
+        for (const i of items)
+            if (c[i.status] !== undefined)
+                c[i.status]++;
         const parts = [];
-        if (c.modified) parts.push(`<span class="npc-status-badge modified">${c.modified} mod</span>`);
-        if (c.unlinked) parts.push(`<span class="npc-status-badge unlinked">${c.unlinked} unl</span>`);
-        if (c.synced) parts.push(`<span class="npc-status-badge synced">${c.synced} ok</span>`);
-        if (c.missing) parts.push(`<span class="refresh-count-missing">${c.missing} missing</span>`);
+        if (c.modified)
+            parts.push(`<span class="npc-status-badge modified">${c.modified} mod</span>`);
+        if (c.unlinked)
+            parts.push(`<span class="npc-status-badge unlinked">${c.unlinked} unl</span>`);
+        if (c.synced)
+            parts.push(`<span class="npc-status-badge synced">${c.synced} ok</span>`);
+        if (c.missing)
+            parts.push(`<span class="refresh-count-missing">${c.missing} missing</span>`);
         return parts.join(" ");
     }
 
-    #renderRow(cls, ti, ii, locked) {
+    #renderRow(cls, ti, ii, locked)
+    {
         const checkable = ACTIONABLE.has(cls.status) && !locked;
         const checkbox = checkable
             ? `<input type="checkbox" class="refresh-row-cb" data-target="${ti}" data-row="${ii}">`
@@ -660,30 +779,38 @@ export class RefreshItemsDialog {
         `;
     }
 
-    #renderDiffLine(d) {
+    #renderDiffLine(d)
+    {
         return `<div class="refresh-diff-line"><code>${escapeHtml(d.path)}</code>: ${formatVal(d.actor)} → ${formatVal(d.pack)}</div>`;
     }
 
-    async #apply(html) {
+    async #apply(html)
+    {
         const root = html instanceof HTMLElement ? html : html[0];
         const overall = { updated: 0, replaced: [], failed: [], actorsTouched: 0 };
 
-        for (let ti = 0; ti < this.targets.length; ti++) {
+        for (let ti = 0; ti < this.targets.length; ti++)
+        {
             const t = this.targets[ti];
-            if (t.locked) continue;
+            if (t.locked)
+                continue;
             const selections = [];
-            for (let ii = 0; ii < t.items.length; ii++) {
+            for (let ii = 0; ii < t.items.length; ii++)
+            {
                 const cls = t.items[ii];
-                if (!ACTIONABLE.has(cls.status)) continue;
+                if (!ACTIONABLE.has(cls.status))
+                    continue;
                 const cb = root.querySelector(`input.refresh-row-cb[data-target="${ti}"][data-row="${ii}"]`);
-                if (!cb || !cb.checked) continue;
+                if (!cb || !cb.checked)
+                    continue;
                 selections.push({
                     actorItem: cls.actorItem,
                     packDoc: cls.packDoc,
                     action: cls.status === "unlinked" ? "replace" : "update"
                 });
             }
-            if (!selections.length) continue;
+            if (!selections.length)
+                continue;
             const r = await applyRefresh(t.actor, selections);
             overall.updated += r.updated;
             overall.replaced.push(...r.replaced);
@@ -692,37 +819,50 @@ export class RefreshItemsDialog {
         }
 
         const parts = [];
-        if (overall.updated) parts.push(`${overall.updated} updated`);
-        if (overall.replaced.length) parts.push(`${overall.replaced.length} replaced`);
-        if (overall.failed.length) parts.push(`${overall.failed.length} failed`);
+        if (overall.updated)
+            parts.push(`${overall.updated} updated`);
+        if (overall.replaced.length)
+            parts.push(`${overall.replaced.length} replaced`);
+        if (overall.failed.length)
+            parts.push(`${overall.failed.length} failed`);
         const msg = parts.length
             ? `Refresh on ${overall.actorsTouched} actor(s): ${parts.join(", ")}`
             : "Refresh: nothing to do";
-        if (overall.failed.length) ui.notifications.warn(msg); else ui.notifications.info(msg);
+        if (overall.failed.length)
+            ui.notifications.warn(msg); else
+            ui.notifications.info(msg);
 
-        if (overall.replaced.length) {
+        if (overall.replaced.length)
+        {
             console.log("lancer-npc-import refresh - replaced items (oldId -> newId):", overall.replaced);
         }
     }
 }
 
-function setRowExpanded(row, expanded) {
+function setRowExpanded(row, expanded)
+{
     row.dataset.expanded = expanded ? "1" : "0";
     const body = row.querySelector(".refresh-row-body");
-    if (body) body.hidden = !expanded;
+    if (body)
+        body.hidden = !expanded;
     const toggle = row.querySelector(".refresh-row-toggle");
-    if (toggle && body) toggle.textContent = expanded ? "▼" : "▶";
+    if (toggle && body)
+        toggle.textContent = expanded ? "▼" : "▶";
 }
 
-function setSectionExpanded(section, expanded) {
+function setSectionExpanded(section, expanded)
+{
     section.dataset.expanded = expanded ? "1" : "0";
     const body = section.querySelector(".refresh-actor-body");
-    if (body) body.hidden = !expanded;
+    if (body)
+        body.hidden = !expanded;
     const toggle = section.querySelector(".refresh-actor-toggle");
-    if (toggle) toggle.textContent = expanded ? "▼" : "▶";
+    if (toggle)
+        toggle.textContent = expanded ? "▼" : "▶";
 }
 
-function escapeHtml(s) {
+function escapeHtml(s)
+{
     return String(s ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -730,11 +870,15 @@ function escapeHtml(s) {
         .replace(/"/g, "&quot;");
 }
 
-function formatVal(v) {
-    if (v === undefined) return `<i class="refresh-val-missing">missing</i>`;
-    if (v === null) return `<code>null</code>`;
+function formatVal(v)
+{
+    if (v === undefined)
+        return `<i class="refresh-val-missing">missing</i>`;
+    if (v === null)
+        return `<code>null</code>`;
     const s = typeof v === "string" ? v : JSON.stringify(v);
-    if (s.length > 80) {
+    if (s.length > 80)
+    {
         return `<span class="refresh-val-trunc" title="${escapeHtml(s)}">${escapeHtml(s.slice(0, 80))}…</span>`;
     }
     return `<code>${escapeHtml(s)}</code>`;

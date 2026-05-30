@@ -2,11 +2,13 @@
 // more than one same-name candidate, or always when the user wants to opt in
 // to picking explicitly.
 
-function _esc(s) {
+function _esc(s)
+{
     return foundry.utils.escapeHTML?.(String(s ?? "")) ?? String(s ?? "");
 }
 
-function _candidateRow(actor, checked, isLinkedAlready) {
+function _candidateRow(actor, checked, isLinkedAlready)
+{
     const folder = actor.folder?.name ? `Folder: ${actor.folder.name}` : "(no folder)";
     const lid = actor.system?.lid ? ` · lid: ${actor.system.lid}` : "";
     const tag = isLinkedAlready ? `<span class="link-tag link-tag--linked">linked</span>` : "";
@@ -21,7 +23,8 @@ function _candidateRow(actor, checked, isLinkedAlready) {
     `;
 }
 
-export async function showLinkChooser(cloudNpc, alreadyLinked = []) {
+export async function showLinkChooser(cloudNpc, alreadyLinked = [])
+{
     const nameLower = (cloudNpc.json?.name || cloudNpc.name || "").toLowerCase();
     const sameName = game.actors.filter(a =>
         a.type === "npc" && a.name.toLowerCase() === nameLower
@@ -29,12 +32,15 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = []) {
     const initialLinkedIds = new Set(alreadyLinked.map(a => a.id));
     const initialUnion = [...alreadyLinked];
     for (const a of sameName)
-        if (!initialLinkedIds.has(a.id)) initialUnion.push(a);
+        if (!initialLinkedIds.has(a.id))
+            initialUnion.push(a);
     let candidateIds = new Set(initialUnion.map(a => a.id));
     let checkedIds = new Set(initialUnion.map(a => a.id));
 
-    return new Promise((resolve) => {
-        function content() {
+    return new Promise((resolve) =>
+    {
+        function content()
+        {
             const candidates = [...candidateIds].map(id => game.actors.get(id)).filter(Boolean);
             const rows = candidates.length
                 ? candidates.map(a => _candidateRow(a, checkedIds.has(a.id), initialLinkedIds.has(a.id))).join("")
@@ -50,10 +56,10 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = []) {
                         <select id="link-add-pick">
                             <option value="">-- pick another NPC actor to link --</option>
                             ${game.actors
-                                .filter(a => a.type === "npc" && !candidateIds.has(a.id))
-                                .sort((a, b) => a.name.localeCompare(b.name))
-                                .map(a => `<option value="${a.id}">${_esc(a.name)}${a.folder?.name ? ` (${_esc(a.folder.name)})` : ""}</option>`)
-                                .join("")}
+        .filter(a => a.type === "npc" && !candidateIds.has(a.id))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(a => `<option value="${a.id}">${_esc(a.name)}${a.folder?.name ? ` (${_esc(a.folder.name)})` : ""}</option>`)
+        .join("")}
                         </select>
                         <button type="button" class="lancer-action-btn" id="link-add-btn">
                             <i class="fas fa-plus"></i> Add
@@ -70,20 +76,26 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = []) {
                 link: {
                     icon: '<i class="fas fa-link"></i>',
                     label: "Apply",
-                    callback: (html) => {
+                    callback: (html) =>
+                    {
                         const checkedNow = new Set();
-                        html.find(".link-candidate-check:checked").each(function() {
+                        html.find(".link-candidate-check:checked").each(function()
+                        {
                             checkedNow.add($(this).data("actor-id"));
                         });
                         const toLink = [];
                         const toUnlink = [];
-                        for (const id of candidateIds) {
+                        for (const id of candidateIds)
+                        {
                             const a = game.actors.get(id);
-                            if (!a) continue;
+                            if (!a)
+                                continue;
                             const was = initialLinkedIds.has(id);
                             const now = checkedNow.has(id);
-                            if (now) toLink.push(a);
-                            else if (was) toUnlink.push(a);
+                            if (now)
+                                toLink.push(a);
+                            else if (was)
+                                toUnlink.push(a);
                         }
                         resolve({ toLink, toUnlink });
                     }
@@ -109,19 +121,26 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = []) {
 
         // Re-render when the user adds another actor.
         dlg.render(true);
-        const wireAdd = () => {
+        const wireAdd = () =>
+        {
             const $root = dlg.element;
-            if (!$root) return;
-            $root.find("#link-add-btn").off("click").on("click", () => {
+            if (!$root)
+                return;
+            $root.find("#link-add-btn").off("click").on("click", () =>
+            {
                 const id = String($root.find("#link-add-pick").val() || "");
-                if (!id) return;
+                if (!id)
+                    return;
                 candidateIds.add(id);
                 checkedIds.add(id);
                 // Preserve currently checked state of others
-                $root.find(".link-candidate-check").each(function() {
+                $root.find(".link-candidate-check").each(function()
+                {
                     const aid = $(this).data("actor-id");
-                    if ($(this).prop("checked")) checkedIds.add(aid);
-                    else checkedIds.delete(aid);
+                    if ($(this).prop("checked"))
+                        checkedIds.add(aid);
+                    else
+                        checkedIds.delete(aid);
                 });
                 const $content = $root.find(".dialog-content");
                 $content.html(content());
@@ -133,13 +152,15 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = []) {
     });
 }
 
-export async function applyLink(actors, npcId) {
+export async function applyLink(actors, npcId)
+{
     for (const actor of actors)
         await actor.update({ "system.lid": npcId });
     return actors.length;
 }
 
-export async function applyUnlink(actors) {
+export async function applyUnlink(actors)
+{
     for (const actor of actors)
         await actor.update({ "system.lid": "" });
     return actors.length;

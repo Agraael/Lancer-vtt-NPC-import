@@ -5,7 +5,8 @@ import { ImportProgressDialog } from "./npc-import-ui.js";
 import { normalizeNpcData, importNPCFromCompCon } from "./npc-import-core.js";
 import { importOnePilot } from "./pilot-import-core.js";
 
-export function detectActorKind(json) {
+export function detectActorKind(json)
+{
     if (!json || typeof json !== "object")
         return null;
     const hasPilotMarkers = json.callsign !== undefined
@@ -21,7 +22,8 @@ export function detectActorKind(json) {
     return null;
 }
 
-export async function importFromFiles() {
+export async function importFromFiles()
+{
     let updateExisting = true;
     let manualReplace = false;
 
@@ -65,7 +67,8 @@ export async function importFromFiles() {
             import: {
                 icon: '<i class="fas fa-file-upload"></i>',
                 label: "Select Files",
-                callback: async (html) => {
+                callback: async (html) =>
+                {
                     updateExisting = html.find('#update-existing-files').val() === 'true';
                     manualReplace = html.find('#manual-replace-files').val() === 'true';
                     const customTierMode = html.find('#custom-tier-mode').val();
@@ -78,22 +81,28 @@ export async function importFromFiles() {
             }
         },
         default: "import",
-        render: (html) => {
-            html.find('.lancer-toggle-card').click(function() {
+        render: (html) =>
+        {
+            html.find('.lancer-toggle-card').click(function()
+            {
                 const setting = $(this).data('setting');
                 const isActive = $(this).hasClass('active');
 
-                if (setting === 'update-existing' || setting === 'manual-replace') {
+                if (setting === 'update-existing' || setting === 'manual-replace')
+                {
                     const otherCard = setting === 'update-existing' ? '#manual-replace-card' : '#update-existing-card';
 
                     $(this).toggleClass('active');
                     const icon = $(this).find('.lancer-toggle-card-icon i');
                     const hiddenInput = $(this).find('input[type="hidden"]');
 
-                    if (isActive) {
+                    if (isActive)
+                    {
                         icon.removeClass('fa-check').addClass('fa-times');
                         hiddenInput.val('false');
-                    } else {
+                    }
+                    else
+                    {
                         icon.removeClass('fa-times').addClass('fa-check');
                         hiddenInput.val('true');
 
@@ -104,7 +113,8 @@ export async function importFromFiles() {
                 }
             });
 
-            html.find('.lancer-scaling-card').click(function() {
+            html.find('.lancer-scaling-card').click(function()
+            {
                 html.find('.lancer-scaling-card').removeClass('selected');
                 $(this).addClass('selected');
                 const mode = $(this).data('mode');
@@ -119,8 +129,10 @@ export async function importFromFiles() {
 }
 
 // Dialog pour mapper manuellement les NPCs à des acteurs existants
-export async function selectActorMappings(npcsToImport) {
-    return new Promise((resolve) => {
+export async function selectActorMappings(npcsToImport)
+{
+    return new Promise((resolve) =>
+    {
         const allActors = game.actors.filter(a => a.type === 'npc');
 
         const actorOptions = `<option value="new">── Create New ──</option>
@@ -158,15 +170,20 @@ export async function selectActorMappings(npcsToImport) {
                 import: {
                     icon: '<i class="fas fa-download"></i>',
                     label: "Import All",
-                    callback: (html) => {
+                    callback: (html) =>
+                    {
                         const mappings = [];
-                        npcsToImport.forEach((npc, index) => {
+                        npcsToImport.forEach((npc, index) =>
+                        {
                             const selectedValue = html.find(`.target-select[data-index="${index}"]`).val();
                             const keepName = html.find(`.keep-name-toggle[data-index="${index}"]`).hasClass('active');
 
-                            if (selectedValue === 'new') {
+                            if (selectedValue === 'new')
+                            {
                                 mappings.push({ npc, targetActor: null, keepName: false });
-                            } else {
+                            }
+                            else
+                            {
                                 const targetActor = game.actors.get(selectedValue);
                                 mappings.push({ npc, targetActor, keepName });
                             }
@@ -181,28 +198,37 @@ export async function selectActorMappings(npcsToImport) {
                 }
             },
             default: "import",
-            render: (html) => {
-                html.find('.target-select').on('change', function() {
+            render: (html) =>
+            {
+                html.find('.target-select').on('change', function()
+                {
                     const index = $(this).data('index');
                     const selectedValue = $(this).val();
                     const keepNameToggle = html.find(`.keep-name-toggle[data-index="${index}"]`);
 
-                    if (selectedValue === 'new') {
+                    if (selectedValue === 'new')
+                    {
                         keepNameToggle.removeClass('visible active');
                         keepNameToggle.find('i').removeClass('fa-check').addClass('fa-times');
-                    } else {
+                    }
+                    else
+                    {
                         keepNameToggle.addClass('visible');
                     }
                 });
 
-                html.find('.keep-name-toggle').click(function() {
+                html.find('.keep-name-toggle').click(function()
+                {
                     const isActive = $(this).hasClass('active');
                     $(this).toggleClass('active');
 
                     const icon = $(this).find('i');
-                    if (isActive) {
+                    if (isActive)
+                    {
                         icon.removeClass('fa-check').addClass('fa-times');
-                    } else {
+                    }
+                    else
+                    {
                         icon.removeClass('fa-times').addClass('fa-check');
                     }
                 });
@@ -218,42 +244,55 @@ export async function selectActorMappings(npcsToImport) {
     });
 }
 
-export async function selectAndImportFiles(customTierMode, updateExisting = true, manualReplace = false) {
+export async function selectAndImportFiles(customTierMode, updateExisting = true, manualReplace = false)
+{
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
     input.multiple = true;
 
-    input.onchange = async (e) => {
+    input.onchange = async (e) =>
+    {
         const files = Array.from(e.target.files);
         if (files.length === 0)
             return;
 
         const npcsToImport = [];
         const pilotsToImport = [];
-        for (const file of files) {
-            try {
+        for (const file of files)
+        {
+            try
+            {
                 const text = await file.text();
                 const raw = unwrapData(JSON.parse(text));
                 const kind = detectActorKind(raw);
 
-                if (kind === "pilot") {
-                    if (!raw.name) {
+                if (kind === "pilot")
+                {
+                    if (!raw.name)
+                    {
                         ui.notifications.error(`Invalid pilot JSON: ${file.name} - missing name`);
                         continue;
                     }
                     pilotsToImport.push({ name: raw.name, json: raw });
-                } else if (kind === "npc") {
+                }
+                else if (kind === "npc")
+                {
                     const npcData = normalizeNpcData(raw);
-                    if (!npcData.class || !npcData.name) {
+                    if (!npcData.class || !npcData.name)
+                    {
                         ui.notifications.error(`Invalid NPC JSON: ${file.name} - missing required fields`);
                         continue;
                     }
                     npcsToImport.push(npcData);
-                } else {
+                }
+                else
+                {
                     ui.notifications.warn(`Skipped ${file.name}: not a recognized pilot or NPC JSON`);
                 }
-            } catch (error) {
+            }
+            catch (error)
+            {
                 console.error(`Error parsing ${file.name}:`, error);
                 ui.notifications.error(`Failed to parse ${file.name}: ${error.message}`);
             }
@@ -262,17 +301,20 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
         if (pilotsToImport.length > 0)
             await _importPilotFiles(pilotsToImport, updateExisting);
 
-        if (npcsToImport.length === 0) {
+        if (npcsToImport.length === 0)
+        {
             if (pilotsToImport.length === 0)
                 ui.notifications.warn("No valid actors to import");
             return;
         }
 
         let mappings = null;
-        if (manualReplace) {
+        if (manualReplace)
+        {
             mappings = await selectActorMappings(npcsToImport);
 
-            if (mappings === null) {
+            if (mappings === null)
+            {
                 ui.notifications.info("Import cancelled");
                 return;
             }
@@ -287,31 +329,41 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
         let updateCount = 0;
         let replaceCount = 0;
 
-        for (let i = 0; i < npcsToImport.length; i++) {
+        for (let i = 0; i < npcsToImport.length; i++)
+        {
             const npcData = npcsToImport[i];
             let targetActor = null;
             let keepName = false;
 
-            if (mappings && mappings[i]) {
+            if (mappings && mappings[i])
+            {
                 targetActor = mappings[i].targetActor;
                 keepName = mappings[i].keepName;
             }
 
-            try {
+            try
+            {
                 progressDialog.addLog(`Importing: ${npcData.name}...`, 'info');
                 const result = await importNPCFromCompCon(npcData, updateExisting, customTierMode, targetActor, keepName, progressDialog);
 
-                if (result.updated) {
+                if (result.updated)
+                {
                     updateCount++;
                     progressDialog.addLog(`✓ Updated: ${npcData.name}`, 'success');
-                } else if (result.replaced) {
+                }
+                else if (result.replaced)
+                {
                     replaceCount++;
                     progressDialog.addLog(`✓ Replaced: ${npcData.name}`, 'success');
-                } else {
+                }
+                else
+                {
                     progressDialog.addLog(`✓ Created: ${npcData.name}`, 'success');
                 }
                 successCount++;
-            } catch (error) {
+            }
+            catch (error)
+            {
                 console.error(`Error importing ${npcData.name}:`, error);
                 progressDialog.addLog(`✗ Failed: ${npcData.name} - ${error.message}`, 'error');
                 errorCount++;
@@ -334,10 +386,12 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
         const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
         progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
 
-        if (successCount > 0) {
+        if (successCount > 0)
+        {
             ui.notifications.info(`✓ Imported ${successCount} NPC(s)`);
         }
-        if (errorCount > 0) {
+        if (errorCount > 0)
+        {
             ui.notifications.warn(`✗ ${errorCount} NPC(s) failed to import`);
         }
     };
@@ -345,18 +399,23 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
     input.click();
 }
 
-async function _importPilotFiles(pilots, updateExisting) {
+async function _importPilotFiles(pilots, updateExisting)
+{
     const progress = new ImportProgressDialog(pilots.length);
     progress.render(true);
     progress.addLog(`Starting import of ${pilots.length} pilot(s)...`, "info");
     let created = 0, updated = 0, failed = 0;
-    for (const p of pilots) {
-        try {
+    for (const p of pilots)
+    {
+        try
+        {
             progress.addLog(`Importing: ${p.name}...`, "info");
             const r = await importOnePilot(p.json, { updateExisting });
             if (r.updated) { updated++; progress.addLog(`✓ Updated: ${p.name}`, "success"); }
             else           { created++; progress.addLog(`✓ Created: ${p.name}`, "success"); }
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error(`pilot import failed for ${p.name}:`, e);
             progress.addLog(`✗ Failed: ${p.name} - ${e.message}`, "error");
             failed++;
@@ -364,9 +423,12 @@ async function _importPilotFiles(pilots, updateExisting) {
         progress.incrementProgress();
     }
     const parts = [];
-    if (created) parts.push(`${created} created`);
-    if (updated) parts.push(`${updated} updated`);
-    if (failed)  parts.push(`${failed} failed`);
+    if (created)
+        parts.push(`${created} created`);
+    if (updated)
+        parts.push(`${updated} updated`);
+    if (failed)
+        parts.push(`${failed} failed`);
     progress.addLog(`Pilot import done: ${parts.join(", ")}`, failed ? "warning" : "success");
     if (created + updated > 0)
         ui.notifications.info(`✓ Imported ${created + updated} pilot(s)`);

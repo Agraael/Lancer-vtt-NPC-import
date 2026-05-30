@@ -18,7 +18,8 @@ const N = BigInt("0x" + N_HEX);
 const g = 2n;
 const INFO_BITS = new TextEncoder().encode("Caldera Derived Key");
 
-function hexToBytes(hex) {
+function hexToBytes(hex)
+{
     if (hex.length % 2)
         hex = "0" + hex;
     const out = new Uint8Array(hex.length / 2);
@@ -26,43 +27,54 @@ function hexToBytes(hex) {
         out[i] = parseInt(hex.substr(i * 2, 2), 16);
     return out;
 }
-function bytesToHex(bytes) {
+function bytesToHex(bytes)
+{
     return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
-function bigIntToHex(bi) {
+function bigIntToHex(bi)
+{
     return bi.toString(16);
 }
-function bytesToBigInt(bytes) {
+function bytesToBigInt(bytes)
+{
     const hex = bytesToHex(bytes);
     return BigInt("0x" + (hex || "0"));
 }
 
 // Even-length hex, "00"-prefixed when MSB is 8-F (Cognito's exact rule).
-function padHex(input) {
+function padHex(input)
+{
     let hex = (typeof input === "bigint") ? bigIntToHex(input) : String(input);
-    if (hex.length % 2 === 1) {
+    if (hex.length % 2 === 1)
+    {
         hex = "0" + hex;
-    } else if ("89abcdef".indexOf(hex[0].toLowerCase()) !== -1) {
+    }
+    else if ("89abcdef".indexOf(hex[0].toLowerCase()) !== -1)
+    {
         hex = "00" + hex;
     }
     return hex;
 }
 
-async function sha256(bytes) {
+async function sha256(bytes)
+{
     const buf = await crypto.subtle.digest("SHA-256", bytes);
     return new Uint8Array(buf);
 }
-async function sha256Hex(hex) {
+async function sha256Hex(hex)
+{
     return sha256(hexToBytes(hex));
 }
-async function hmacSha256(keyBytes, dataBytes) {
+async function hmacSha256(keyBytes, dataBytes)
+{
     const key = await crypto.subtle.importKey(
         "raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
     );
     const sig = await crypto.subtle.sign("HMAC", key, dataBytes);
     return new Uint8Array(sig);
 }
-async function hkdf16(ikm, salt) {
+async function hkdf16(ikm, salt)
+{
     const prk = await hmacSha256(salt, ikm);
     const infoBlock = new Uint8Array(INFO_BITS.length + 1);
     infoBlock.set(INFO_BITS, 0);
@@ -71,26 +83,32 @@ async function hkdf16(ikm, salt) {
     return t.slice(0, 16);
 }
 
-function modPow(base, exp, mod) {
+function modPow(base, exp, mod)
+{
     let result = 1n;
     base = ((base % mod) + mod) % mod;
-    while (exp > 0n) {
-        if (exp & 1n) result = (result * base) % mod;
+    while (exp > 0n)
+    {
+        if (exp & 1n)
+            result = (result * base) % mod;
         exp >>= 1n;
         base = (base * base) % mod;
     }
     return result;
 }
 
-function randomBigInt(bits) {
+function randomBigInt(bits)
+{
     const bytes = new Uint8Array(bits / 8);
     crypto.getRandomValues(bytes);
     return bytesToBigInt(bytes);
 }
 
-function concatBytes(...arrs) {
+function concatBytes(...arrs)
+{
     let len = 0;
-    for (const a of arrs) len += a.length;
+    for (const a of arrs)
+        len += a.length;
     const out = new Uint8Array(len);
     let off = 0;
     for (const a of arrs) { out.set(a, off); off += a.length; }
@@ -98,7 +116,8 @@ function concatBytes(...arrs) {
 }
 
 // "Day Mon D HH:MM:SS UTC YYYY" - day NOT zero-padded, time IS. AWS checks verbatim.
-function cognitoTimestamp() {
+function cognitoTimestamp()
+{
     const d = new Date();
     const wk = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getUTCDay()];
     const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()];
@@ -109,10 +128,12 @@ function cognitoTimestamp() {
     return `${wk} ${mo} ${day} ${hh}:${mm}:${ss} UTC ${d.getUTCFullYear()}`;
 }
 
-export function generateSrpA() {
+export function generateSrpA()
+{
     let a;
     let A;
-    do {
+    do
+    {
         a = randomBigInt(256);
         A = modPow(g, a, N);
     } while (A % N === 0n);
@@ -122,7 +143,8 @@ export function generateSrpA() {
 export async function computePasswordSignature({
     a, A, srpBHex, saltHex,
     poolId, userIdForSrp, password, secretBlockB64
-}) {
+})
+{
     const B = BigInt("0x" + srpBHex);
     if (B % N === 0n)
         throw new Error("Invalid SRP B from server");

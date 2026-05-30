@@ -15,7 +15,8 @@ const VOLATILE_SYSTEM_KEYS = new Set([
     "maxUses", "isUsed", "selected_profile_index"
 ]);
 
-export function stripVolatile(obj) {
+export function stripVolatile(obj)
+{
     if (obj === null || obj === undefined)
         return obj;
     if (Array.isArray(obj))
@@ -24,14 +25,17 @@ export function stripVolatile(obj) {
         return obj;
     const out = {};
     const keys = Object.keys(obj).sort();
-    for (const k of keys) {
+    for (const k of keys)
+    {
         if (VOLATILE_KEYS.has(k))
             continue;
         if (k === "flags")
             continue; // import timestamps, folder refs, etc.
-        if (k === "system" && obj[k] && typeof obj[k] === "object") {
+        if (k === "system" && obj[k] && typeof obj[k] === "object")
+        {
             const sys = {};
-            for (const sk of Object.keys(obj[k]).sort()) {
+            for (const sk of Object.keys(obj[k]).sort())
+            {
                 if (VOLATILE_SYSTEM_KEYS.has(sk))
                     continue;
                 sys[sk] = stripVolatile(obj[k][sk]);
@@ -45,19 +49,23 @@ export function stripVolatile(obj) {
 }
 
 // Derive a stable sort key: prefer system.lid (Lancer content LID), else name.
-function sortKey(doc) {
+function sortKey(doc)
+{
     return doc.system?.lid || doc.name || doc._id || "";
 }
 
-async function snapshotPack(pack, prefix) {
+async function snapshotPack(pack, prefix)
+{
     const index = await pack.getIndex({ fields: ["system.lid", "name"] });
     let candidates = Array.from(index);
-    if (prefix) {
+    if (prefix)
+    {
         candidates = candidates.filter(e => (e.system?.lid || "").startsWith(prefix));
     }
     candidates.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
     const entries = [];
-    for (const entry of candidates) {
+    for (const entry of candidates)
+    {
         const doc = await pack.getDocument(entry._id);
         if (!doc)
             continue;
@@ -77,7 +85,8 @@ async function snapshotPack(pack, prefix) {
  * @param {string}  [opts.label]  Label included in the filename (e.g. "v2" or "v3-translated").
  * @returns {Promise<object>} the snapshot object, keyed by pack collection id.
  */
-export async function dumpLcpSnapshot({ prefix = "", download = true, logToConsole = true, label = "snapshot" } = {}) {
+export async function dumpLcpSnapshot({ prefix = "", download = true, logToConsole = true, label = "snapshot" } = {})
+{
     const snapshot = {
         _meta: {
             generatedAt: new Date().toISOString(),
@@ -87,12 +96,14 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
             label
         }
     };
-    const lancerPacks = game.packs.filter(p => {
+    const lancerPacks = game.packs.filter(p =>
+    {
         const type = p.metadata.packageType;
         const sys = p.metadata.system || p.metadata.name;
         return type === "system" || type === "world" || sys === "lancer";
     });
-    for (const pack of lancerPacks) {
+    for (const pack of lancerPacks)
+    {
         if (!["Item", "Actor"].includes(pack.metadata.type))
             continue;
         const entries = await snapshotPack(pack, prefix);
@@ -102,14 +113,18 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
     if (logToConsole)
         console.log(`[compendium-snapshot] ${label}`, snapshot);
     const json = JSON.stringify(snapshot, null, 2);
-    if (download) {
+    if (download)
+    {
         const filename = `lancer-snapshot-${label}-${Date.now()}.json`;
         // Foundry's saveDataToFile handles Electron + browser uniformly, avoiding
         // the Microsoft Store popup that the native <a download> triggers in the desktop app.
         const save = globalThis.saveDataToFile ?? foundry.utils?.saveDataToFile;
-        if (save) {
+        if (save)
+        {
             save(json, "application/json", filename);
-        } else {
+        }
+        else
+        {
             const blob = new Blob([json], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -122,9 +137,11 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
         }
     }
     // Also copy to clipboard for console-driven workflows where downloading is painful.
-    try {
+    try
+    {
         await navigator.clipboard?.writeText(json);
-    } catch (e) { /* clipboard write is best-effort */ }
+    }
+    catch (e) { /* clipboard write is best-effort */ }
     return snapshot;
 }
 
@@ -132,25 +149,31 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
  * Diff two snapshots produced by dumpLcpSnapshot. Returns a structured report of
  * what's only in A, only in B, and differing between both (keyed by LID).
  */
-export function diffSnapshots(a, b) {
+export function diffSnapshots(a, b)
+{
     const report = { onlyInA: {}, onlyInB: {}, changed: {} };
     const packIds = new Set([...Object.keys(a), ...Object.keys(b)].filter(k => k !== "_meta"));
-    for (const packId of packIds) {
+    for (const packId of packIds)
+    {
         const aEntries = new Map((a[packId] ?? []).map(e => [e.system?.lid || e.name, e]));
         const bEntries = new Map((b[packId] ?? []).map(e => [e.system?.lid || e.name, e]));
-        for (const [key, aDoc] of aEntries) {
-            if (!bEntries.has(key)) {
+        for (const [key, aDoc] of aEntries)
+        {
+            if (!bEntries.has(key))
+            {
                 (report.onlyInA[packId] ??= []).push(key);
                 continue;
             }
             const bDoc = bEntries.get(key);
             const aJson = JSON.stringify(aDoc);
             const bJson = JSON.stringify(bDoc);
-            if (aJson !== bJson) {
+            if (aJson !== bJson)
+            {
                 (report.changed[packId] ??= []).push({ key, aDoc, bDoc });
             }
         }
-        for (const key of bEntries.keys()) {
+        for (const key of bEntries.keys())
+        {
             if (!aEntries.has(key))
                 (report.onlyInB[packId] ??= []).push(key);
         }
@@ -158,7 +181,8 @@ export function diffSnapshots(a, b) {
     return report;
 }
 
-export function registerSnapshotApi() {
+export function registerSnapshotApi()
+{
     const mod = game.modules.get(MODULE_ID);
     if (!mod)
         return;

@@ -10,12 +10,14 @@ import { isRefreshableActor } from "./refresh/refresh-core.js";
 import { COGNITO_SETTINGS_KEYS } from "./auth/cognito-auth.js";
 import { installV3CodeFetchPatch } from "./v3-api.js";
 
-export async function ImportActor() {
+export async function ImportActor()
+{
     new ActorImportDialog().render(true);
 }
 export const ImportNPC = ImportActor;
 
-Hooks.once('init', () => {
+Hooks.once('init', () =>
+{
     if (game.system?.id === 'lancer')
         installV3CodeFetchPatch();
 
@@ -163,7 +165,8 @@ Hooks.once('init', () => {
     });
 });
 
-Hooks.once('ready', async () => {
+Hooks.once('ready', async () =>
+{
     if (game.system.id !== 'lancer')
         return;
 
@@ -173,7 +176,8 @@ Hooks.once('ready', async () => {
     registerSnapshotApi();
 });
 
-Hooks.on('renderActorDirectory', (_app, htmlOrEl) => {
+Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
+{
     if (game.system.id !== 'lancer')
         return;
 
@@ -187,7 +191,8 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) => {
             <i class="fas fa-file-import"></i> Import Actor
         </button>
     `);
-    importButton.click(() => {
+    importButton.click(() =>
+    {
         ImportActor();
     });
     headerActions.append(importButton);
@@ -197,25 +202,33 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) => {
             <i class="fas fa-sync"></i> Refresh actors
         </button>
     `);
-    refreshButton.click(async () => {
+    refreshButton.click(async () =>
+    {
         const dlg = await RefreshItemsDialog.forAllActors();
-        if (dlg) dlg.render(true);
+        if (dlg)
+            dlg.render(true);
     });
     headerActions.append(refreshButton);
 });
 
-Hooks.on('getActorSheetHeaderButtons', (app, buttons) => {
-    if (game.system.id !== 'lancer') return;
+Hooks.on('getActorSheetHeaderButtons', (app, buttons) =>
+{
+    if (game.system.id !== 'lancer')
+        return;
     const actor = app.actor;
-    if (!isRefreshableActor(actor)) return;
-    if (!actor.isOwner) return;
+    if (!isRefreshableActor(actor))
+        return;
+    if (!actor.isOwner)
+        return;
     buttons.unshift({
         class: 'lancer-refresh-items-btn',
         icon: 'fas fa-sync',
         label: 'Refresh',
-        onclick: async () => {
+        onclick: async () =>
+        {
             const dlg = await RefreshItemsDialog.forActor(actor);
-            if (dlg) dlg.render(true);
+            if (dlg)
+                dlg.render(true);
         }
     });
 });

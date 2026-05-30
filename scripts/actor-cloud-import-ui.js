@@ -8,15 +8,18 @@ import { importSelectedNPCs } from "./npc-import-core.js";
 import { isLoggedIn } from "./auth/cognito-auth.js";
 import { CompconLoginDialog } from "./auth/login-dialog.js";
 
-async function _ensureLoggedIn() {
+async function _ensureLoggedIn()
+{
     if (isLoggedIn())
         return true;
-    return new Promise(resolve => {
+    return new Promise(resolve =>
+    {
         new CompconLoginDialog(ok => resolve(!!ok)).render(true);
     });
 }
 
-function _loadingDialog(total) {
+function _loadingDialog(total)
+{
     const dlg = new Dialog({
         title: "Loading Comp/Con",
         content: `
@@ -39,8 +42,10 @@ function _loadingDialog(total) {
     dlg.render(true);
 
     const state = { p: 0, pTotal: total.pilots, n: 0, nTotal: total.npcs };
-    const repaint = () => {
-        if (!dlg.element) return;
+    const repaint = () =>
+    {
+        if (!dlg.element)
+            return;
         const done = state.p + state.n;
         const tot = state.pTotal + state.nTotal;
         const pct = tot > 0 ? Math.round((done / tot) * 100) : 0;
@@ -49,14 +54,24 @@ function _loadingDialog(total) {
     };
     return {
         dialog: dlg,
-        pilotProgress: (loaded, total) => { state.p = loaded; if (total) state.pTotal = total; repaint(); },
-        npcProgress:   (loaded, total) => { state.n = loaded; if (total) state.nTotal = total; repaint(); },
+        pilotProgress: (loaded, total) =>
+        {
+            state.p = loaded; if (total)
+                state.pTotal = total; repaint();
+        },
+        npcProgress:   (loaded, total) =>
+        {
+            state.n = loaded; if (total)
+                state.nTotal = total; repaint();
+        },
         close: () => dlg.close()
     };
 }
 
-export class CloudActorImportDialog extends Dialog {
-    constructor(pilots, npcs) {
+export class CloudActorImportDialog extends Dialog
+{
+    constructor(pilots, npcs)
+    {
         const pilotPanel = buildPilotSelectionPanel(pilots);
         const npcPanel = buildNPCSelectionPanel(npcs);
 
@@ -86,21 +101,27 @@ export class CloudActorImportDialog extends Dialog {
                 import: {
                     icon: '<i class="fas fa-download"></i>',
                     label: "Import Selected",
-                    callback: async (html) => {
+                    callback: async (html) =>
+                    {
                         const active = html.find(".cloud-import-tab.active").data("tab");
-                        if (active === "pilots") {
+                        if (active === "pilots")
+                        {
                             const $body = html.find(".cloud-import-tabbody[data-tab-body='pilots']");
                             const selected = pilotPanel.getSelected($body);
-                            if (selected.length === 0) {
+                            if (selected.length === 0)
+                            {
                                 ui.notifications.warn("No pilots selected");
                                 return;
                             }
                             const { updateExisting } = pilotPanel.getOptions($body);
                             await importSelectedPilots(selected, updateExisting);
-                        } else {
+                        }
+                        else
+                        {
                             const $body = html.find(".cloud-import-tabbody[data-tab-body='npcs']");
                             const selected = npcPanel.getSelected($body);
-                            if (selected.length === 0) {
+                            if (selected.length === 0)
+                            {
                                 ui.notifications.warn("No NPCs selected");
                                 return;
                             }
@@ -124,14 +145,16 @@ export class CloudActorImportDialog extends Dialog {
         this._npcs = npcs;
     }
 
-    activateListeners(html) {
+    activateListeners(html)
+    {
         super.activateListeners(html);
 
         const $pilotBody = html.find(".cloud-import-tabbody[data-tab-body='pilots']");
         const $npcBody = html.find(".cloud-import-tabbody[data-tab-body='npcs']");
         this._pilotPanel.activate($pilotBody);
         this._npcPanel.activate($npcBody, {
-            onRefresh: () => {
+            onRefresh: () =>
+            {
                 // re-render the dialog so badges update after a Link Actors action
                 this.close();
                 new CloudActorImportDialog(this._pilots, this._npcs).render(true);
@@ -139,7 +162,8 @@ export class CloudActorImportDialog extends Dialog {
         });
 
         const self = this;
-        html.find(".cloud-import-tab").on("click", function() {
+        html.find(".cloud-import-tab").on("click", function()
+        {
             const tab = $(this).data("tab");
             html.find(".cloud-import-tab").removeClass("active");
             $(this).addClass("active");
@@ -151,26 +175,32 @@ export class CloudActorImportDialog extends Dialog {
     }
 }
 
-export async function openCloudActorImport() {
+export async function openCloudActorImport()
+{
     const signedIn = await _ensureLoggedIn();
     if (!signedIn)
         return;
 
     const loader = _loadingDialog({ pilots: 0, npcs: 0 });
-    try {
+    try
+    {
         const [pilots, npcs] = await Promise.all([
             fetchPilotsViaV3API((loaded, total) => loader.pilotProgress(loaded, total)),
             fetchNPCsViaV3API((loaded, total) => loader.npcProgress(loaded, total))
         ]);
         loader.close();
-        if (pilots.length === 0 && npcs.length === 0) {
+        if (pilots.length === 0 && npcs.length === 0)
+        {
             ui.notifications.warn("No pilots or NPCs found in Comp/Con cloud");
             return;
         }
         new CloudActorImportDialog(pilots, npcs).render(true);
-    } catch (e) {
+    }
+    catch (e)
+    {
         loader.close();
-        if (e.message === "NOT_LOGGED_IN") {
+        if (e.message === "NOT_LOGGED_IN")
+        {
             ui.notifications.warn("Sign in to Comp/Con to browse cloud actors.");
             return;
         }
