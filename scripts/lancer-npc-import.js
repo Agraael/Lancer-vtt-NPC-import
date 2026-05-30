@@ -173,10 +173,11 @@ Hooks.once('ready', async () => {
     registerSnapshotApi();
 });
 
-Hooks.on('renderActorDirectory', (_app, html) => {
+Hooks.on('renderActorDirectory', (_app, htmlOrEl) => {
     if (game.system.id !== 'lancer')
         return;
 
+    const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
     const headerActions = html.find('.header-actions.action-buttons');
     if (headerActions.length === 0)
         return;
