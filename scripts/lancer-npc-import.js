@@ -180,6 +180,8 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
 {
     if (game.system.id !== 'lancer')
         return;
+    if (!game.user?.isGM)
+        return;
 
     const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
     const headerActions = html.find('.header-actions.action-buttons');
