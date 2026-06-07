@@ -1473,16 +1473,30 @@ export async function getLancerApi()
     if (_lancerApi)
         return _lancerApi;
     const entrySrc = await fetch("/systems/lancer/lancer.mjs").then(r => r.text());
-    const match = entrySrc.match(/(?:from|import)\s+['"](\.\/)?(lancer-[^'"]+\.mjs)['"]/);
-    if (!match)
-        throw new Error("v3-lcp-shim: could not locate Lancer main bundle");
-    const mod = await import(`/systems/lancer/${match[2]}`);
-    // Exported in the system bundle as `parseContentPack as p` and `importCP as i`.
-    if (typeof mod.p !== "function" || typeof mod.i !== "function")
+
+    const actorMatch = entrySrc.match(/(?:from|import)\s+['"](\.\/)?(lancer-actor-[^'"]+\.mjs)['"]/);
+    const compMatch  = entrySrc.match(/(?:from|import)\s+['"](\.\/)?(comp-builder-[^'"]+\.mjs)['"]/);
+    if (!actorMatch || !compMatch)
+        throw new Error("v3-lcp-shim: Lancer v3 bundles not found");
+
+    // Signature scan survives minified-name reshuffles between v3.x versions.
+    const findFn = (mod, preferred, sig) =>
     {
-        throw new Error("v3-lcp-shim: Lancer API (parseContentPack/importCP) not found in bundle");
-    }
-    _lancerApi = { parseContentPack: mod.p, importCP: mod.i };
+        if (typeof mod?.[preferred] === "function") return mod[preferred];
+        for (const v of Object.values(mod ?? {}))
+            if (typeof v === "function") { try { if (sig.test(v.toString())) return v; } catch (_) {} }
+        return null;
+    };
+    const [actorMod, compMod] = await Promise.all([
+        import(`/systems/lancer/${actorMatch[2]}`),
+        import(`/systems/lancer/${compMatch[2]}`)
+    ]);
+    const parse    = findFn(actorMod, "st", /loadAsync|lcp_manifest|JSZip|content_packs/);
+    const importCp = findFn(compMod, "n",  /coreBonuses[\s\S]{0,400}npcClasses|npcFeatures[\s\S]{0,400}npcTemplates/);
+    if (typeof parse !== "function" || typeof importCp !== "function")
+        throw new Error("v3-lcp-shim: parseContentPack/importCP not found in v3 bundles");
+
+    _lancerApi = { parseContentPack: parse, importCP: importCp };
     return _lancerApi;
 }
 
