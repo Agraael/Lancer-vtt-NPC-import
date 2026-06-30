@@ -51,10 +51,24 @@ Custom stats are detected by comparing against the class base, so it still works
 
 Button only shows up for v3 LCPs. v2 LCPs go through the normal Lancer importer.
 
-Stuff v3 has that Lancer doesn't:
-- Eidolons → each layer becomes an NPC template + features in an `Eidolons` folder. Apply the template you want on the Eidolon actor manually. No layer-swap.
-- `active_effects` → lifted into bonuses/actions where possible, rest appended to the item's effect text.
-- `add_status` / `add_resist` → appended as text. Lancer doesn't apply statuses from LCPs.
+| v3 feature | Handling |
+|---|---|
+| `active_effects[]` bonuses / actions / deployables / synergies / counters | Lifted into the item's v2 arrays |
+| Action-shaped `active_effects[]` (damage / range / attack / condition / frequency) | Synthesized as v2 actions |
+| `save` (scalar or `.dc`) / `accuracy` / `bonus_damage` scalars | Lifted into bonuses |
+| `on_attack` / `on_hit` / `on_crit` / `on_miss` as objects | String-coerced; `on_attack` / `on_crit` merged into effect |
+| `damage[].val` → `damage[].damage` | Renamed |
+| NPC weapon tier arrays | Pass-through (Lancer handles natively) |
+| Inline `integrated` items | Flattened to LID strings |
+| `core_system.active_effects[]` / `passive_effects[]` | Fanned into `active_bonuses` / `active_actions` / `active_synergies` (+ passive) plus core `deployables` / `counters` |
+| `add_status` / `add_resist` / `add_special` / `remove_special` | Text in effect — Lancer doesn't apply statuses from LCPs |
+| `duration` / `condition` / `target` (non-action AEs) | Text meta in header |
+| `damage` / `bonus_damage` on non-action AEs | Text in effect |
+| Structured `save.on_success` / `on_fail` | Text in effect (DC still goes to bonus) |
+| Eidolon layers | Each layer → NPC template + features in an `Eidolons` folder. Apply manually, no layer-swap |
+| `flavorDescription` / `brew` / `deprecated` | Dropped |
+
+Translation summary in the LCP Manager shows per-bucket counts and how many AE blocks went structured vs text.
 
 
 ## Refresh items from LCPs

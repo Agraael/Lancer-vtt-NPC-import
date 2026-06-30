@@ -240,6 +240,23 @@ function renderResidualText(ae, handled)
         const s = renderTokens(ae.remove_special); if (s)
             extras.push(`Removes special: ${s}`);
     }
+    // Structured save object: surface stat/dc/on_success/on_fail in text.
+    // Scalar save is already lifted into bonuses by liftActiveEffects.
+    if (ae.save && typeof ae.save === "object")
+    {
+        const parts = [];
+        if (ae.save.stat)
+            parts.push(String(ae.save.stat).toUpperCase());
+        if (ae.save.dc !== undefined)
+            parts.push(String(ae.save.dc));
+        const head = parts.join(" ");
+        const tail = [];
+        if (ae.save.on_success)
+            tail.push(`success: ${ae.save.on_success}`);
+        if (ae.save.on_fail)
+            tail.push(`fail: ${ae.save.on_fail}`);
+        extras.push(`Save${head ? ` ${head}` : ""}${tail.length ? ` (${tail.join("; ")})` : ""}`);
+    }
     // No meaningful body → don't emit a header-only trailer.
     if (!detail && !extras.length && !meta.length)
         return "";
@@ -362,7 +379,11 @@ function liftActiveEffects(item)
         const newBonuses = [];
         if (ae.save !== undefined && ae.save !== null && ae.save !== "")
         {
-            newBonuses.push({ lid: "save", val: String(ae.save) });
+            // v3 save can be scalar (legacy) or structured {stat, dc, on_success, on_fail}.
+            // Use dc as the bonus value; full structure surfaces in residual text.
+            const scalarSave = typeof ae.save === "object" ? ae.save.dc : ae.save;
+            if (scalarSave !== undefined && scalarSave !== null && scalarSave !== "")
+                newBonuses.push({ lid: "save", val: String(scalarSave) });
         }
         if (typeof ae.accuracy === "number" && ae.accuracy !== 0)
         {
@@ -465,6 +486,26 @@ function mergeEffectArrayToHtml(arr)
 {
     if (!Array.isArray(arr))
         return "";
+    const renderToken = t =>
+    {
+        if (t == null)
+            return "";
+        if (typeof t === "string")
+            return t;
+        if (typeof t === "object")
+            return t.name ?? t.lid ?? t.id ?? "";
+        return String(t);
+    };
+    const renderTokens = v => (Array.isArray(v) ? v : [v]).map(renderToken).filter(Boolean).join(", ");
+    const renderDamage = v => (Array.isArray(v) ? v : [v]).map(d =>
+    {
+        if (typeof d === "string")
+            return d;
+        if (typeof d === "object")
+            return [d.val ?? d.damage ?? "", d.type ?? ""].filter(Boolean).join(" ");
+        return String(d);
+    }).filter(Boolean).join(", ");
+
     const parts = [];
     for (const ae of arr)
     {
@@ -476,11 +517,68 @@ function mergeEffectArrayToHtml(arr)
             meta.push(ae.frequency);
         if (ae.duration)
             meta.push(ae.duration);
+        if (ae.target)
+            meta.push(`Target: ${ae.target}`);
         const header = label + (meta.length ? ` (${meta.join(", ")})` : "");
         const body = ae.detail ?? "";
+        const extras = [];
+        if (ae.add_status)
+        {
+            const s = renderTokens(ae.add_status); if (s)
+                extras.push(`Applies status: ${s}`);
+        }
+        if (ae.add_resist)
+        {
+            const s = renderTokens(ae.add_resist); if (s)
+                extras.push(`Grants resistance: ${s}`);
+        }
+        if (ae.add_special)
+        {
+            const s = renderTokens(ae.add_special); if (s)
+                extras.push(`Special: ${s}`);
+        }
+        if (ae.remove_special)
+        {
+            const s = renderTokens(ae.remove_special); if (s)
+                extras.push(`Removes special: ${s}`);
+        }
+        if (ae.damage)
+        {
+            const s = renderDamage(ae.damage); if (s)
+                extras.push(`Damage: ${s}`);
+        }
+        if (ae.bonus_damage)
+        {
+            const s = renderDamage(ae.bonus_damage); if (s)
+                extras.push(`Bonus damage: ${s}`);
+        }
+        if (ae.save !== undefined && ae.save !== null && ae.save !== "")
+        {
+            if (typeof ae.save === "object")
+            {
+                const parts = [];
+                if (ae.save.stat)
+                    parts.push(String(ae.save.stat).toUpperCase());
+                if (ae.save.dc !== undefined)
+                    parts.push(String(ae.save.dc));
+                const head = parts.join(" ");
+                const tail = [];
+                if (ae.save.on_success)
+                    tail.push(`success: ${ae.save.on_success}`);
+                if (ae.save.on_fail)
+                    tail.push(`fail: ${ae.save.on_fail}`);
+                extras.push(`Save${head ? ` ${head}` : ""}${tail.length ? ` (${tail.join("; ")})` : ""}`);
+            }
+            else
+            {
+                extras.push(`Save: ${ae.save}`);
+            }
+        }
         const chunk = [header, body].filter(Boolean).join(" ");
-        if (chunk)
-            parts.push(`<p>${chunk}</p>`);
+        const extrasChunk = extras.length ? `<em>${extras.join(" | ")}</em>` : "";
+        const full = [chunk, extrasChunk].filter(Boolean).join("<br>");
+        if (full)
+            parts.push(`<p>${full}</p>`);
     }
     return parts.join("");
 }
@@ -613,6 +711,15 @@ function liftCoreSystemEffects(core, kind)
         if (Array.isArray(ae.synergies) && ae.synergies.length)
         {
             core[synergyKey] = (core[synergyKey] ?? []).concat(ae.synergies);
+        }
+        // core_system schema has top-level deployables/counters (not prefixed)
+        if (Array.isArray(ae.deployables) && ae.deployables.length)
+        {
+            core.deployables = (core.deployables ?? []).concat(ae.deployables);
+        }
+        if (Array.isArray(ae.counters) && ae.counters.length)
+        {
+            core.counters = (core.counters ?? []).concat(ae.counters);
         }
     }
     const html = mergeEffectArrayToHtml(arr);
