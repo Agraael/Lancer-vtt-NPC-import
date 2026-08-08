@@ -3,7 +3,6 @@
 import { ImportProgressDialog, uploadPortraitToServer } from "./npc-import-ui.js";
 import { selectActorMappings } from "./npc-import-files.js";
 
-// Importer les NPCs sélectionnés depuis Comp/Con
 export async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled', manualReplace = false, downloadPortraits = false)
 {
     let mappings = null;
@@ -112,9 +111,9 @@ export async function applyFeatureCustomizations(actor, npcData, progressDialog 
 
         for (const ccItem of npcData.items)
         {
-            const feature = actor.items.find(i =>
-                i.type === 'npc_feature' &&
-                i.system.lid === ccItem.itemID
+            const feature = actor.items.find(item =>
+                item.type === 'npc_feature' &&
+                item.system.lid === ccItem.itemID
             );
 
             if (!feature)
@@ -160,7 +159,7 @@ export async function applyFeatureCustomizations(actor, npcData, progressDialog 
 
         if (tierOverrides.length > 0)
         {
-            const featureList = tierOverrides.map(f => `${f.name} (T${f.tier})`).join(', ');
+            const featureList = tierOverrides.map(override => `${override.name} (T${override.tier})`).join(', ');
             if (progressDialog)
             {
                 progressDialog.addLog(`  ⚠ ${tierOverrides.length} feature(s) with different tiers not applied: ${featureList}`, 'warning');
@@ -183,7 +182,7 @@ export async function applyCustomTierStats(actor, npcData, mode = 'scaled', prog
 {
     try
     {
-        const npcClass = actor.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
+        const npcClass = actor.items.find(item => item.type === 'npc_class' && item.system.lid === npcData.class);
 
         if (!npcClass)
         {
@@ -265,33 +264,30 @@ export async function applyCustomTierStats(actor, npcData, mode = 'scaled', prog
     }
 }
 
-// Chercher tous les NPCs existants par LID
 export function findExistingNPCsByLID(npcData)
 {
     const found = [];
 
     if (npcData.id)
     {
-        const actorsByLid = game.actors.filter(a => a.type === 'npc' && a.system.lid === npcData.id);
+        const actorsByLid = game.actors.filter(actor => actor.type === 'npc' && actor.system.lid === npcData.id);
         found.push(...actorsByLid);
     }
 
     return found;
 }
 
-// Comparer un NPC de Comp/Con avec un acteur existant
 // Retourne: { status: 'new'|'unlinked'|'synced'|'modified', count: nombre, reasons: [] }
 export function compareNPCWithActor(npcData, actors)
 {
-    // Aucun acteur trouvé par LID
     if (!actors || actors.length === 0)
     {
         // Vérifier si un NPC avec le même nom existe (sans LID correspondant)
         if (npcData.name)
         {
             const nameLower = npcData.name.toLowerCase();
-            const actorsByName = game.actors.filter(a =>
-                a.type === 'npc' && a.name.toLowerCase() === nameLower
+            const actorsByName = game.actors.filter(actor =>
+                actor.type === 'npc' && actor.name.toLowerCase() === nameLower
             );
             if (actorsByName.length > 0)
             {
@@ -311,8 +307,8 @@ export function compareNPCWithActor(npcData, actors)
             continue;
         anyModified = true;
         const prefix = actors.length > 1 ? `[${actor.name}] ` : '';
-        for (const r of perActorReasons)
-            allReasons.push(`${prefix}${r}`);
+        for (const reason of perActorReasons)
+            allReasons.push(`${prefix}${reason}`);
     }
 
     if (anyModified)
@@ -328,15 +324,15 @@ function _compareNpcSingleActor(npcData, actor)
     if (npcData.tier !== 'custom' && npcTier !== actor.system.tier)
         reasons.push(`tier changed: ${actor.system.tier} → ${npcTier}`);
 
-    const actorClass = actor.items.find(i => i.type === 'npc_class');
+    const actorClass = actor.items.find(item => item.type === 'npc_class');
     const actorClassLid = actorClass?.system.lid;
     if (npcData.class !== actorClassLid)
         reasons.push(`class: ${actorClassLid || 'none'} → ${npcData.class || 'none'}`);
 
     const npcTemplates = (npcData.templates || []).filter(lid => lid).sort();
     const actorTemplates = actor.items
-        .filter(i => i.type === 'npc_template')
-        .map(i => i.system.lid)
+        .filter(item => item.type === 'npc_template')
+        .map(item => item.system.lid)
         .filter(lid => lid)
         .sort();
     if (npcTemplates.length !== actorTemplates.length
@@ -348,8 +344,8 @@ function _compareNpcSingleActor(npcData, actor)
         .filter(lid => lid)
         .sort();
     const actorFeatures = actor.items
-        .filter(i => i.type === 'npc_feature')
-        .map(i => i.system.lid)
+        .filter(item => item.type === 'npc_feature')
+        .map(item => item.system.lid)
         .filter(lid => lid)
         .sort();
     if (npcFeatures.length !== actorFeatures.length
@@ -357,7 +353,7 @@ function _compareNpcSingleActor(npcData, actor)
         reasons.push(`features: ${actorFeatures.length} → ${npcFeatures.length}`);
 
     const stats = npcData.stats || {};
-    const npcClass = actor.items.find(i => i.type === 'npc_class');
+    const npcClass = actor.items.find(item => item.type === 'npc_class');
     if (npcClass && npcClass.system.base_stats)
     {
         const isCustomTier = npcData.tier === 'custom';
@@ -411,46 +407,46 @@ export function normalizeNpcData(npcData)
     // templates: objects → string LIDs
     if (Array.isArray(npcData.templates))
     {
-        npcData.templates = npcData.templates.map(t =>
-            typeof t === 'string' ? t : (t.data?.id || t.id || t)
+        npcData.templates = npcData.templates.map(template =>
+            typeof template === 'string' ? template : (template.data?.id || template.id || template)
         );
     }
 
     // features (v2) → items (v3)
     if (npcData.features && !npcData.items)
     {
-        npcData.items = npcData.features.map(f => ({
-            itemID: f.data?.id || f.id || f.itemID,
-            tier: f.tier || 1,
-            flavorName: f.flavorName || '',
-            description: f.description || '',
-            destroyed: f.destroyed || false,
-            charged: f.charged ?? true,
-            uses: f.uses || 0
+        npcData.items = npcData.features.map(feature => ({
+            itemID: feature.data?.id || feature.id || feature.itemID,
+            tier: feature.tier || 1,
+            flavorName: feature.flavorName || '',
+            description: feature.description || '',
+            destroyed: feature.destroyed || false,
+            charged: feature.charged ?? true,
+            uses: feature.uses || 0
         }));
     }
 
     // v2 stats: combat_data.stats.max → stats at root (with v3 field names)
     if (!npcData.stats && npcData.combat_data?.stats?.max)
     {
-        const s = npcData.combat_data.stats.max;
+        const maxStats = npcData.combat_data.stats.max;
         npcData.stats = {
-            activations: s.activations,
-            armor: s.armor,
-            hp: s.hp,
-            evade: s.evasion,
-            edef: s.edef,
-            heatcap: s.heatcap,
-            speed: s.speed,
-            sensor: s.sensorRange,
-            save: s.saveTarget,
-            hull: s.hull,
-            agility: s.agi,
-            systems: s.sys,
-            engineering: s.eng,
-            size: s.size,
-            structure: s.structure,
-            stress: s.stress
+            activations: maxStats.activations,
+            armor: maxStats.armor,
+            hp: maxStats.hp,
+            evade: maxStats.evasion,
+            edef: maxStats.edef,
+            heatcap: maxStats.heatcap,
+            speed: maxStats.speed,
+            sensor: maxStats.sensorRange,
+            save: maxStats.saveTarget,
+            hull: maxStats.hull,
+            agility: maxStats.agi,
+            systems: maxStats.sys,
+            engineering: maxStats.eng,
+            size: maxStats.size,
+            structure: maxStats.structure,
+            stress: maxStats.stress
         };
     }
 
@@ -468,7 +464,6 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
     normalizeNpcData(npcData);
     const isCustomTier = npcData.tier === 'custom';
 
-    // Déterminer les acteurs à mettre à jour
     let existingActors = [];
     let isReplace = false;
     let localImagePath = null;
@@ -492,7 +487,6 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
     }
     else if (updateExisting)
     {
-        // Chercher tous les NPCs existants par LID
         existingActors = findExistingNPCsByLID(npcData);
 
         if (existingActors.length > 1)
@@ -540,7 +534,6 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
 
     if (existingActors.length > 0)
     {
-        // Mettre à jour tous les acteurs existants
         for (const existingActor of existingActors)
         {
             console.log(`Updating existing NPC: ${existingActor.name}`);
@@ -553,9 +546,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
                 console.log(`Preserving custom size (${existingActor.system.size}) for ${existingActor.name}`);
             }
 
-            // Déterminer si on change le nom :
-            // - Update normal : jamais changer le nom (garder celui de l'acteur)
-            // - Replace manuel : changer seulement si keepName=false
+            // Changement de nom seulement en replace manuel avec keepName=false; l'update normal garde le nom de l'acteur.
             const finalName = (isReplace && !keepName) ? npcData.name : existingActor.name;
 
             await existingActor.update({
@@ -672,16 +663,15 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
 
     const actorsToUpdate = existingActors.length > 0 ? existingActors : [actor];
 
-    // Appliquer les items à tous les acteurs
     for (const actorToUpdate of actorsToUpdate)
     {
         // Supprimer les anciennes classes et templates
-        const oldClassAndTemplates = actorToUpdate.items.filter(i =>
-            i.type === 'npc_class' || i.type === 'npc_template'
+        const oldClassAndTemplates = actorToUpdate.items.filter(item =>
+            item.type === 'npc_class' || item.type === 'npc_template'
         );
         if (oldClassAndTemplates.length > 0)
         {
-            await actorToUpdate.deleteEmbeddedDocuments('Item', oldClassAndTemplates.map(i => i.id));
+            await actorToUpdate.deleteEmbeddedDocuments('Item', oldClassAndTemplates.map(item => item.id));
         }
 
         // Ajouter class et templates (déclenche automatiquement les base_features via hook)
@@ -704,7 +694,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
 
         if (!needsCustomStats && npcData.class && npcData.stats)
         {
-            const npcClass = actorToUpdate.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
+            const npcClass = actorToUpdate.items.find(item => item.type === 'npc_class' && item.system.lid === npcData.class);
             if (npcClass?.system.base_stats)
             {
                 const tierIndex = Math.max(0, parseTier(npcData.tier) - 1);
@@ -745,7 +735,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
         else if (npcData.class && npcData.stats?.size)
         {
             // Just apply size if it differs (some classes allow multiple sizes)
-            const npcClass = actorToUpdate.items.find(i => i.type === 'npc_class' && i.system.lid === npcData.class);
+            const npcClass = actorToUpdate.items.find(item => item.type === 'npc_class' && item.system.lid === npcData.class);
             if (npcClass)
             {
                 const newBaseStats = npcClass.system.base_stats.map(tierStats => ({
@@ -757,15 +747,14 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
         }
 
         // Supprimer TOUTES les features (y compris celles ajoutées par les templates)
-        const allFeatures = actorToUpdate.items.filter(i => i.type === 'npc_feature');
+        const allFeatures = actorToUpdate.items.filter(item => item.type === 'npc_feature');
         if (allFeatures.length > 0)
         {
             console.log(`Removing ${allFeatures.length} auto-added features before adding Comp/Con features`);
-            await actorToUpdate.deleteEmbeddedDocuments('Item', allFeatures.map(i => i.id));
+            await actorToUpdate.deleteEmbeddedDocuments('Item', allFeatures.map(item => item.id));
             await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        // Ajouter les features de Comp/Con
         if (featuresToAdd.length > 0)
         {
             await actorToUpdate.createEmbeddedDocuments('Item', featuresToAdd);
@@ -780,6 +769,17 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
             'system.structure.value': actorToUpdate.system.structure.max,
             'system.stress.value': actorToUpdate.system.stress.max
         });
+
+        // Sync prototype token size to the NPC's Lancer size so drops snap right. Half-size (0.5) stays 1x1 (LA handles the visual).
+        const tokenSize = Math.max(1, Math.round(actorToUpdate.system?.size ?? 1));
+        const proto = actorToUpdate.prototypeToken;
+        if (!proto?.flags?.lancer?.manual_token_size && (proto?.width !== tokenSize || proto?.height !== tokenSize))
+        {
+            await actorToUpdate.update({
+                'prototypeToken.width': tokenSize,
+                'prototypeToken.height': tokenSize
+            });
+        }
     }
 
     if (missingFeatures.length > 0)
@@ -810,10 +810,10 @@ export async function findItemByLid(lid, itemType = null)
         if (pack.metadata.type !== 'Item')
             continue;
         const index = await pack.getIndex({ fields: ['system.lid', 'type'] });
-        const entry = index.find(i =>
+        const entry = index.find(indexEntry =>
         {
-            const matchesLid = i.system?.lid === lid;
-            const matchesType = itemType ? i.type === itemType : true;
+            const matchesLid = indexEntry.system?.lid === lid;
+            const matchesType = itemType ? indexEntry.type === itemType : true;
             return matchesLid && matchesType;
         });
         if (entry)

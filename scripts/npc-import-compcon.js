@@ -125,12 +125,12 @@ export async function fetchNPCsViaV3API(progressUpdate)
             title: "Loading NPCs",
             content: `
                 <div style="text-align:center; padding: 20px;">
-                    <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING NPC DATA</div>
+                    <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: var(--la-ink);">DOWNLOADING NPC DATA</div>
                     <div style="margin: 15px 0;">
                         <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
                             <div id="v3-loading-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
                         </div>
-                        <div id="v3-loading-text" style="margin-top: 8px; color: #444;">0 / ${npcItems.length}</div>
+                        <div id="v3-loading-text" style="margin-top: 8px; color: var(--la-ink-dim);">0 / ${npcItems.length}</div>
                     </div>
                 </div>
             `,
@@ -200,7 +200,7 @@ export async function fetchNPCsViaV3API(progressUpdate)
     }
 
     loadingDialog?.close();
-    npcs.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
+    npcs.sort((npcA, npcB) => String(npcA.name || "").localeCompare(String(npcB.name || ""), undefined, { sensitivity: "base" }));
     return npcs;
 }
 

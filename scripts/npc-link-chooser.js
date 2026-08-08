@@ -1,10 +1,9 @@
-// Per-NPC link chooser dialog. Shown when Link Actors is clicked and there's
-// more than one same-name candidate, or always when the user wants to opt in
-// to picking explicitly.
+// Per-NPC link chooser dialog: shown when Link Actors has more than one
+// same-name candidate, or when the user opts in to picking explicitly.
 
-function _esc(s)
+function _esc(value)
 {
-    return foundry.utils.escapeHTML?.(String(s ?? "")) ?? String(s ?? "");
+    return foundry.utils.escapeHTML?.(String(value ?? "")) ?? String(value ?? "");
 }
 
 function _candidateRow(actor, checked, isLinkedAlready)
@@ -26,16 +25,16 @@ function _candidateRow(actor, checked, isLinkedAlready)
 export async function showLinkChooser(cloudNpc, alreadyLinked = [])
 {
     const nameLower = (cloudNpc.json?.name || cloudNpc.name || "").toLowerCase();
-    const sameName = game.actors.filter(a =>
-        a.type === "npc" && a.name.toLowerCase() === nameLower
+    const sameName = game.actors.filter(actor =>
+        actor.type === "npc" && actor.name.toLowerCase() === nameLower
     );
-    const initialLinkedIds = new Set(alreadyLinked.map(a => a.id));
+    const initialLinkedIds = new Set(alreadyLinked.map(actor => actor.id));
     const initialUnion = [...alreadyLinked];
-    for (const a of sameName)
-        if (!initialLinkedIds.has(a.id))
-            initialUnion.push(a);
-    let candidateIds = new Set(initialUnion.map(a => a.id));
-    let checkedIds = new Set(initialUnion.map(a => a.id));
+    for (const actor of sameName)
+        if (!initialLinkedIds.has(actor.id))
+            initialUnion.push(actor);
+    let candidateIds = new Set(initialUnion.map(actor => actor.id));
+    let checkedIds = new Set(initialUnion.map(actor => actor.id));
 
     return new Promise((resolve) =>
     {
@@ -43,7 +42,7 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = [])
         {
             const candidates = [...candidateIds].map(id => game.actors.get(id)).filter(Boolean);
             const rows = candidates.length
-                ? candidates.map(a => _candidateRow(a, checkedIds.has(a.id), initialLinkedIds.has(a.id))).join("")
+                ? candidates.map(actor => _candidateRow(actor, checkedIds.has(actor.id), initialLinkedIds.has(actor.id))).join("")
                 : `<div class="link-candidate-empty">No same-name NPC actors. Use "Add another actor" to pick one.</div>`;
             return `
                 <div class="lancer-dialog-base link-chooser">
@@ -56,9 +55,9 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = [])
                         <select id="link-add-pick">
                             <option value="">-- pick another NPC actor to link --</option>
                             ${game.actors
-        .filter(a => a.type === "npc" && !candidateIds.has(a.id))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(a => `<option value="${a.id}">${_esc(a.name)}${a.folder?.name ? ` (${_esc(a.folder.name)})` : ""}</option>`)
+        .filter(actor => actor.type === "npc" && !candidateIds.has(actor.id))
+        .sort((actorA, actorB) => actorA.name.localeCompare(actorB.name))
+        .map(actor => `<option value="${actor.id}">${_esc(actor.name)}${actor.folder?.name ? ` (${_esc(actor.folder.name)})` : ""}</option>`)
         .join("")}
                         </select>
                         <button type="button" class="lancer-action-btn" id="link-add-btn">
@@ -87,15 +86,15 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = [])
                         const toUnlink = [];
                         for (const id of candidateIds)
                         {
-                            const a = game.actors.get(id);
-                            if (!a)
+                            const actor = game.actors.get(id);
+                            if (!actor)
                                 continue;
                             const was = initialLinkedIds.has(id);
                             const now = checkedNow.has(id);
                             if (now)
-                                toLink.push(a);
+                                toLink.push(actor);
                             else if (was)
-                                toUnlink.push(a);
+                                toUnlink.push(actor);
                         }
                         resolve({ toLink, toUnlink });
                     }

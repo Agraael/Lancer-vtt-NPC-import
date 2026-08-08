@@ -24,12 +24,12 @@ function _loadingDialog(total)
         title: "Loading Comp/Con",
         content: `
             <div style="text-align:center; padding: 20px;">
-                <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: #222;">DOWNLOADING CLOUD DATA</div>
+                <div style="font-size: 14px; font-weight: bold; letter-spacing: 2px; color: var(--la-ink);">DOWNLOADING CLOUD DATA</div>
                 <div style="margin: 15px 0;">
                     <div style="background: #ccc; border-radius: 4px; overflow: hidden; height: 20px;">
                         <div id="actor-load-bar" style="background: #991e2a; height: 100%; width: 0%; transition: width 0.2s;"></div>
                     </div>
-                    <div id="actor-load-text" style="margin-top: 8px; color: #444;">Pilots 0 / ? · NPCs 0 / ?</div>
+                    <div id="actor-load-text" style="margin-top: 8px; color: var(--la-ink-dim);">Pilots 0 / ? · NPCs 0 / ?</div>
                 </div>
             </div>
         `,
@@ -125,8 +125,8 @@ export class CloudActorImportDialog extends Dialog
                                 ui.notifications.warn("No NPCs selected");
                                 return;
                             }
-                            const o = npcPanel.getOptions($body);
-                            await importSelectedNPCs(selected, o.updateExisting, o.customTierMode, o.manualReplace, o.downloadPortraits);
+                            const options = npcPanel.getOptions($body);
+                            await importSelectedNPCs(selected, options.updateExisting, options.customTierMode, options.manualReplace, options.downloadPortraits);
                         }
                     }
                 },

@@ -6,16 +6,16 @@ export function findExistingPilotByCloudId(cloudId)
 {
     if (!cloudId)
         return [];
-    return game.actors.filter(a => a.type === "pilot" && a.system?.cloud_id === cloudId);
+    return game.actors.filter(actor => actor.type === "pilot" && actor.system?.cloud_id === cloudId);
 }
 
 export function findExistingMechByLid(lid)
 {
     if (!lid)
         return [];
-    return game.actors.filter(a =>
-        (a.type === "mech" || (typeof a.is_mech === "function" && a.is_mech())) &&
-        a.system?.lid === lid
+    return game.actors.filter(actor =>
+        (actor.type === "mech" || (typeof actor.is_mech === "function" && actor.is_mech())) &&
+        actor.system?.lid === lid
     );
 }
 
@@ -26,21 +26,21 @@ function _mechLinksTo(mechActor, pilotActor)
         return false;
     if (typeof link === "string")
         return link === pilotActor.uuid || link === pilotActor.id;
-    const v = link.value;
-    if (!v)
+    const linkValue = link.value;
+    if (!linkValue)
         return false;
-    if (typeof v === "string")
-        return v === pilotActor.uuid || v === pilotActor.id;
-    return v === pilotActor || v?.uuid === pilotActor.uuid || v?.id === pilotActor.id;
+    if (typeof linkValue === "string")
+        return linkValue === pilotActor.uuid || linkValue === pilotActor.id;
+    return linkValue === pilotActor || linkValue?.uuid === pilotActor.uuid || linkValue?.id === pilotActor.id;
 }
 
 function _set(arr) { return new Set(arr.filter(Boolean)); }
-function _eqSet(a, b)
+function _eqSet(setA, setB)
 {
-    if (a.size !== b.size)
+    if (setA.size !== setB.size)
         return false;
-    for (const v of a)
-        if (!b.has(v))
+    for (const value of setA)
+        if (!setB.has(value))
             return false;
     return true;
 }
@@ -49,10 +49,10 @@ function _licenseList(json)
 {
     if (!Array.isArray(json.licenses))
         return [];
-    return json.licenses.map(l =>
+    return json.licenses.map(license =>
     {
-        const id = typeof l === "string" ? l : (l.id || l.data?.id || "");
-        const rank = typeof l === "string" ? 1 : (l.rank ?? l.level ?? 1);
+        const id = typeof license === "string" ? license : (license.id || license.data?.id || "");
+        const rank = typeof license === "string" ? 1 : (license.rank ?? license.level ?? 1);
         return `${id}:${rank}`;
     });
 }
@@ -61,10 +61,22 @@ function _talentList(json)
 {
     if (!Array.isArray(json.talents))
         return [];
-    return json.talents.map(t =>
+    return json.talents.map(talent =>
     {
-        const id = typeof t === "string" ? t : (t.id || t.lid || t.data?.id || "");
-        const rank = typeof t === "string" ? 1 : (t.rank ?? t.curr_rank ?? 1);
+        const id = typeof talent === "string" ? talent : (talent.id || talent.lid || talent.data?.id || "");
+        const rank = typeof talent === "string" ? 1 : (talent.rank ?? talent.curr_rank ?? 1);
+        return `${id}:${rank}`;
+    });
+}
+
+function _skillList(json)
+{
+    if (!Array.isArray(json.skills))
+        return [];
+    return json.skills.map(skill =>
+    {
+        const id = typeof skill === "string" ? skill : (skill.id || skill.lid || skill.data?.id || "");
+        const rank = typeof skill === "string" ? 1 : (skill.rank ?? skill.curr_rank ?? 1);
         return `${id}:${rank}`;
     });
 }
@@ -86,39 +98,60 @@ export function comparePilotWithActor(pilotData, actors)
     const skills = Array.isArray(pilotData.mechSkills) ? pilotData.mechSkills : null;
     if (skills && skills.length >= 4)
     {
-        const [h, a, s, e] = skills;
-        if ((actor.system?.hull ?? -1) !== h
-            || (actor.system?.agi ?? -1) !== a
-            || (actor.system?.sys ?? -1) !== s
-            || (actor.system?.eng ?? -1) !== e)
+        const [hull, agi, sys, eng] = skills;
+        if ((actor.system?.hull ?? -1) !== hull
+            || (actor.system?.agi ?? -1) !== agi
+            || (actor.system?.sys ?? -1) !== sys
+            || (actor.system?.eng ?? -1) !== eng)
         {
-            reasons.push(`HASE: ${actor.system?.hull}/${actor.system?.agi}/${actor.system?.sys}/${actor.system?.eng} → ${h}/${a}/${s}/${e}`);
+            reasons.push(`HASE: ${actor.system?.hull}/${actor.system?.agi}/${actor.system?.sys}/${actor.system?.eng} → ${hull}/${agi}/${sys}/${eng}`);
         }
     }
 
-    const cloudMechs = _set((pilotData.mechs || []).map(m => m.id));
+    const cloudMechs = _set((pilotData.mechs || []).map(mech => mech.id));
     const actorMechs = _set(
         game.actors
-            .filter(a => (a.type === "mech" || (typeof a.is_mech === "function" && a.is_mech())) && _mechLinksTo(a, actor))
-            .map(m => m.system?.lid)
+            .filter(candidate => (candidate.type === "mech" || (typeof candidate.is_mech === "function" && candidate.is_mech())) && _mechLinksTo(candidate, actor))
+            .map(mech => mech.system?.lid)
     );
     if (!_eqSet(cloudMechs, actorMechs))
     {
-        const added = [...cloudMechs].filter(x => !actorMechs.has(x)).length;
-        const removed = [...actorMechs].filter(x => !cloudMechs.has(x)).length;
+        const added = [...cloudMechs].filter(lid => !actorMechs.has(lid)).length;
+        const removed = [...actorMechs].filter(lid => !cloudMechs.has(lid)).length;
         if (added || removed)
             reasons.push(`mechs: ${actorMechs.size} → ${cloudMechs.size} (+${added}/-${removed})`);
     }
 
     const cloudLicenses = _set(_licenseList(pilotData));
-    const actorLicenses = _set((actor.items || []).filter(i => i.type === "license").map(i => `${i.system?.lid}:${i.system?.curr_rank ?? 1}`));
+    const actorLicenses = _set((actor.items || []).filter(item => item.type === "license").map(item => `${item.system?.lid}:${item.system?.curr_rank ?? 1}`));
     if (!_eqSet(cloudLicenses, actorLicenses))
         reasons.push(`licenses: ${actorLicenses.size} → ${cloudLicenses.size}`);
 
     const cloudTalents = _set(_talentList(pilotData));
-    const actorTalents = _set((actor.items || []).filter(i => i.type === "talent").map(i => `${i.system?.lid}:${i.system?.curr_rank ?? 1}`));
+    const actorTalents = _set((actor.items || []).filter(item => item.type === "talent").map(item => `${item.system?.lid}:${item.system?.curr_rank ?? 1}`));
     if (!_eqSet(cloudTalents, actorTalents))
         reasons.push(`talents: ${actorTalents.size} → ${cloudTalents.size}`);
+
+    const cloudSkills = _set(_skillList(pilotData));
+    const actorSkills = _set((actor.items || []).filter(item => item.type === "skill").map(item => `${item.system?.lid}:${item.system?.curr_rank ?? 1}`));
+    if (!_eqSet(cloudSkills, actorSkills))
+        reasons.push(`skills: ${actorSkills.size} → ${cloudSkills.size}`);
+
+    const cloudReserves = (pilotData.reserves || []).map(reserve => reserve.id || reserve.lid || reserve.data?.id).filter(Boolean);
+    const actorReserves = (actor.items || []).filter(item => item.type === "reserve").map(item => item.system?.lid).filter(Boolean);
+    if (cloudReserves.length !== actorReserves.length || !_eqSet(_set(cloudReserves), _set(actorReserves)))
+        reasons.push(`reserves: ${actorReserves.length} → ${cloudReserves.length}`);
+
+    // Roll up per-mech loadout changes so the pilot badge flags them without expanding.
+    let modifiedMechs = 0;
+    for (const mechData of (pilotData.mechs || []))
+    {
+        const mechActor = findExistingMechByLid(mechData.id).find(mech => _mechLinksTo(mech, actor));
+        if (mechActor && compareMechWithActor(mechData, mechActor).status === "modified")
+            modifiedMechs++;
+    }
+    if (modifiedMechs > 0)
+        reasons.push(`${modifiedMechs} mech loadout${modifiedMechs > 1 ? "s" : ""} changed`);
 
     if (reasons.length > 0)
         return { status: "modified", count: actors.length, reasons };
@@ -145,7 +178,7 @@ function _cloudMechSystemLids(mechData)
 {
     const idx = mechData.active_loadout_index ?? 0;
     const loadout = mechData.loadouts?.[idx];
-    return (loadout?.systems || []).map(s => s.id || s.lid).filter(Boolean);
+    return (loadout?.systems || []).map(system => system.id || system.lid).filter(Boolean);
 }
 function _actorMechWeaponLids(actor)
 {
@@ -154,8 +187,8 @@ function _actorMechWeaponLids(actor)
     {
         for (const slot of (mount.slots || []))
         {
-            const w = slot.weapon?.value;
-            const lid = w?.system?.lid || w?.lid;
+            const weapon = slot.weapon?.value;
+            const lid = weapon?.system?.lid || weapon?.lid;
             if (lid)
                 lids.push(lid);
         }
@@ -165,7 +198,7 @@ function _actorMechWeaponLids(actor)
 function _actorMechSystemLids(actor)
 {
     return (actor.system?.loadout?.systems || [])
-        .map(s => s.value?.system?.lid || s.value?.lid)
+        .map(system => system.value?.system?.lid || system.value?.lid)
         .filter(Boolean);
 }
 
@@ -189,8 +222,8 @@ export function compareMechWithActor(mechData, actor)
     const actorW = _set(_actorMechWeaponLids(actor));
     if (!_eqSet(cloudW, actorW))
     {
-        const added = [...cloudW].filter(x => !actorW.has(x)).length;
-        const removed = [...actorW].filter(x => !cloudW.has(x)).length;
+        const added = [...cloudW].filter(lid => !actorW.has(lid)).length;
+        const removed = [...actorW].filter(lid => !cloudW.has(lid)).length;
         reasons.push(`weapons: ${actorW.size} → ${cloudW.size} (+${added}/-${removed})`);
     }
 
@@ -198,8 +231,8 @@ export function compareMechWithActor(mechData, actor)
     const actorS = _set(_actorMechSystemLids(actor));
     if (!_eqSet(cloudS, actorS))
     {
-        const added = [...cloudS].filter(x => !actorS.has(x)).length;
-        const removed = [...actorS].filter(x => !cloudS.has(x)).length;
+        const added = [...cloudS].filter(lid => !actorS.has(lid)).length;
+        const removed = [...actorS].filter(lid => !cloudS.has(lid)).length;
         reasons.push(`systems: ${actorS.size} → ${cloudS.size} (+${added}/-${removed})`);
     }
 
@@ -237,7 +270,7 @@ export async function importOnePilot(pilotJson, { updateExisting = true, mechIds
     let payload = pilotJson;
     if (mechIdsFilter && mechIdsFilter.size > 0 && Array.isArray(pilotJson.mechs))
     {
-        payload = { ...pilotJson, mechs: pilotJson.mechs.filter(m => mechIdsFilter.has(m.id)) };
+        payload = { ...pilotJson, mechs: pilotJson.mechs.filter(mech => mechIdsFilter.has(mech.id)) };
     }
     await _runPilotJsonParsed(actor, JSON.stringify(payload));
     return { actor, updated: wasUpdate };
@@ -261,11 +294,11 @@ export async function importSelectedPilots(selection, updateExisting = true)
         try
         {
             progress.addLog(`Importing: ${name}...`, "info");
-            const r = await importOnePilot(pilot.json, {
+            const result = await importOnePilot(pilot.json, {
                 updateExisting,
                 mechIdsFilter: allMechs ? undefined : mechIds
             });
-            if (r.updated)
+            if (result.updated)
             {
                 updated++;
                 progress.addLog(`✓ Updated: ${name}`, "success");

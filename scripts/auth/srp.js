@@ -29,7 +29,7 @@ function hexToBytes(hex)
 }
 function bytesToHex(bytes)
 {
-    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
 }
 function bigIntToHex(bi)
 {
@@ -79,8 +79,8 @@ async function hkdf16(ikm, salt)
     const infoBlock = new Uint8Array(INFO_BITS.length + 1);
     infoBlock.set(INFO_BITS, 0);
     infoBlock[INFO_BITS.length] = 0x01;
-    const t = await hmacSha256(prk, infoBlock);
-    return t.slice(0, 16);
+    const block = await hmacSha256(prk, infoBlock);
+    return block.slice(0, 16);
 }
 
 function modPow(base, exp, mod)
@@ -107,25 +107,25 @@ function randomBigInt(bits)
 function concatBytes(...arrs)
 {
     let len = 0;
-    for (const a of arrs)
-        len += a.length;
+    for (const arr of arrs)
+        len += arr.length;
     const out = new Uint8Array(len);
     let off = 0;
-    for (const a of arrs) { out.set(a, off); off += a.length; }
+    for (const arr of arrs) { out.set(arr, off); off += arr.length; }
     return out;
 }
 
 // "Day Mon D HH:MM:SS UTC YYYY" - day NOT zero-padded, time IS. AWS checks verbatim.
 function cognitoTimestamp()
 {
-    const d = new Date();
-    const wk = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getUTCDay()];
-    const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()];
-    const day = d.getUTCDate();
-    const hh = String(d.getUTCHours()).padStart(2, "0");
-    const mm = String(d.getUTCMinutes()).padStart(2, "0");
-    const ss = String(d.getUTCSeconds()).padStart(2, "0");
-    return `${wk} ${mo} ${day} ${hh}:${mm}:${ss} UTC ${d.getUTCFullYear()}`;
+    const now = new Date();
+    const wk = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][now.getUTCDay()];
+    const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][now.getUTCMonth()];
+    const day = now.getUTCDate();
+    const hh = String(now.getUTCHours()).padStart(2, "0");
+    const mm = String(now.getUTCMinutes()).padStart(2, "0");
+    const ss = String(now.getUTCSeconds()).padStart(2, "0");
+    return `${wk} ${mo} ${day} ${hh}:${mm}:${ss} UTC ${now.getUTCFullYear()}`;
 }
 
 export function generateSrpA()
@@ -171,7 +171,7 @@ export async function computePasswordSignature({
     const hkdfKey = await hkdf16(hexToBytes(padHex(S)), hexToBytes(padHex(u)));
 
     const timestamp = cognitoTimestamp();
-    const secretBlockBytes = Uint8Array.from(atob(secretBlockB64), c => c.charCodeAt(0));
+    const secretBlockBytes = Uint8Array.from(atob(secretBlockB64), ch => ch.charCodeAt(0));
     const sigInput = concatBytes(
         new TextEncoder().encode(poolName),
         new TextEncoder().encode(userIdForSrp),

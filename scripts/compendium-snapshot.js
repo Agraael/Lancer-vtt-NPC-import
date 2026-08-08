@@ -25,25 +25,25 @@ export function stripVolatile(obj)
         return obj;
     const out = {};
     const keys = Object.keys(obj).sort();
-    for (const k of keys)
+    for (const key of keys)
     {
-        if (VOLATILE_KEYS.has(k))
+        if (VOLATILE_KEYS.has(key))
             continue;
-        if (k === "flags")
+        if (key === "flags")
             continue; // import timestamps, folder refs, etc.
-        if (k === "system" && obj[k] && typeof obj[k] === "object")
+        if (key === "system" && obj[key] && typeof obj[key] === "object")
         {
             const sys = {};
-            for (const sk of Object.keys(obj[k]).sort())
+            for (const sk of Object.keys(obj[key]).sort())
             {
                 if (VOLATILE_SYSTEM_KEYS.has(sk))
                     continue;
-                sys[sk] = stripVolatile(obj[k][sk]);
+                sys[sk] = stripVolatile(obj[key][sk]);
             }
-            out[k] = sys;
+            out[key] = sys;
             continue;
         }
-        out[k] = stripVolatile(obj[k]);
+        out[key] = stripVolatile(obj[key]);
     }
     return out;
 }
@@ -60,9 +60,9 @@ async function snapshotPack(pack, prefix)
     let candidates = Array.from(index);
     if (prefix)
     {
-        candidates = candidates.filter(e => (e.system?.lid || "").startsWith(prefix));
+        candidates = candidates.filter(entry => (entry.system?.lid || "").startsWith(prefix));
     }
-    candidates.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    candidates.sort((docA, docB) => sortKey(docA).localeCompare(sortKey(docB)));
     const entries = [];
     for (const entry of candidates)
     {
@@ -96,10 +96,10 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
             label
         }
     };
-    const lancerPacks = game.packs.filter(p =>
+    const lancerPacks = game.packs.filter(pack =>
     {
-        const type = p.metadata.packageType;
-        const sys = p.metadata.system || p.metadata.name;
+        const type = pack.metadata.packageType;
+        const sys = pack.metadata.system || pack.metadata.name;
         return type === "system" || type === "world" || sys === "lancer";
     });
     for (const pack of lancerPacks)
@@ -127,12 +127,12 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
         {
             const blob = new Blob([json], { type: "application/json" });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = filename;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
     }
@@ -149,14 +149,14 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
  * Diff two snapshots produced by dumpLcpSnapshot. Returns a structured report of
  * what's only in A, only in B, and differing between both (keyed by LID).
  */
-export function diffSnapshots(a, b)
+export function diffSnapshots(snapshotA, snapshotB)
 {
     const report = { onlyInA: {}, onlyInB: {}, changed: {} };
-    const packIds = new Set([...Object.keys(a), ...Object.keys(b)].filter(k => k !== "_meta"));
+    const packIds = new Set([...Object.keys(snapshotA), ...Object.keys(snapshotB)].filter(key => key !== "_meta"));
     for (const packId of packIds)
     {
-        const aEntries = new Map((a[packId] ?? []).map(e => [e.system?.lid || e.name, e]));
-        const bEntries = new Map((b[packId] ?? []).map(e => [e.system?.lid || e.name, e]));
+        const aEntries = new Map((snapshotA[packId] ?? []).map(entry => [entry.system?.lid || entry.name, entry]));
+        const bEntries = new Map((snapshotB[packId] ?? []).map(entry => [entry.system?.lid || entry.name, entry]));
         for (const [key, aDoc] of aEntries)
         {
             if (!bEntries.has(key))

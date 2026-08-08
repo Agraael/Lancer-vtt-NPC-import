@@ -85,11 +85,11 @@ export class CompconLoginDialog extends Dialog
         const $password = html.find('#compcon-password');
         const $signin = html.closest('.app').find('button[data-button="signin"]');
 
-        html.find('input').on('keydown', (e) =>
+        html.find('input').on('keydown', (event) =>
         {
-            if (e.key === 'Enter')
+            if (event.key === 'Enter')
             {
-                e.preventDefault();
+                event.preventDefault();
                 $signin.trigger('click');
             }
         });
@@ -128,16 +128,16 @@ export class CompconLoginDialog extends Dialog
 
 function _humanizeCognitoError(err)
 {
-    const t = err?.cognitoType || "";
-    if (t.includes("NotAuthorizedException"))
+    const type = err?.cognitoType || "";
+    if (type.includes("NotAuthorizedException"))
         return "Incorrect email or password.";
-    if (t.includes("UserNotFoundException"))
+    if (type.includes("UserNotFoundException"))
         return "No Comp/Con account found for that email.";
-    if (t.includes("UserNotConfirmedException"))
+    if (type.includes("UserNotConfirmedException"))
         return "Account email not confirmed. Check your inbox.";
-    if (t.includes("PasswordResetRequiredException"))
+    if (type.includes("PasswordResetRequiredException"))
         return "Password reset required. Visit compcon.app to reset.";
-    if (t.includes("TooManyRequestsException") || t.includes("LimitExceededException"))
+    if (type.includes("TooManyRequestsException") || type.includes("LimitExceededException"))
         return "Too many sign-in attempts. Wait a few minutes.";
     return err?.message || "Sign-in failed.";
 }

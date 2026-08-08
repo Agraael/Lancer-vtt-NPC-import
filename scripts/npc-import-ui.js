@@ -167,7 +167,7 @@ export class ImportProgressDialog
                 }
             }, {
                 width: 600,
-                height: 500, // Hauteur fixe
+                height: 500,
                 resizable: true,
                 classes: ["lancer-import-progress-dialog", "lancer-dialog-base", "lancer-no-title"]
             });
@@ -303,7 +303,6 @@ export function buildNPCSelectionPanel(npcs)
         const count = comparison.count;
         const reasons = comparison.reasons || [];
 
-        // Récupérer la liste des acteurs (par LID ou par nom)
         let actorsList = [];
         if (existingActors.length > 0)
         {
@@ -312,8 +311,8 @@ export function buildNPCSelectionPanel(npcs)
         else if (status === 'unlinked' && npc.json.name)
         {
             const nameLower = npc.json.name.toLowerCase();
-            actorsList = game.actors.filter(a =>
-                a.type === 'npc' && a.name.toLowerCase() === nameLower
+            actorsList = game.actors.filter(actor =>
+                actor.type === 'npc' && actor.name.toLowerCase() === nameLower
             );
         }
 
@@ -334,10 +333,9 @@ export function buildNPCSelectionPanel(npcs)
                 ? `NPC has changes (${count} copies in world)`
                 : 'NPC has changes';
 
-            // Ajouter les raisons des modifications
             if (reasons.length > 0)
             {
-                const reasonsList = reasons.map(r => "- " + r).join('\n');
+                const reasonsList = reasons.map(reason => "- " + reason).join('\n');
                 badgeTooltip = `${baseTooltip}\nReasons:\n${reasonsList}`;
             }
             else
@@ -358,10 +356,9 @@ export function buildNPCSelectionPanel(npcs)
                 : 'NPC with same name exists but not linked (no LID)';
         }
 
-        // Ajouter la liste des acteurs au tooltip
         if (actorsList.length > 0)
         {
-            const actorNames = actorsList.map(a => "- " + a.name).join('\n');
+            const actorNames = actorsList.map(actor => "- " + actor.name).join('\n');
             badgeTooltip += '\nActors:\n' + actorNames;
         }
 
@@ -454,7 +451,6 @@ export function buildNPCSelectionPanel(npcs)
             updateCount();
         });
 
-        // Fonction de filtre combinée (recherche + statut)
         let currentStatusFilter = 'all';
 
         function applyFilters()
@@ -470,25 +466,20 @@ export function buildNPCSelectionPanel(npcs)
                 const tag = $item.data('npc-tag') || '';
                 const status = $item.data('status') || '';
 
-                // Filtre de recherche
                 const matchesSearch = searchTerm === '' ||
                     name.includes(searchTerm) ||
                     npcClass.includes(searchTerm) ||
                     tier.includes(searchTerm) ||
                     tag.includes(searchTerm);
 
-                // Filtre de statut
                 const matchesStatus = currentStatusFilter === 'all' || status === currentStatusFilter;
 
-                // Montrer l'item seulement s'il passe les deux filtres
                 $item.toggleClass('lancer-hidden', !(matchesSearch && matchesStatus));
             });
         }
 
-        // Recherche par texte
         html.find('#npc-search').on('input', applyFilters);
 
-        // Boutons de filtre par statut
         html.find('.status-filter-btn').on('click', function()
         {
             const status = $(this).data('status');
@@ -542,8 +533,8 @@ export function buildNPCSelectionPanel(npcs)
             {
                 const alreadyLinked = findExistingNPCsByLID(npc.json);
                 const nameLower = npc.json.name.toLowerCase();
-                const sameName = game.actors.filter(a =>
-                    a.type === 'npc' && a.name.toLowerCase() === nameLower
+                const sameName = game.actors.filter(actor =>
+                    actor.type === 'npc' && actor.name.toLowerCase() === nameLower
                 );
 
                 const onlyOneSameName = alreadyLinked.length === 0 && sameName.length === 1;
@@ -620,8 +611,8 @@ export class NPCSelectionDialog extends Dialog
                             ui.notifications.warn("No NPCs selected");
                             return;
                         }
-                        const o = panel.getOptions(html);
-                        await importSelectedNPCs(selected, o.updateExisting, o.customTierMode, o.manualReplace, o.downloadPortraits);
+                        const options = panel.getOptions(html);
+                        await importSelectedNPCs(selected, options.updateExisting, options.customTierMode, options.manualReplace, options.downloadPortraits);
                     }
                 },
                 cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
@@ -660,23 +651,19 @@ export async function uploadPortraitToServer(url, npcName)
 
     try
     {
-        // 1. Créer le dossier s'il n'existe pas
         try
         {
             await FilePicker.createDirectory("data", folderPath);
         }
         catch (e) { /* existe déjà */ }
 
-        // 2. Récupérer l'image via le proxy
         const response = await corsProxyFetch(url);
         const blob = await response.blob();
 
-        // 3. Préparer le fichier
         const extension = url.split('.').pop().split(/\#|\?/)[0] || 'png';
         const fileName = `${npcName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
         const file = new File([blob], fileName, { type: blob.type });
 
-        // 4. Uploader sur Foundry
         const uploadResponse = await FilePicker.upload("data", folderPath, file);
         return uploadResponse.path;
     }

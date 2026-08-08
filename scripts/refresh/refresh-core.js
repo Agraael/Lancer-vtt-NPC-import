@@ -10,7 +10,7 @@ export function isRefreshableActor(actor)
 export async function buildLidIndex(progress = null, packs = null)
 {
     const index = new Map();
-    const itemPacks = packs ?? game.packs.filter(p => p.metadata.type === "Item");
+    const itemPacks = packs ?? game.packs.filter(pack => pack.metadata.type === "Item");
     progress?.update(0, itemPacks.length, "Indexing item compendiums...");
     for (let i = 0; i < itemPacks.length; i++)
     {
@@ -26,14 +26,14 @@ export async function buildLidIndex(progress = null, packs = null)
             console.warn(`lancer-npc-import refresh: failed to index pack ${pack.collection}`, err);
             continue;
         }
-        for (const e of entries)
+        for (const entry of entries)
         {
-            const lid = e.system?.lid;
+            const lid = entry.system?.lid;
             if (!lid)
                 continue;
             if (!index.has(lid))
                 index.set(lid, []);
-            index.get(lid).push({ pack, _id: e._id, type: e.type });
+            index.get(lid).push({ pack, _id: entry._id, type: entry.type });
         }
     }
     progress?.update(itemPacks.length, itemPacks.length, "Indexing done");
@@ -48,7 +48,7 @@ function chosenPackEntry(item, lidIndex)
     const candidates = lidIndex.get(lid);
     if (!candidates?.length)
         return null;
-    return candidates.find(c => c.type === item.type) || candidates[0];
+    return candidates.find(candidate => candidate.type === item.type) || candidates[0];
 }
 
 function packDocKey(entry)
@@ -175,57 +175,57 @@ export async function classifyActorItems(actor, lidIndex, cache = null, lidWhite
 
 function computeDiff(actorItem, packDoc)
 {
-    const a = stripVolatile(actorItem.toObject());
-    const p = stripVolatile(packDoc.toObject());
+    const actorData = stripVolatile(actorItem.toObject());
+    const packData = stripVolatile(packDoc.toObject());
     const diffs = [];
-    walkDiff("", a, p, diffs);
+    walkDiff("", actorData, packData, diffs);
     return diffs;
 }
 
-function walkDiff(prefix, a, b, out)
+function walkDiff(prefix, actorVal, packVal, out)
 {
-    if (a === b)
+    if (actorVal === packVal)
         return;
-    const aIsObj = a && typeof a === "object" && !Array.isArray(a);
-    const bIsObj = b && typeof b === "object" && !Array.isArray(b);
-    if (aIsObj && bIsObj)
+    const actorIsObj = actorVal && typeof actorVal === "object" && !Array.isArray(actorVal);
+    const packIsObj = packVal && typeof packVal === "object" && !Array.isArray(packVal);
+    if (actorIsObj && packIsObj)
     {
-        const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-        for (const k of keys)
-            walkDiff(prefix ? `${prefix}.${k}` : k, a[k], b[k], out);
+        const keys = new Set([...Object.keys(actorVal), ...Object.keys(packVal)]);
+        for (const key of keys)
+            walkDiff(prefix ? `${prefix}.${key}` : key, actorVal[key], packVal[key], out);
         return;
     }
-    if (Array.isArray(a) && Array.isArray(b))
+    if (Array.isArray(actorVal) && Array.isArray(packVal))
     {
-        const len = Math.max(a.length, b.length);
-        for (let i = 0; i < len; i++)
-            walkDiff(`${prefix}[${i}]`, a[i], b[i], out);
+        const len = Math.max(actorVal.length, packVal.length);
+        for (let index = 0; index < len; index++)
+            walkDiff(`${prefix}[${index}]`, actorVal[index], packVal[index], out);
         return;
     }
-    if (Array.isArray(a) !== Array.isArray(b) && JSON.stringify(a) !== JSON.stringify(b))
+    if (Array.isArray(actorVal) !== Array.isArray(packVal) && JSON.stringify(actorVal) !== JSON.stringify(packVal))
     {
-        out.push({ path: prefix, actor: a, pack: b });
+        out.push({ path: prefix, actor: actorVal, pack: packVal });
         return;
     }
-    if (a !== b)
-        out.push({ path: prefix, actor: a, pack: b });
+    if (actorVal !== packVal)
+        out.push({ path: prefix, actor: actorVal, pack: packVal });
 }
 
 export async function applyRefresh(actor, selections)
 {
     const updates = [];
     const replacements = [];
-    for (const s of selections)
+    for (const selection of selections)
     {
-        if (s.action === "update")
+        if (selection.action === "update")
         {
-            const data = s.packDoc.toObject();
-            data._id = s.actorItem.id;
+            const data = selection.packDoc.toObject();
+            data._id = selection.actorItem.id;
             updates.push(data);
         }
-        else if (s.action === "replace")
+        else if (selection.action === "replace")
         {
-            replacements.push(s);
+            replacements.push(selection);
         }
     }
 
@@ -246,19 +246,19 @@ export async function applyRefresh(actor, selections)
     }
 
     // delete+create changes the embedded id; mech loadout slots may need re-link
-    for (const r of replacements)
+    for (const replacement of replacements)
     {
         try
         {
-            const oldId = r.actorItem.id;
+            const oldId = replacement.actorItem.id;
             await actor.deleteEmbeddedDocuments("Item", [oldId]);
-            const [created] = await actor.createEmbeddedDocuments("Item", [r.packDoc.toObject()]);
-            report.replaced.push({ name: r.actorItem.name, oldId, newId: created.id });
+            const [created] = await actor.createEmbeddedDocuments("Item", [replacement.packDoc.toObject()]);
+            report.replaced.push({ name: replacement.actorItem.name, oldId, newId: created.id });
         }
         catch (err)
         {
             console.error("refresh: replacement failed", err);
-            report.failed.push({ kind: "replace", name: r.actorItem.name, error: err.message });
+            report.failed.push({ kind: "replace", name: replacement.actorItem.name, error: err.message });
         }
     }
 

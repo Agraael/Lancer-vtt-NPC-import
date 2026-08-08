@@ -128,12 +128,11 @@ export async function importFromFiles()
     scalingDialog.render(true);
 }
 
-// Dialog pour mapper manuellement les NPCs à des acteurs existants
 export async function selectActorMappings(npcsToImport)
 {
     return new Promise((resolve) =>
     {
-        const allActors = game.actors.filter(a => a.type === 'npc');
+        const allActors = game.actors.filter(actor => actor.type === 'npc');
 
         const actorOptions = `<option value="new">── Create New ──</option>
             ${allActors.map(actor => `<option value="${actor.id}">${actor.name}  (${actor.system.class.name ? actor.system.class.name : 'Unknown'})-(${actor.system.tier ? 'T' + actor.system.tier : 'Unknown'})</option>`).join('')}`;
@@ -251,9 +250,9 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
     input.accept = '.json';
     input.multiple = true;
 
-    input.onchange = async (e) =>
+    input.onchange = async (event) =>
     {
-        const files = Array.from(e.target.files);
+        const files = Array.from(event.target.files);
         if (files.length === 0)
             return;
 
@@ -405,19 +404,19 @@ async function _importPilotFiles(pilots, updateExisting)
     progress.render(true);
     progress.addLog(`Starting import of ${pilots.length} pilot(s)...`, "info");
     let created = 0, updated = 0, failed = 0;
-    for (const p of pilots)
+    for (const pilot of pilots)
     {
         try
         {
-            progress.addLog(`Importing: ${p.name}...`, "info");
-            const r = await importOnePilot(p.json, { updateExisting });
-            if (r.updated) { updated++; progress.addLog(`✓ Updated: ${p.name}`, "success"); }
-            else           { created++; progress.addLog(`✓ Created: ${p.name}`, "success"); }
+            progress.addLog(`Importing: ${pilot.name}...`, "info");
+            const result = await importOnePilot(pilot.json, { updateExisting });
+            if (result.updated) { updated++; progress.addLog(`✓ Updated: ${pilot.name}`, "success"); }
+            else           { created++; progress.addLog(`✓ Created: ${pilot.name}`, "success"); }
         }
         catch (e)
         {
-            console.error(`pilot import failed for ${p.name}:`, e);
-            progress.addLog(`✗ Failed: ${p.name} - ${e.message}`, "error");
+            console.error(`pilot import failed for ${pilot.name}:`, e);
+            progress.addLog(`✗ Failed: ${pilot.name} - ${e.message}`, "error");
             failed++;
         }
         progress.incrementProgress();

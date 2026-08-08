@@ -33,10 +33,10 @@ export function pilotFromV3Json(json, key)
     if (!json || !json.name)
         return null;
     normalizePilotData(json);
-    const mechs = Array.isArray(json.mechs) ? json.mechs.map(m => ({
-        id: m.id,
-        name: m.name,
-        frame: m.frame || m.frameData?.id || ""
+    const mechs = Array.isArray(json.mechs) ? json.mechs.map(mech => ({
+        id: mech.id,
+        name: mech.name,
+        frame: mech.frame || mech.frameData?.id || ""
     })) : [];
     return {
         key: key || json.cloudID || json.id || "",
@@ -75,8 +75,8 @@ export async function fetchPilotsViaV3API(progressUpdate)
     const items = Array.isArray(data) ? data : (data.items || data.Items || []);
     const pilotItems = items.filter(item =>
     {
-        const sk = (item.SortKey || item.sortkey || item.sk || "").toLowerCase();
-        return sk.startsWith("savedata_pilot_");
+        const sortKey = (item.SortKey || item.sortkey || item.sk || "").toLowerCase();
+        return sortKey.startsWith("savedata_pilot_");
     });
 
     const v3Cdn = getV3Cdn();
@@ -86,16 +86,16 @@ export async function fetchPilotsViaV3API(progressUpdate)
 
     for (let i = 0; i < pilotItems.length; i += BATCH)
     {
-        const batch = pilotItems.slice(i, i + BATCH).filter(it => it.uri);
+        const batch = pilotItems.slice(i, i + BATCH).filter(item => item.uri);
         const results = await Promise.allSettled(
-            batch.map(async (it) =>
+            batch.map(async (item) =>
             {
                 // ?cb= busts CloudFront's per-Origin cache.
-                const resp = await fetch(`${v3Cdn}/${it.uri}?cb=${Date.now()}`, { cache: "no-store" });
+                const resp = await fetch(`${v3Cdn}/${item.uri}?cb=${Date.now()}`, { cache: "no-store" });
                 if (!resp.ok)
                     throw new Error(`CDN ${resp.status}`);
                 const pilotJson = unwrapData(await resp.json());
-                return pilotFromV3Json(pilotJson, it.sortkey || it.uri);
+                return pilotFromV3Json(pilotJson, item.sortkey || item.uri);
             })
         );
         for (let j = 0; j < results.length; j++)
@@ -110,6 +110,6 @@ export async function fetchPilotsViaV3API(progressUpdate)
             progressUpdate(loaded, pilotItems.length);
     }
 
-    pilots.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
+    pilots.sort((pilotA, pilotB) => String(pilotA.name || "").localeCompare(String(pilotB.name || ""), undefined, { sensitivity: "base" }));
     return pilots;
 }

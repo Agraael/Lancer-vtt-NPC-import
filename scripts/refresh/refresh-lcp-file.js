@@ -18,9 +18,9 @@ function collectIds(data, out)
     const root = data?.data || data;
     if (!root || typeof root !== "object")
         return;
-    for (const k of ITEM_ARRAYS)
+    for (const key of ITEM_ARRAYS)
     {
-        const arr = root[k];
+        const arr = root[key];
         if (!Array.isArray(arr))
             continue;
         for (const item of arr)

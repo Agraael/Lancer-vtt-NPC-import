@@ -8,9 +8,9 @@ import {
     importSelectedPilots
 } from "./pilot-import-core.js";
 
-function _escape(s)
+function _escape(value)
 {
-    return foundry.utils.escapeHTML?.(String(s ?? "")) ?? String(s ?? "");
+    return foundry.utils.escapeHTML?.(String(value ?? "")) ?? String(value ?? "");
 }
 
 function _badge(status, count)
@@ -91,30 +91,30 @@ function _mechRow(mech, pilotIndex, mechIndex)
 
 function _pilotDetailLine(pilot)
 {
-    const j = pilot.json || {};
+    const json = pilot.json || {};
     const parts = [`Lv${pilot.level}`];
     parts.push(`${pilot.mechCount} mech${pilot.mechCount === 1 ? "" : "s"}`);
-    const licenses = Array.isArray(j.licenses) ? j.licenses.length : 0;
+    const licenses = Array.isArray(json.licenses) ? json.licenses.length : 0;
     if (licenses)
         parts.push(`${licenses} lic`);
-    const talents = Array.isArray(j.talents) ? j.talents.length : 0;
+    const talents = Array.isArray(json.talents) ? json.talents.length : 0;
     if (talents)
         parts.push(`${talents} tal`);
-    const reserves = Array.isArray(j.reserves) ? j.reserves.length : 0;
+    const reserves = Array.isArray(json.reserves) ? json.reserves.length : 0;
     if (reserves)
         parts.push(`${reserves} res`);
-    const orgs = Array.isArray(j.orgs) ? j.orgs.length : 0;
+    const orgs = Array.isArray(json.orgs) ? json.orgs.length : 0;
     if (orgs)
         parts.push(`${orgs} org`);
-    if (j.player_name)
-        parts.push(j.player_name);
-    if (j.status)
-        parts.push(j.status);
-    if (j.lastCloudUpdate)
+    if (json.player_name)
+        parts.push(json.player_name);
+    if (json.status)
+        parts.push(json.status);
+    if (json.lastCloudUpdate)
     {
-        const d = new Date(j.lastCloudUpdate);
-        if (!Number.isNaN(d.getTime()))
-            parts.push(d.toISOString().slice(0, 10));
+        const date = new Date(json.lastCloudUpdate);
+        if (!Number.isNaN(date.getTime()))
+            parts.push(date.toISOString().slice(0, 10));
     }
     return parts.join(" · ");
 }
@@ -125,7 +125,7 @@ function _pilotRow(pilot, index)
     const cmp = comparePilotWithActor(pilot.json, existing);
     const portrait = pilot.json.cloud_portrait || pilot.json.img?.cloud_portrait || pilot.json.portrait || "";
     const callsign = pilot.callsign ? `<span class="callsign">"${_escape(pilot.callsign)}"</span>` : "";
-    const mechsHtml = (pilot.mechs || []).map((m, i) => _mechRow(m, index, i)).join("");
+    const mechsHtml = (pilot.mechs || []).map((mech, mechIndex) => _mechRow(mech, index, mechIndex)).join("");
     const detailLine = _pilotDetailLine(pilot);
     const tooltip = cmp.reasons?.length ? _escape(cmp.reasons.join("\n")) : "";
 
@@ -179,7 +179,7 @@ export function buildPilotSelectionPanel(pilots)
                     <button type="button" class="status-filter-btn" data-status="modified">⚠ Modified</button>
                 </div>
                 <div class="lancer-list pilot-list">
-                    ${pilots.map((p, i) => _pilotRow(p, i)).join("")}
+                    ${pilots.map((pilot, index) => _pilotRow(pilot, index)).join("")}
                 </div>
             </div>
             <div class="lancer-action-buttons">
@@ -202,16 +202,16 @@ export function buildPilotSelectionPanel(pilots)
 
         function applyFilters()
         {
-            const q = String($search.val() || "").toLowerCase().trim();
+            const query = String($search.val() || "").toLowerCase().trim();
             $list.find(".pilot-row").each(function()
             {
-                const $r = $(this);
-                const name = $r.data("pilot-name") || "";
-                const cs = $r.data("pilot-callsign") || "";
-                const st = $r.data("status") || "";
-                const matchesSearch = !q || name.includes(q) || cs.includes(q);
-                const matchesStatus = statusFilter === "all" || st === statusFilter;
-                $r.toggleClass("lancer-hidden", !(matchesSearch && matchesStatus));
+                const $row = $(this);
+                const name = $row.data("pilot-name") || "";
+                const callsign = $row.data("pilot-callsign") || "";
+                const status = $row.data("status") || "";
+                const matchesSearch = !query || name.includes(query) || callsign.includes(query);
+                const matchesStatus = statusFilter === "all" || status === statusFilter;
+                $row.toggleClass("lancer-hidden", !(matchesSearch && matchesStatus));
             });
         }
         $search.on("input", applyFilters);
@@ -242,7 +242,7 @@ export function buildPilotSelectionPanel(pilots)
             });
             refreshCount();
         });
-        $list.on("click", ".pilot-checkbox", (e) => e.stopPropagation());
+        $list.on("click", ".pilot-checkbox", (event) => event.stopPropagation());
 
         // Mech checkbox: independent; highlights the mech row.
         $list.on("change", ".mech-checkbox", function()
@@ -253,7 +253,7 @@ export function buildPilotSelectionPanel(pilots)
         });
         // Click on the mech-sub-row label naturally toggles the checkbox; stop the
         // event from also toggling the parent <details>.
-        $list.on("click", ".mech-sub-row", (e) => e.stopPropagation());
+        $list.on("click", ".mech-sub-row", (event) => event.stopPropagation());
 
         $root.find("#pilot-select-all").on("click", () =>
         {
@@ -278,9 +278,8 @@ export function buildPilotSelectionPanel(pilots)
         });
     }
 
-    // Returns selected pilots as { pilot, mechIds: Set } so the importer can
-    // filter the mechs[] array. A pilot is included if its own checkbox is on
-    // OR any of its mechs are checked.
+    // Selected pilots as { pilot, mechIds: Set } for the importer. A pilot is
+    // included if its own checkbox is on OR any of its mechs are checked.
     function getSelected($root)
     {
         const byIdx = new Map();

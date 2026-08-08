@@ -61,7 +61,7 @@ Button only shows up for v3 LCPs. v2 LCPs go through the normal Lancer importer.
 | NPC weapon tier arrays | Pass-through (Lancer handles natively) |
 | Inline `integrated` items | Flattened to LID strings |
 | `core_system.active_effects[]` / `passive_effects[]` | Fanned into `active_bonuses` / `active_actions` / `active_synergies` (+ passive) plus core `deployables` / `counters` |
-| `add_status` / `add_resist` / `add_special` / `remove_special` | Text in effect — Lancer doesn't apply statuses from LCPs |
+| `add_status` / `add_resist` / `add_special` / `remove_special` | Text in effect (Lancer doesn't apply statuses from LCPs) |
 | `duration` / `condition` / `target` (non-action AEs) | Text meta in header |
 | `damage` / `bonus_damage` on non-action AEs | Text in effect |
 | Structured `save.on_success` / `on_fail` | Text in effect (DC still goes to bonus) |
@@ -73,7 +73,7 @@ Translation summary in the LCP Manager shows per-bucket counts and how many AE b
 
 ## Refresh items from LCPs
 
-After an LCP update, the compendium gets the new item versions but actors keep the old data. This tool re-pulls compendium items onto existing actors with a per-item diff and opt-in.
+Re-pulls updated compendium items onto existing actors, with a per-item diff and opt-in.
 
 Per actor: **Refresh** button in the actor sheet title bar.
 Bulk: **Refresh actors** button in the Actors sidebar.
@@ -100,7 +100,7 @@ If a red notification says the Worker isn't responding, it's hit its daily limit
 <details>
 <summary>Advanced: endpoint overrides</summary>
 
-If Massif rotates keys or moves hosts, five world settings let you update things without waiting for a module release. World reload required after changing any of them.
+If Massif rotates keys or moves hosts, you can update these endpoints in the settings without waiting for a module release. Reload the world after changing any of them.
 
 - `V3 API Base URL`
 - `V3 API Key`

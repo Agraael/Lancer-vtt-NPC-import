@@ -57,9 +57,9 @@ async function fetchCdnFromEntry(entry)
     }
 }
 
-function escapeHtml(s)
+function escapeHtml(value)
 {
-    return String(s ?? "")
+    return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -178,10 +178,10 @@ async function runTest(html, code)
     const directResult = await testDirect(v3Url, headers);
 
     const results = [directResult];
-    for (const p of CORS_PROXIES)
-        results.push(await testOne(p, v3Url, headers));
+    for (const proxy of CORS_PROXIES)
+        results.push(await testOne(proxy, v3Url, headers));
 
-    const successful = results.find(r => r.ok && r.parsed);
+    const successful = results.find(result => result.ok && result.parsed);
     let cdnBlock = "";
     if (successful)
     {

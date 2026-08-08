@@ -23,9 +23,13 @@ export function patchPilotImportReserves()
                 pilotData = JSON.parse(fileData);
                 pilotData = unwrapData(pilotData);
                 normalizePilotData(pilotData);
+                _preserveMechCurrentStats(pilotData);
                 normalizedFileData = JSON.stringify(pilotData);
             }
-            catch { /* not JSON, let original handle */ }
+            catch
+            {
+                // not JSON, let the original importer handle it
+            }
         }
         await orig.call(this, normalizedFileData);
         if (pilotData?.reserves?.length > 0)
@@ -33,9 +37,73 @@ export function patchPilotImportReserves()
         if (pilotData?.orgs?.length > 0)
             await _importOrganizations(this.actor, pilotData.orgs);
         await _backfillBondState(this.actor, pilotData);
+        await _backfillSkillDetail(this.actor, pilotData);
         await _refillResources(this.actor);
     };
     console.log('lancer-npc-import | Patched pilot import to include reserves & organizations');
+}
+
+const _MECH_STAT_MAP = [
+    ["hp", "hp.value"],
+    ["overshield", "overshield.value"],
+    ["burn", "burn"],
+    ["heat", "heat.value"],
+    ["stress", "stress.value"],
+    ["structure", "structure.value"],
+    ["overcharge", "overcharge.value"],
+    ["repairCapacity", "repairs.value"],
+    ["activations", "activations.value"],
+];
+
+// CompCon exports mech stats.current.hp as 0; the importer writes it, and hp<=0 auto-fires Lancer's
+// structure-damage flow, wrecking a live mech. Carry each existing mech's real current stats instead.
+function _preserveMechCurrentStats(pilotData)
+{
+    if (!Array.isArray(pilotData?.mechs))
+        return;
+    for (const mechData of pilotData.mechs)
+    {
+        const current = mechData?.stats?.current;
+        if (!current)
+            continue;
+        const existing = game.actors?.find(actor =>
+            typeof actor.is_mech === "function" && actor.is_mech() && actor.system?.lid === mechData.id);
+        if (!existing)
+            continue;
+        for (const [key, path] of _MECH_STAT_MAP)
+        {
+            const value = foundry.utils.getProperty(existing.system, path);
+            if (typeof value === "number" && Number.isFinite(value))
+                current[key] = value;
+        }
+    }
+}
+
+export async function _backfillSkillDetail(pilot, pilotData)
+{
+    if (!pilot || !Array.isArray(pilotData?.skills))
+        return;
+    const skillItems = pilot.items.filter(item => item.type === 'skill');
+    if (!skillItems.length)
+        return;
+    for (const skill of pilotData.skills)
+    {
+        const isCustom = !!skill.custom;
+        const lid = skill.id;
+        const wantName = isCustom ? lid : (skill.data?.name ?? lid);
+        const detail = isCustom ? (skill.custom_detail || '') : (skill.data?.detail || '');
+        const description = isCustom ? (skill.custom_desc || '') : (skill.data?.description || '');
+        const match = skillItems.find(item => (lid && item.system?.lid === lid) || item.name === wantName);
+        if (!match)
+            continue;
+        const updates = {};
+        if (detail && detail !== (match.system?.detail ?? ''))
+            updates['system.detail'] = detail;
+        if (description && !(match.system?.description ?? '').trim())
+            updates['system.description'] = description;
+        if (Object.keys(updates).length)
+            await match.update(updates);
+    }
 }
 
 export async function _importReserves(pilot, reserves)
@@ -43,12 +111,12 @@ export async function _importReserves(pilot, reserves)
     if (!pilot || !reserves?.length)
         return;
     const existingLids = new Set(
-        pilot.items.filter(i => i.type === 'reserve').map(i => i.system?.lid)
+        pilot.items.filter(item => item.type === 'reserve').map(item => item.system?.lid)
     );
     const toCreate = [];
-    for (const r of reserves)
+    for (const reserve of reserves)
     {
-        const lid = r.id;
+        const lid = reserve.id;
         if (!lid || existingLids.has(lid))
             continue;
         let found = null;
@@ -57,7 +125,7 @@ export async function _importReserves(pilot, reserves)
             if (pack.documentName !== 'Item')
                 continue;
             const index = await pack.getIndex({ fields: ['system.lid'] });
-            const entry = index.find(e => e.system?.lid === lid);
+            const entry = index.find(indexEntry => indexEntry.system?.lid === lid);
             if (entry)
             {
                 found = await pack.getDocument(entry._id);
@@ -67,36 +135,36 @@ export async function _importReserves(pilot, reserves)
         if (found)
         {
             const itemData = found.toObject();
-            if (r.name)
-                itemData.name = r.name;
-            if (r.used !== undefined)
-                itemData.system.used = r.used;
+            if (reserve.name)
+                itemData.name = reserve.name;
+            if (reserve.used !== undefined)
+                itemData.system.used = reserve.used;
             toCreate.push(itemData);
         }
         else
         {
             const descParts = [];
-            if (r.description)
-                descParts.push(r.description);
-            if (r.resource_name)
-                descParts.push(`<b>Resource:</b> ${r.resource_name}`);
-            if (r.resource_note)
-                descParts.push(`<b>Note:</b> ${r.resource_note}`);
-            if (r.resource_cost)
-                descParts.push(`<b>Cost:</b> ${r.resource_cost}`);
+            if (reserve.description)
+                descParts.push(reserve.description);
+            if (reserve.resource_name)
+                descParts.push(`<b>Resource:</b> ${reserve.resource_name}`);
+            if (reserve.resource_note)
+                descParts.push(`<b>Note:</b> ${reserve.resource_note}`);
+            if (reserve.resource_cost)
+                descParts.push(`<b>Cost:</b> ${reserve.resource_cost}`);
             const typeMap = { 'Resource': 'Resources', 'Tactical': 'Tactical', 'Mech': 'Mech', 'Project': 'Project', 'Organization': 'Organization', 'Bonus': 'Bonus' };
-            const reserveType = typeMap[r.type] || r.type || 'Resources';
+            const reserveType = typeMap[reserve.type] || reserve.type || 'Resources';
             toCreate.push({
-                name: r.name || r.label || 'Reserve',
+                name: reserve.name || reserve.label || 'Reserve',
                 type: 'reserve',
                 img: 'systems/lancer/assets/icons/reserve.svg',
                 system: {
                     lid: lid,
                     type: reserveType,
-                    label: r.label || r.name || '',
+                    label: reserve.label || reserve.name || '',
                     description: descParts.join('<br>') || '',
-                    consumable: r.consumable ?? false,
-                    used: r.used ?? false,
+                    consumable: reserve.consumable ?? false,
+                    used: reserve.used ?? false,
                 },
             });
         }
@@ -113,7 +181,7 @@ export async function _importOrganizations(pilot, orgs)
     if (!pilot || !orgs?.length)
         return;
     const existingNames = new Set(
-        pilot.items.filter(i => i.type === 'reserve').map(i => i.name)
+        pilot.items.filter(item => item.type === 'reserve').map(item => item.name)
     );
     const toCreate = [];
     for (const org of orgs)
@@ -158,7 +226,7 @@ export async function _backfillBondState(pilot, pilotData)
         return;
     const hasBurdens = Array.isArray(pilotData.burdens) && pilotData.burdens.length > 0;
     const hasClocks = Array.isArray(pilotData.clocks) && pilotData.clocks.length > 0;
-    const hasAnswers = Array.isArray(pilotData.bondAnswers) && pilotData.bondAnswers.some(a => a);
+    const hasAnswers = Array.isArray(pilotData.bondAnswers) && pilotData.bondAnswers.some(answer => answer);
     const hasMinor = !!pilotData.minorIdeal;
     if (!hasBurdens && !hasClocks && !hasAnswers && !hasMinor)
         return;
@@ -181,10 +249,10 @@ export async function _backfillBondState(pilot, pilotData)
     const cur = pilot.system?.bond_state ?? {};
 
     if (hasBurdens && (!Array.isArray(cur.burdens) || cur.burdens.length === 0))
-        update["system.bond_state.burdens"] = pilotData.burdens.map(b => toCounter(b, "burden"));
+        update["system.bond_state.burdens"] = pilotData.burdens.map(burden => toCounter(burden, "burden"));
     if (hasClocks && (!Array.isArray(cur.clocks) || cur.clocks.length === 0))
-        update["system.bond_state.clocks"] = pilotData.clocks.map(c => toCounter(c, "clock"));
-    if (hasAnswers && (!Array.isArray(cur.answers) || cur.answers.every(a => !a)))
+        update["system.bond_state.clocks"] = pilotData.clocks.map(clock => toCounter(clock, "clock"));
+    if (hasAnswers && (!Array.isArray(cur.answers) || cur.answers.every(answer => !answer)))
         update["system.bond_state.answers"] = pilotData.bondAnswers;
     if (hasMinor && !cur.minor_ideal)
         update["system.bond_state.minor_ideal"] = pilotData.minorIdeal;
@@ -208,17 +276,17 @@ export async function _refillResources(pilot)
         const sys = actor.system;
         const fillKeys = ['hp', 'structure', 'stress', 'repairs'];
         const zeroKeys = ['heat', 'burn', 'overshield'];
-        for (const k of fillKeys)
+        for (const key of fillKeys)
         {
-            const pool = sys[k];
+            const pool = sys[key];
             if (pool && typeof pool === 'object' && pool.max !== undefined && pool.value !== pool.max)
-                update[`system.${k}.value`] = pool.max;
+                update[`system.${key}.value`] = pool.max;
         }
-        for (const k of zeroKeys)
+        for (const key of zeroKeys)
         {
-            const pool = sys[k];
+            const pool = sys[key];
             if (pool && typeof pool === 'object' && pool.value !== undefined && pool.value !== 0)
-                update[`system.${k}.value`] = 0;
+                update[`system.${key}.value`] = 0;
         }
         if (Object.keys(update).length > 0)
             await actor.update(update);
@@ -234,18 +302,18 @@ export async function _refillResources(pilot)
             const id = typeof ref === 'string' ? ref : (ref?.id || ref?.value);
             if (!id || seen.has(id))
                 continue;
-            const m = game.actors.get(id);
-            if (m?.type === 'mech')
+            const mech = game.actors.get(id);
+            if (mech?.type === 'mech')
             {
-                seen.add(id); mechs.push(m);
+                seen.add(id); mechs.push(mech);
             }
         }
         for (const actor of game.actors)
         {
             if (actor.type !== 'mech' || seen.has(actor.id))
                 continue;
-            const pr = actor.system?.pilot;
-            const pid = typeof pr === 'string' ? pr : (pr?.id || pr?.value);
+            const pilotRef = actor.system?.pilot;
+            const pid = typeof pilotRef === 'string' ? pilotRef : (pilotRef?.id || pilotRef?.value);
             if (pid === pilot.id)
             {
                 seen.add(actor.id); mechs.push(actor);
@@ -255,11 +323,11 @@ export async function _refillResources(pilot)
     };
 
     // Wait up to 2s for mech HP max to populate.
-    for (let i = 0; i < 20; i++)
+    for (let attempt = 0; attempt < 20; attempt++)
     {
-        if (findMechs().every(m => (m.system?.hp?.max ?? 0) > 0))
+        if (findMechs().every(mech => (mech.system?.hp?.max ?? 0) > 0))
             break;
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     await refillOne(pilot);

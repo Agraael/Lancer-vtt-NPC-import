@@ -35,16 +35,16 @@ export async function checkModuleUpdate(moduleId)
             if (apiResponse.ok)
             {
                 const allReleases = await apiResponse.json();
-                const missed = allReleases.filter(r =>
+                const missed = allReleases.filter(release =>
                 {
-                    const v = r.tag_name.replace(/^v/, "");
-                    return foundry.utils.isNewerVersion(v, module.version);
+                    const version = release.tag_name.replace(/^v/, "");
+                    return foundry.utils.isNewerVersion(version, module.version);
                 });
                 if (missed.length > 0)
                 {
                     remoteVersion = missed[0].tag_name.replace(/^v/, "");
                     releaseNotes = missed
-                        .map(r => `## ${r.tag_name}\n${r.body || ""}`)
+                        .map(release => `## ${release.tag_name}\n${release.body || ""}`)
                         .join("\n\n---\n\n");
                 }
             }
@@ -95,7 +95,7 @@ function showUpdateDialog(module, newVersion, releaseNotes = "")
             <div class="lancer-action-buttons" style="margin: 10px 0 5px 0;">
                 <span class="lancer-section-title">RELEASE NOTES</span>
             </div>
-            <div class="form-group lancer-item-details" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 2px solid #999; border-radius: 4px; background: rgba(0,0,0,0.05);">
+            <div class="form-group lancer-item-details" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 2px solid var(--la-edge); border-radius: 4px; background: rgba(0,0,0,0.05);">
                 ${htmlNotes}
             </div>
         `;

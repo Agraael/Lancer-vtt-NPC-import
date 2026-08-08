@@ -1,8 +1,8 @@
 // Thin V3 HTTP layer for NPC cloud import. Pilot import is now the system's job.
 
 export const CORS_PROXIES = [
-    { name: "corsproxy.io",         wrap: u => `https://corsproxy.io/?${encodeURIComponent(u)}` },
-    { name: "lasossis-lancer-cors", wrap: u => `https://lasossis-lancer-cors.m-cescutti.workers.dev/?url=${encodeURIComponent(u)}` },
+    { name: "corsproxy.io",         wrap: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
+    { name: "lasossis-lancer-cors", wrap: url => `https://lasossis-lancer-cors.m-cescutti.workers.dev/?url=${encodeURIComponent(url)}` },
 ];
 
 let _proxyIdx = 0;
@@ -87,8 +87,8 @@ function _setting(key, fallback)
 {
     try
     {
-        const v = game.settings.get("lancer-npc-import", key);
-        return (typeof v === "string" && v.length > 0) ? v : fallback;
+        const value = game.settings.get("lancer-npc-import", key);
+        return (typeof value === "string" && value.length > 0) ? value : fallback;
     }
     catch
     {
@@ -111,7 +111,7 @@ export function getV3Cdn()
 export function getV2ShareApiHosts()
 {
     const raw = _setting("v2ShareApi", "https://api.compcon.app/share");
-    return raw.split(",").map(s => s.trim()).filter(Boolean);
+    return raw.split(",").map(host => host.trim()).filter(Boolean);
 }
 export function getV2ShareApiPrimary()
 {
@@ -172,33 +172,33 @@ export function normalizePilotData(pilotData)
 
     if (Array.isArray(pilotData.licenses))
     {
-        pilotData.licenses = pilotData.licenses.map(l =>
+        pilotData.licenses = pilotData.licenses.map(license =>
         {
-            if (typeof l === 'string')
-                return { id: l, rank: 1 };
-            return { id: l.id || l.data?.id || l, rank: l.rank ?? l.level ?? 1 };
+            if (typeof license === 'string')
+                return { id: license, rank: 1 };
+            return { id: license.id || license.data?.id || license, rank: license.rank ?? license.level ?? 1 };
         });
     }
 
-    const b = pilotData.bond;
-    if (b && typeof b === "object")
+    const bond = pilotData.bond;
+    if (bond && typeof bond === "object")
     {
         if (pilotData.bondId === undefined)
-            pilotData.bondId = b.bondId ?? b.data?.id;
+            pilotData.bondId = bond.bondId ?? bond.data?.id;
         if (!Array.isArray(pilotData.bondPowers))
-            pilotData.bondPowers = Array.isArray(b.bondPowers) ? b.bondPowers : [];
+            pilotData.bondPowers = Array.isArray(bond.bondPowers) ? bond.bondPowers : [];
         if (!Array.isArray(pilotData.burdens))
-            pilotData.burdens = Array.isArray(b.burdens) ? b.burdens : [];
+            pilotData.burdens = Array.isArray(bond.burdens) ? bond.burdens : [];
         if (!Array.isArray(pilotData.clocks))
-            pilotData.clocks = Array.isArray(b.clocks) ? b.clocks : [];
+            pilotData.clocks = Array.isArray(bond.clocks) ? bond.clocks : [];
         if (!Array.isArray(pilotData.bondAnswers))
-            pilotData.bondAnswers = Array.isArray(b.bondAnswers) ? b.bondAnswers : [];
+            pilotData.bondAnswers = Array.isArray(bond.bondAnswers) ? bond.bondAnswers : [];
         if (pilotData.minorIdeal === undefined)
-            pilotData.minorIdeal = b.minorIdeal ?? "";
+            pilotData.minorIdeal = bond.minorIdeal ?? "";
         if (pilotData.xp === undefined)
-            pilotData.xp = b.xp ?? 0;
+            pilotData.xp = bond.xp ?? 0;
         if (pilotData.stress === undefined)
-            pilotData.stress = b.stress ?? 0;
+            pilotData.stress = bond.stress ?? 0;
     }
     if (pilotData.bondId === undefined && pilotData.bond_id !== undefined)
         pilotData.bondId = pilotData.bond_id;
@@ -246,9 +246,8 @@ export async function getJwtTokenFromV5Auth()
     return getValidJwt();
 }
 
-// Intercept window.fetch so the Lancer v2.12 native share-code import goes
-// through our CORS proxy. The system calls api.compcon.app/v3/code directly,
-// which the API only allows from compcon.app origin, breaking everyone else.
+// Route Lancer v2.12's native share-code import through our CORS proxy: it hits
+// api.compcon.app/v3/code directly, which the API only allows from compcon.app.
 const V3_CODE_HOST_MATCH = /^https?:\/\/api\.compcon\.app\/v3\/code(\?|$)/i;
 
 export function installV3CodeFetchPatch()

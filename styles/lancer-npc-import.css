@@ -12,7 +12,7 @@
 .mapping-dialog .window-content,
 .lancer-import-progress-dialog .window-content,
 .lancer-refresh-dialog .window-content {
-    color: var(--color-text-dark-primary);
+    color: var(--la-ink);
 }
 
 /* --- Source selection dialog item sizing --- */
@@ -55,7 +55,7 @@
     background: transparent !important;
     border: 2px solid rgba(0, 0, 0, 0.2) !important;
     border-radius: 6px !important;
-    color: var(--color-text-dark-primary) !important;
+    color: var(--la-ink) !important;
     font-weight: 600 !important;
     transition: all 0.2s ease !important;
     width: 100%;
@@ -169,7 +169,7 @@
     background: transparent !important;
     border: 2px solid rgba(0, 0, 0, 0.2) !important;
     border-radius: 6px !important;
-    color: var(--color-text-dark-primary) !important;
+    color: var(--la-ink) !important;
     font-weight: 600 !important;
     transition: all 0.2s ease !important;
 }
@@ -220,7 +220,7 @@
     background: transparent !important;
     border: 2px solid rgba(0, 0, 0, 0.2) !important;
     border-radius: 6px !important;
-    color: var(--color-text-dark-primary) !important;
+    color: var(--la-ink) !important;
     font-weight: 600 !important;
     transition: all 0.2s ease !important;
 }
@@ -274,7 +274,7 @@
 .mapping-item-header {
     font-weight: bold;
     margin-bottom: 8px;
-    color: #191813;
+    color: var(--la-ink);
     font-size: 14px;
 }
 
@@ -292,7 +292,7 @@
 }
 
 .mapping-item select option {
-    color: #191813;
+    color: var(--la-ink);
 }
 
 .mapping-item .keep-name-toggle {
@@ -303,7 +303,7 @@
     cursor: pointer;
     font-size: 12px;
     border: 1px solid rgba(0, 0, 0, 0.15);
-    color: #191813;
+    color: var(--la-ink);
 }
 
 .mapping-item .keep-name-toggle.visible {
@@ -334,7 +334,7 @@
     background: transparent !important;
     border: 2px solid rgba(0, 0, 0, 0.2) !important;
     border-radius: 6px !important;
-    color: var(--color-text-dark-primary) !important;
+    color: var(--la-ink) !important;
     font-weight: 600 !important;
     transition: all 0.2s ease !important;
 }
@@ -406,7 +406,7 @@
 
 .npc-list-label {
     margin: 0;
-    color: #191813;
+    color: var(--la-ink);
     font-weight: 600;
 }
 
@@ -453,13 +453,13 @@
 
 .npc-name {
     font-weight: bold;
-    color: #191813 !important;
+    color: var(--la-ink) !important;
     margin-bottom: 3px;
 }
 
 .npc-details {
     font-size: 0.9em;
-    color: rgba(25, 24, 19, 0.6) !important;
+    color: var(--la-ink-dim) !important;
 }
 
 .npc-portrait {
@@ -573,7 +573,7 @@
     flex-direction: column !important;
     height: 100% !important;
     overflow: hidden !important;
-    color: var(--color-text-dark-primary);
+    color: var(--la-ink);
 }
 
 .lancer-refresh-dialog .dialog-content {
@@ -838,8 +838,8 @@
     font-style: italic;
 }
 
-.refresh-val-missing { color: #999; }
-.refresh-val-trunc { cursor: help; border-bottom: 1px dotted #999; }
+.refresh-val-missing { color: var(--la-ink-dim); }
+.refresh-val-trunc { cursor: help; border-bottom: 1px dotted var(--la-edge); }
 
 .refresh-actors-button { white-space: nowrap; }
 
@@ -847,7 +847,7 @@
 /* === Refresh progress dialog === */
 
 .lancer-refresh-progress-dialog .window-content {
-    color: var(--color-text-dark-primary);
+    color: var(--la-ink);
 }
 
 .refresh-progress {
@@ -888,7 +888,7 @@
 
 /* === Share code test === */
 
-.lancer-share-code-test .window-content { color: var(--color-text-dark-primary); }
+.lancer-share-code-test .window-content { color: var(--la-ink); }
 
 .sct-root { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .sct-hint { font-size: 12px; opacity: 0.75; margin: 0; }
@@ -971,7 +971,7 @@
 /* === Refresh pack picker === */
 
 .lancer-refresh-pack-dialog .window-content {
-    color: var(--color-text-dark-primary);
+    color: var(--la-ink);
 }
 
 .refresh-pack-section {
@@ -1025,8 +1025,8 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #888;
-    border: 1px solid #aaa;
+    color: var(--la-ink-dim);
+    border: 1px solid var(--la-edge);
     border-radius: 3px;
     padding: 0 4px;
 }
@@ -1297,9 +1297,8 @@
 }
 
 .pilot-row > summary::before {
-    content: "\f105";
-    font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
-    font-weight: 900;
+    content: "\25B6";
+    font-size: 1em;
     width: 12px;
     transition: transform 0.15s ease;
     opacity: 0.6;

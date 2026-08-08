@@ -5,6 +5,7 @@ import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
 import { ActorImportDialog } from "./npc-import-ui.js";
 import { LcpDebugDiffMenu } from "./lcp-debug-diff.js";
 import { ShareCodeTestMenu } from "./share-code-test.js";
+import { FixTokenSizesMenu } from "./fix-token-sizes.js";
 import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
 import { isRefreshableActor } from "./refresh/refresh-core.js";
 import { COGNITO_SETTINGS_KEYS } from "./auth/cognito-auth.js";
@@ -122,6 +123,15 @@ Hooks.once('init', () =>
         hint: "Tests a v3 share code against each CORS proxy and shows the raw JSON response.",
         icon: "fas fa-vial",
         type: ShareCodeTestMenu,
+        restricted: true
+    });
+
+    game.settings.registerMenu("lancer-npc-import", "fixTokenSizes", {
+        name: "Fix Token Sizes",
+        label: "Fix Token Sizes",
+        hint: "Set each actor's prototype token size to match its Lancer size so drag-drops snap correctly. Skips manual-size actors; half-size units become 1x1.",
+        icon: "fas fa-expand",
+        type: FixTokenSizesMenu,
         restricted: true
     });
 

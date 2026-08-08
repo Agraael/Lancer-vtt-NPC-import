@@ -67,7 +67,10 @@ class RefreshProgressDialog
     close()
     {
         try { this.dialog?.close({ force: true }); }
-        catch { /* ignore */ }
+        catch
+        {
+            // dialog already gone
+        }
         this.dialog = null;
     }
 
@@ -84,7 +87,7 @@ class RefreshProgressDialog
 }
 
 // yield so the progress dialog can repaint
-async function tick() { return new Promise(r => setTimeout(r, 0)); }
+async function tick() { return new Promise(resolve => setTimeout(resolve, 0)); }
 
 class RefreshPackPicker
 {
@@ -97,9 +100,9 @@ class RefreshPackPicker
     {
         return new Promise(resolve =>
         {
-            const itemPacks = game.packs.filter(p => p.metadata.type === "Item");
+            const itemPacks = game.packs.filter(pack => pack.metadata.type === "Item");
             const actorPacks = mode === "all"
-                ? game.packs.filter(p => p.metadata.type === "Actor")
+                ? game.packs.filter(pack => pack.metadata.type === "Actor")
                 : [];
 
             const savedItem = game.settings.get("lancer-npc-import", this.SETTING_ITEM) || [];
@@ -107,7 +110,7 @@ class RefreshPackPicker
             const savedFolders = mode === "all"
                 ? (game.settings.get("lancer-npc-import", this.SETTING_FOLDERS) || [])
                 : [];
-            const itemSelected = new Set(savedItem.length ? savedItem : itemPacks.map(p => p.collection));
+            const itemSelected = new Set(savedItem.length ? savedItem : itemPacks.map(pack => pack.collection));
             const actorSelected = new Set(savedActor);
             const folderSelected = new Set(savedFolders);
 
@@ -130,35 +133,35 @@ class RefreshPackPicker
                     </div>
                     <div class="refresh-pack-hint">Source of truth. Each actor item is compared to its match in these packs.</div>
                     <div class="refresh-pack-list">
-                        ${itemPacks.map(p => renderRow(p, itemSelected.has(p.collection))).join("")}
+                        ${itemPacks.map(pack => renderRow(pack, itemSelected.has(pack.collection))).join("")}
                     </div>
                 </div>
             `;
 
             const actorFolders = mode === "all"
-                ? game.folders.filter(f => f.type === "Actor")
+                ? game.folders.filter(folder => folder.type === "Actor")
                 : [];
             const folderTree = [];
             const visit = (folder, depth) =>
             {
                 folderTree.push({ folder, depth });
                 actorFolders
-                    .filter(f => f.folder?.id === folder.id)
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(c => visit(c, depth + 1));
+                    .filter(child => child.folder?.id === folder.id)
+                    .sort((childA, childB) => childA.name.localeCompare(childB.name))
+                    .forEach(child => visit(child, depth + 1));
             };
             actorFolders
-                .filter(f => !f.folder)
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach(f => visit(f, 0));
+                .filter(folder => !folder.folder)
+                .sort((folderA, folderB) => folderA.name.localeCompare(folderB.name))
+                .forEach(folder => visit(folder, 0));
 
             const countActorsInFolder = folderId =>
             {
                 if (folderId === RefreshPackPicker.NOFOLDER_ID)
                 {
-                    return game.actors.filter(a => isRefreshableActor(a) && !a.folder).length;
+                    return game.actors.filter(actor => isRefreshableActor(actor) && !actor.folder).length;
                 }
-                return game.actors.filter(a => isRefreshableActor(a) && a.folder?.id === folderId).length;
+                return game.actors.filter(actor => isRefreshableActor(actor) && actor.folder?.id === folderId).length;
             };
 
             const folderRows = folderTree
@@ -196,7 +199,7 @@ class RefreshPackPicker
             const packGroup = actorPacks.length
                 ? `
                     <div class="refresh-pack-group-header">Actor compendiums</div>
-                    ${actorPacks.map(p => renderRow(p, actorSelected.has(p.collection))).join("")}
+                    ${actorPacks.map(pack => renderRow(pack, actorSelected.has(pack.collection))).join("")}
                 `
                 : "";
 
@@ -264,15 +267,15 @@ class RefreshPackPicker
                         {
                             const root = html instanceof HTMLElement ? html : html[0];
                             const itemColl = Array.from(root.querySelectorAll('[data-kind="item"] input[type="checkbox"]:checked'))
-                                .filter(i => i.dataset.collection)
-                                .map(i => i.dataset.collection);
+                                .filter(input => input.dataset.collection)
+                                .map(input => input.dataset.collection);
                             let actorColl = [];
                             let folderIds = [];
                             if (mode === "all")
                             {
                                 const checked = Array.from(root.querySelectorAll('[data-kind="actor"] input[type="checkbox"]:checked'));
-                                actorColl = checked.filter(i => i.dataset.collection).map(i => i.dataset.collection);
-                                folderIds = checked.filter(i => i.dataset.folder).map(i => i.dataset.folder);
+                                actorColl = checked.filter(input => input.dataset.collection).map(input => input.dataset.collection);
+                                folderIds = checked.filter(input => input.dataset.folder).map(input => input.dataset.folder);
                             }
                             game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_ITEM, itemColl);
                             if (mode === "all")
@@ -282,8 +285,8 @@ class RefreshPackPicker
                             }
                             resolved = true;
                             resolve({
-                                itemPacks: itemPacks.filter(p => itemColl.includes(p.collection)),
-                                actorPacks: actorPacks.filter(p => actorColl.includes(p.collection)),
+                                itemPacks: itemPacks.filter(pack => itemColl.includes(pack.collection)),
+                                actorPacks: actorPacks.filter(pack => actorColl.includes(pack.collection)),
                                 folderIds,
                                 lcpLids,
                                 lcpLabel
@@ -347,17 +350,17 @@ class RefreshPackPicker
                     setStatus(`Loading ${file.name}...`, false);
                     try
                     {
-                        const r = await loadLcpFile(file);
-                        if (!r.lids.size)
+                        const result = await loadLcpFile(file);
+                        if (!result.lids.size)
                         {
                             lcpLids = null;
                             lcpLabel = null;
                             setStatus(`No LIDs found in ${file.name}.`, false);
                             return;
                         }
-                        lcpLids = r.lids;
-                        lcpLabel = r.name + (r.version ? ` v${r.version}` : "");
-                        setStatus(`Loaded "${lcpLabel}" - ${r.count} LID(s)`, true);
+                        lcpLids = result.lids;
+                        lcpLabel = result.name + (result.version ? ` v${result.version}` : "");
+                        setStatus(`Loaded "${lcpLabel}" - ${result.count} LID(s)`, true);
                     }
                     catch (err)
                     {
@@ -450,19 +453,19 @@ export class RefreshItemsDialog
 
             const folderSet = new Set(picked.folderIds);
             const includeNoFolder = folderSet.has(RefreshPackPicker.NOFOLDER_ID);
-            const worldActors = game.actors.filter(a =>
+            const worldActors = game.actors.filter(actor =>
             {
-                if (!isRefreshableActor(a))
+                if (!isRefreshableActor(actor))
                     return false;
-                if (!a.folder)
+                if (!actor.folder)
                     return includeNoFolder;
-                return folderSet.has(a.folder.id);
+                return folderSet.has(actor.folder.id);
             });
             const actorPacks = picked.actorPacks;
 
             const allActors = [];
-            for (const a of worldActors)
-                allActors.push({ actor: a, locked: false });
+            for (const actor of worldActors)
+                allActors.push({ actor, locked: false });
 
             for (let pi = 0; pi < actorPacks.length; pi++)
             {
@@ -479,14 +482,14 @@ export class RefreshItemsDialog
                     console.warn(`refresh: failed to load actors from ${pack.collection}`, err);
                     continue;
                 }
-                for (const a of docs)
+                for (const actor of docs)
                 {
-                    if (isRefreshableActor(a))
-                        allActors.push({ actor: a, locked: !!pack.locked });
+                    if (isRefreshableActor(actor))
+                        allActors.push({ actor, locked: !!pack.locked });
                 }
             }
 
-            const actors = allActors.map(a => a.actor);
+            const actors = allActors.map(entry => entry.actor);
             const needed = collectNeededPackDocs(actors, lidIndex, picked.lcpLids);
             const cache = await prefetchPackDocs(needed, progress);
 
@@ -501,7 +504,7 @@ export class RefreshItemsDialog
                     await tick();
                 }
                 const items = await classifyActorItems(actor, lidIndex, cache, picked.lcpLids);
-                if (items.some(it => ACTIONABLE.has(it.status)))
+                if (items.some(classifiedItem => ACTIONABLE.has(classifiedItem.status)))
                 {
                     targets.push({ actor, items, locked });
                 }
@@ -600,18 +603,18 @@ export class RefreshItemsDialog
                 btn.addEventListener("click", ev => { ev.preventDefault(); fn(root); });
         };
 
-        handleClick('[data-act="expand-all"]', r =>
+        handleClick('[data-act="expand-all"]', rootEl =>
         {
-            r.querySelectorAll(".refresh-actor-section").forEach(s => setSectionExpanded(s, true));
-            r.querySelectorAll(".refresh-row").forEach(row => setRowExpanded(row, true));
+            rootEl.querySelectorAll(".refresh-actor-section").forEach(section => setSectionExpanded(section, true));
+            rootEl.querySelectorAll(".refresh-row").forEach(row => setRowExpanded(row, true));
         });
-        handleClick('[data-act="collapse-all"]', r =>
+        handleClick('[data-act="collapse-all"]', rootEl =>
         {
-            r.querySelectorAll(".refresh-row").forEach(row => setRowExpanded(row, false));
+            rootEl.querySelectorAll(".refresh-row").forEach(row => setRowExpanded(row, false));
         });
-        handleClick('[data-act="check-all"]', r =>
+        handleClick('[data-act="check-all"]', rootEl =>
         {
-            r.querySelectorAll(".refresh-row").forEach(row =>
+            rootEl.querySelectorAll(".refresh-row").forEach(row =>
             {
                 if (row.style.display === "none")
                     return;
@@ -622,9 +625,9 @@ export class RefreshItemsDialog
                     cb.checked = true;
             });
         });
-        handleClick('[data-act="uncheck-all"]', r =>
+        handleClick('[data-act="uncheck-all"]', rootEl =>
         {
-            r.querySelectorAll(".refresh-row").forEach(row =>
+            rootEl.querySelectorAll(".refresh-row").forEach(row =>
             {
                 if (row.style.display === "none")
                     return;
@@ -635,9 +638,9 @@ export class RefreshItemsDialog
         });
     }
 
-    #applyFilter(root, q)
+    #applyFilter(root, rawQuery)
     {
-        const query = (q || "").trim().toLowerCase();
+        const query = (rawQuery || "").trim().toLowerCase();
         root.querySelectorAll(".refresh-actor-section").forEach(section =>
         {
             const actorName = section.querySelector(".refresh-actor-name")?.textContent?.toLowerCase() || "";
@@ -660,7 +663,7 @@ export class RefreshItemsDialog
 
     #renderContent()
     {
-        const sections = this.targets.map((t, ti) => this.#renderActorSection(t, ti)).join("");
+        const sections = this.targets.map((target, targetIndex) => this.#renderActorSection(target, targetIndex)).join("");
         const totals = this.#totalsLine();
         return `
             <div class="refresh-toolbar">
@@ -682,39 +685,39 @@ export class RefreshItemsDialog
 
     #totalsLine()
     {
-        const c = { modified: 0, unlinked: 0, synced: 0, missing: 0 };
-        for (const t of this.targets)
+        const counts = { modified: 0, unlinked: 0, synced: 0, missing: 0 };
+        for (const target of this.targets)
         {
-            for (const i of t.items)
-                if (c[i.status] !== undefined)
-                    c[i.status]++;
+            for (const item of target.items)
+                if (counts[item.status] !== undefined)
+                    counts[item.status]++;
         }
         const parts = [];
-        if (c.modified)
-            parts.push(`<span class="npc-status-badge modified">${c.modified}</span>`);
-        if (c.unlinked)
-            parts.push(`<span class="npc-status-badge unlinked">${c.unlinked}</span>`);
-        if (c.synced)
-            parts.push(`<span class="npc-status-badge synced">${c.synced}</span>`);
-        if (c.missing)
-            parts.push(`<span class="refresh-count-missing">${c.missing} miss</span>`);
+        if (counts.modified)
+            parts.push(`<span class="npc-status-badge modified">${counts.modified}</span>`);
+        if (counts.unlinked)
+            parts.push(`<span class="npc-status-badge unlinked">${counts.unlinked}</span>`);
+        if (counts.synced)
+            parts.push(`<span class="npc-status-badge synced">${counts.synced}</span>`);
+        if (counts.missing)
+            parts.push(`<span class="refresh-count-missing">${counts.missing} miss</span>`);
         return parts.join(" ");
     }
 
-    #renderActorSection(t, ti)
+    #renderActorSection(target, targetIndex)
     {
-        const counts = this.#countsLine(t.items);
-        const lockedNote = t.locked
+        const counts = this.#countsLine(target.items);
+        const lockedNote = target.locked
             ? `<div class="lancer-info-box refresh-locked"><i class="fas fa-lock"></i><span>Pack is locked. Unlock it to refresh actors inside.</span></div>`
             : "";
-        const rows = t.items
-            .map((cls, ii) => this.#renderRow(cls, ti, ii, t.locked))
+        const rows = target.items
+            .map((cls, ii) => this.#renderRow(cls, targetIndex, ii, target.locked))
             .join("");
         return `
-            <div class="refresh-actor-section" data-target="${ti}" data-expanded="0">
+            <div class="refresh-actor-section" data-target="${targetIndex}" data-expanded="0">
                 <div class="refresh-actor-summary" data-act="toggle-section">
                     <span class="refresh-actor-toggle">▶</span>
-                    <span class="refresh-actor-name">${escapeHtml(t.actor.name)}</span>
+                    <span class="refresh-actor-name">${escapeHtml(target.actor.name)}</span>
                     <span class="refresh-counts">${counts}</span>
                 </div>
                 <div class="refresh-actor-body" hidden>
@@ -727,19 +730,19 @@ export class RefreshItemsDialog
 
     #countsLine(items)
     {
-        const c = { modified: 0, unlinked: 0, synced: 0, missing: 0 };
-        for (const i of items)
-            if (c[i.status] !== undefined)
-                c[i.status]++;
+        const counts = { modified: 0, unlinked: 0, synced: 0, missing: 0 };
+        for (const item of items)
+            if (counts[item.status] !== undefined)
+                counts[item.status]++;
         const parts = [];
-        if (c.modified)
-            parts.push(`<span class="npc-status-badge modified">${c.modified} mod</span>`);
-        if (c.unlinked)
-            parts.push(`<span class="npc-status-badge unlinked">${c.unlinked} unl</span>`);
-        if (c.synced)
-            parts.push(`<span class="npc-status-badge synced">${c.synced} ok</span>`);
-        if (c.missing)
-            parts.push(`<span class="refresh-count-missing">${c.missing} missing</span>`);
+        if (counts.modified)
+            parts.push(`<span class="npc-status-badge modified">${counts.modified} mod</span>`);
+        if (counts.unlinked)
+            parts.push(`<span class="npc-status-badge unlinked">${counts.unlinked} unl</span>`);
+        if (counts.synced)
+            parts.push(`<span class="npc-status-badge synced">${counts.synced} ok</span>`);
+        if (counts.missing)
+            parts.push(`<span class="refresh-count-missing">${counts.missing} missing</span>`);
         return parts.join(" ");
     }
 
@@ -753,7 +756,7 @@ export class RefreshItemsDialog
         const badge = `<span class="npc-status-badge ${cls.status}">${STATUS_LABELS[cls.status] || cls.status}</span>`;
         const expanded = cls.status !== "synced";
         const diffBlock = cls.diff?.length
-            ? `<div class="refresh-diff">${cls.diff.map(d => this.#renderDiffLine(d)).join("")}</div>`
+            ? `<div class="refresh-diff">${cls.diff.map(diffEntry => this.#renderDiffLine(diffEntry)).join("")}</div>`
             : "";
         const warnBlock = cls.status === "unlinked"
             ? `<div class="refresh-warn"><i class="fas fa-exclamation-triangle"></i> Replaces the item, changes its embedded id. Mech loadout slots may need re-linking.</div>`
@@ -779,9 +782,9 @@ export class RefreshItemsDialog
         `;
     }
 
-    #renderDiffLine(d)
+    #renderDiffLine(diff)
     {
-        return `<div class="refresh-diff-line"><code>${escapeHtml(d.path)}</code>: ${formatVal(d.actor)} → ${formatVal(d.pack)}</div>`;
+        return `<div class="refresh-diff-line"><code>${escapeHtml(diff.path)}</code>: ${formatVal(diff.actor)} → ${formatVal(diff.pack)}</div>`;
     }
 
     async #apply(html)
@@ -791,13 +794,13 @@ export class RefreshItemsDialog
 
         for (let ti = 0; ti < this.targets.length; ti++)
         {
-            const t = this.targets[ti];
-            if (t.locked)
+            const target = this.targets[ti];
+            if (target.locked)
                 continue;
             const selections = [];
-            for (let ii = 0; ii < t.items.length; ii++)
+            for (let ii = 0; ii < target.items.length; ii++)
             {
-                const cls = t.items[ii];
+                const cls = target.items[ii];
                 if (!ACTIONABLE.has(cls.status))
                     continue;
                 const cb = root.querySelector(`input.refresh-row-cb[data-target="${ti}"][data-row="${ii}"]`);
@@ -811,10 +814,10 @@ export class RefreshItemsDialog
             }
             if (!selections.length)
                 continue;
-            const r = await applyRefresh(t.actor, selections);
-            overall.updated += r.updated;
-            overall.replaced.push(...r.replaced);
-            overall.failed.push(...r.failed);
+            const result = await applyRefresh(target.actor, selections);
+            overall.updated += result.updated;
+            overall.replaced.push(...result.replaced);
+            overall.failed.push(...result.failed);
             overall.actorsTouched++;
         }
 
@@ -861,25 +864,25 @@ function setSectionExpanded(section, expanded)
         toggle.textContent = expanded ? "▼" : "▶";
 }
 
-function escapeHtml(s)
+function escapeHtml(value)
 {
-    return String(s ?? "")
+    return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 }
 
-function formatVal(v)
+function formatVal(value)
 {
-    if (v === undefined)
+    if (value === undefined)
         return `<i class="refresh-val-missing">missing</i>`;
-    if (v === null)
+    if (value === null)
         return `<code>null</code>`;
-    const s = typeof v === "string" ? v : JSON.stringify(v);
-    if (s.length > 80)
+    const str = typeof value === "string" ? value : JSON.stringify(value);
+    if (str.length > 80)
     {
-        return `<span class="refresh-val-trunc" title="${escapeHtml(s)}">${escapeHtml(s.slice(0, 80))}…</span>`;
+        return `<span class="refresh-val-trunc" title="${escapeHtml(str)}">${escapeHtml(str.slice(0, 80))}…</span>`;
     }
-    return `<code>${escapeHtml(s)}</code>`;
+    return `<code>${escapeHtml(str)}</code>`;
 }

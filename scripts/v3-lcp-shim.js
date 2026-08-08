@@ -1,7 +1,5 @@
-// V3 → V2 LCP translator.
-// Rewrites a Comp/Con v3 LCP zip into the legacy v2 shape so Lancer 2.x can import it.
-// active_effects are lifted into v2 native bonuses/actions/deployables where shapes match,
-// and appended to item effect text otherwise. Eidolon layers are dropped.
+// V3 -> V2 LCP translator: rewrites a Comp/Con v3 LCP zip into the legacy v2 shape.
+// active_effects lift into native bonuses/actions/deployables or effect text; eidolon layers drop.
 
 const MODULE_ID = "lancer-npc-import";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
@@ -13,12 +11,10 @@ async function getJSZip()
         return globalThis.JSZip;
     if (!_jszipPromise)
     {
-        _jszipPromise = import(JSZIP_CDN).then(m => m.default || m.JSZip || m);
+        _jszipPromise = import(JSZIP_CDN).then(mod => mod.default || mod.JSZip || mod);
     }
     return _jszipPromise;
 }
-
-// ── Detection ───────────────────────────────────────────────────────────────
 
 function isV3Manifest(manifest)
 {
@@ -27,27 +23,24 @@ function isV3Manifest(manifest)
 
 function hasV3Layout(zip)
 {
-    return Object.keys(zip.files).some(n =>
-        /^npcc_.+\.json$/i.test(n) ||
-        /^npct_.+\.json$/i.test(n) ||
-        /^license_.+\.json$/i.test(n) ||
-        n === "eidolon_layers.json"
+    return Object.keys(zip.files).some(name =>
+        /^npcc_.+\.json$/i.test(name) ||
+        /^npct_.+\.json$/i.test(name) ||
+        /^license_.+\.json$/i.test(name) ||
+        name === "eidolon_layers.json"
     );
 }
-
-// ── Field translators ───────────────────────────────────────────────────────
 
 function translateClassStats(cls, logDropped)
 {
     if (!cls.stats)
         return;
-    // v3 size: scalar → v2 [[n],[n],[n]]
+    // v3 size: scalar -> v2 [[n],[n],[n]]
     if (typeof cls.stats.size === "number")
     {
-        const s = cls.stats.size;
-        cls.stats.size = [[s], [s], [s]];
+        const size = cls.stats.size;
+        cls.stats.size = [[size], [size], [size]];
     }
-    // v3 cosmetic, v2 ignores but harmless to keep
 }
 
 function translateFeature(feat, parent, parentType, droppedEffects)
@@ -64,15 +57,15 @@ function translateFeature(feat, parent, parentType, droppedEffects)
     feat.__v3_origin_id = originId;
     feat.__v3_base = baseFlag;
 
-    // damage[].val → damage[].damage
+    // damage[].val -> damage[].damage
     if (Array.isArray(feat.damage))
     {
-        for (const d of feat.damage)
+        for (const damageEntry of feat.damage)
         {
-            if (d?.val !== undefined && d.damage === undefined)
+            if (damageEntry?.val !== undefined && damageEntry.damage === undefined)
             {
-                d.damage = d.val;
-                delete d.val;
+                damageEntry.damage = damageEntry.val;
+                delete damageEntry.val;
             }
         }
     }
@@ -132,72 +125,65 @@ function stripSidecar(feat)
     delete feat.__v3_base;
 }
 
-// ── Generic item translators (non-NPC) ──────────────────────────────────────
-
-// v3 active_effect → v2 Lancer VTT translation.
-// Lancer 2.x has native schemas for most of the fields v3 packs into active_effects:
-// - action.damage[], action.range[], action.frequency, action.trigger, action.tech_attack
-// - bonuses[] with lids "save", "attack", "armor", etc.
-// - bonuses[] with added_damage[]
-// Fields with no native structured home (add_status, add_resist, add_special) fall back to text.
+// v3 active_effect -> v2 translation. Lancer 2.x natively models action damage/range/
+// frequency/trigger and bonuses (save/attack/armor, added_damage); the rest falls back to text.
 
 const FREQUENCY_RE = /^\s*(\d+\s*\/\s*(turn|round|encounter|scene|mission|unlimited)|unlimited)\s*$/i;
 
-function capitalizeDamageType(t)
+function capitalizeDamageType(type)
 {
-    if (!t || typeof t !== "string")
-        return t;
-    const norm = t.trim().toLowerCase();
+    if (!type || typeof type !== "string")
+        return type;
+    const norm = type.trim().toLowerCase();
     const map = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", heat: "Heat", burn: "Burn", variable: "Variable" };
-    return map[norm] ?? (t.charAt(0).toUpperCase() + t.slice(1));
+    return map[norm] ?? (type.charAt(0).toUpperCase() + type.slice(1));
 }
-function capitalizeRangeType(t)
+function capitalizeRangeType(type)
 {
-    if (!t || typeof t !== "string")
-        return t;
-    const norm = t.trim().toLowerCase();
+    if (!type || typeof type !== "string")
+        return type;
+    const norm = type.trim().toLowerCase();
     const map = { range: "Range", threat: "Threat", thrown: "Thrown", line: "Line", cone: "Cone", blast: "Blast", burst: "Burst" };
-    return map[norm] ?? (t.charAt(0).toUpperCase() + t.slice(1));
+    return map[norm] ?? (type.charAt(0).toUpperCase() + type.slice(1));
 }
 
 // v2 damage.val is a string (dice expression or number). Arrays become a single joined string.
-function normalizeDamageVal(v)
+function normalizeDamageVal(value)
 {
-    if (v === undefined || v === null)
+    if (value === undefined || value === null)
         return "";
-    if (Array.isArray(v))
-        return v.map(String).join("/");
-    return String(v);
+    if (Array.isArray(value))
+        return value.map(String).join("/");
+    return String(value);
 }
-function toV2Damage(d)
+function toV2Damage(damage)
 {
-    if (!d)
+    if (!damage)
         return null;
-    return { type: capitalizeDamageType(d.type), val: normalizeDamageVal(d.val ?? d.damage ?? d.amount) };
+    return { type: capitalizeDamageType(damage.type), val: normalizeDamageVal(damage.val ?? damage.damage ?? damage.amount) };
 }
-function toV2Range(r)
+function toV2Range(range)
 {
-    if (r?.val === undefined)
+    if (range?.val === undefined)
         return null;
-    const n = typeof r.val === "number" ? r.val : Number(r.val);
-    return { type: capitalizeRangeType(r.type ?? "Range"), val: Number.isFinite(n) ? n : 0 };
+    const num = typeof range.val === "number" ? range.val : Number(range.val);
+    return { type: capitalizeRangeType(range.type ?? "Range"), val: Number.isFinite(num) ? num : 0 };
 }
 
-function normalizeFrequency(f)
+function normalizeFrequency(freq)
 {
-    if (!f || typeof f !== "string")
+    if (!freq || typeof freq !== "string")
         return "";
-    const t = f.trim();
-    if (FREQUENCY_RE.test(t))
+    const trimmed = freq.trim();
+    if (FREQUENCY_RE.test(trimmed))
     {
-        return t.replace(/\s*\/\s*/, "/").replaceAll(/\b(\w)/g, c => c.toUpperCase());
+        return trimmed.replace(/\s*\/\s*/, "/").replaceAll(/\b(\w)/g, char => char.toUpperCase());
     }
     return "";
 }
 
-// Fragments that stay as text (no Lancer v2 schema equivalent on items).
-// Returns "" if the active_effect has no content beyond just its own name label,
-// so we don't pollute `effect` with bare `**Name**` trailers.
+// Text fragments with no Lancer v2 schema equivalent on items. Returns "" when the
+// active_effect has nothing beyond its name label, so we don't emit bare `**Name**` trailers.
 function renderResidualText(ae, handled)
 {
     if (!ae)
@@ -208,37 +194,37 @@ function renderResidualText(ae, handled)
     if (ae.condition && !handled.trigger)
         meta.push(`When: ${ae.condition}`);
     const detail = !handled.detail && ae.detail ? ae.detail : "";
-    const renderToken = t =>
+    const renderToken = token =>
     {
-        if (t === null || t === undefined)
+        if (token === null || token === undefined)
             return "";
-        if (typeof t === "string")
-            return t;
-        if (typeof t === "object")
-            return t.name ?? t.lid ?? t.id ?? "";
-        return String(t);
+        if (typeof token === "string")
+            return token;
+        if (typeof token === "object")
+            return token.name ?? token.lid ?? token.id ?? "";
+        return String(token);
     };
-    const renderTokens = v => (Array.isArray(v) ? v : [v]).map(renderToken).filter(Boolean).join(", ");
+    const renderTokens = value => (Array.isArray(value) ? value : [value]).map(renderToken).filter(Boolean).join(", ");
     const extras = [];
     if (ae.add_status)
     {
-        const s = renderTokens(ae.add_status); if (s)
-            extras.push(`Applies status: ${s}`);
+        const text = renderTokens(ae.add_status); if (text)
+            extras.push(`Applies status: ${text}`);
     }
     if (ae.add_resist)
     {
-        const s = renderTokens(ae.add_resist); if (s)
-            extras.push(`Grants resistance: ${s}`);
+        const text = renderTokens(ae.add_resist); if (text)
+            extras.push(`Grants resistance: ${text}`);
     }
     if (ae.add_special)
     {
-        const s = renderTokens(ae.add_special); if (s)
-            extras.push(`Special: ${s}`);
+        const text = renderTokens(ae.add_special); if (text)
+            extras.push(`Special: ${text}`);
     }
     if (ae.remove_special)
     {
-        const s = renderTokens(ae.remove_special); if (s)
-            extras.push(`Removes special: ${s}`);
+        const text = renderTokens(ae.remove_special); if (text)
+            extras.push(`Removes special: ${text}`);
     }
     // Structured save object: surface stat/dc/on_success/on_fail in text.
     // Scalar save is already lifted into bonuses by liftActiveEffects.
@@ -273,9 +259,9 @@ function renderResidualText(ae, handled)
 }
 
 // Loose-match containment: lower-case, strip markup/punctuation, collapse whitespace.
-function textNormalize(s)
+function textNormalize(value)
 {
-    return (s ?? "").toString().toLowerCase().replaceAll(/\*+/g, "").replaceAll(/[^\w\s]/g, " ").replaceAll(/\s+/g, " ").trim();
+    return (value ?? "").toString().toLowerCase().replaceAll(/\*+/g, "").replaceAll(/[^\w\s]/g, " ").replaceAll(/\s+/g, " ").trim();
 }
 function existingContainsBody(existing, chunk)
 {
@@ -285,9 +271,9 @@ function existingContainsBody(existing, chunk)
     const body = chunk.split(" — ").slice(1).join(" — ");
     if (!body)
         return true; // header-only; already filtered but guard anyway
-    const e = textNormalize(existing);
-    const c = textNormalize(body);
-    return c.length > 12 && e.includes(c);
+    const existingNorm = textNormalize(existing);
+    const bodyNorm = textNormalize(body);
+    return bodyNorm.length > 12 && existingNorm.includes(bodyNorm);
 }
 
 // Detect whether this active_effect describes an action (has attack/damage/range/trigger-shaped data).
@@ -353,20 +339,20 @@ function liftActiveEffects(item)
             };
             if (ae.damage)
             {
-                const ds = Array.isArray(ae.damage) ? ae.damage : [ae.damage];
-                for (const d of ds)
+                const damages = Array.isArray(ae.damage) ? ae.damage : [ae.damage];
+                for (const damageEntry of damages)
                 {
-                    const v = toV2Damage(d); if (v)
-                        action.damage.push(v);
+                    const converted = toV2Damage(damageEntry); if (converted)
+                        action.damage.push(converted);
                 }
             }
             if (ae.range)
             {
-                const rs = Array.isArray(ae.range) ? ae.range : [ae.range];
-                for (const r of rs)
+                const ranges = Array.isArray(ae.range) ? ae.range : [ae.range];
+                for (const rangeEntry of ranges)
                 {
-                    const v = toV2Range(r); if (v)
-                        action.range.push(v);
+                    const converted = toV2Range(rangeEntry); if (converted)
+                        action.range.push(converted);
                 }
             }
             item.actions = (item.actions ?? []).concat([action]);
@@ -417,10 +403,10 @@ function liftActiveEffects(item)
         const existing = typeof item.effect === "string" ? item.effect : "";
         // Skip chunks whose body is already present in the existing effect text
         // (v3 active_effects often restate the feature's main prose).
-        const novel = textChunks.filter(c => !existingContainsBody(existing, c));
+        const novel = textChunks.filter(chunk => !existingContainsBody(existing, chunk));
         if (novel.length)
         {
-            // `effect` is an HTMLField — raw \n collapses to whitespace. Use <br><br>.
+            // `effect` is an HTMLField: raw \n collapses to whitespace, use <br><br>.
             const block = novel.join("<br><br>");
             item.effect = existing ? `${existing}<br><br>${block}` : block;
         }
@@ -435,29 +421,29 @@ function renderActiveEffectAsText(ae)
 }
 
 // v3 on_* hooks can be { detail, ... } objects; v2 expects string.
-function coerceOnHookString(v)
+function coerceOnHookString(value)
 {
-    if (v == null)
-        return v;
-    if (typeof v === "string")
-        return v;
-    if (typeof v === "object")
+    if (value == null)
+        return value;
+    if (typeof value === "string")
+        return value;
+    if (typeof value === "object")
     {
         // Lift structured fields into the text.
-        return renderActiveEffectAsText(v) || v.detail || "";
+        return renderActiveEffectAsText(value) || value.detail || "";
     }
-    return String(v);
+    return String(value);
 }
 
 function translateOnHooks(obj)
 {
     if (!obj || typeof obj !== "object")
         return;
-    for (const k of ["on_attack", "on_hit", "on_crit", "on_miss"])
+    for (const hook of ["on_attack", "on_hit", "on_crit", "on_miss"])
     {
-        if (obj[k] !== undefined && typeof obj[k] !== "string")
+        if (obj[hook] !== undefined && typeof obj[hook] !== "string")
         {
-            obj[k] = coerceOnHookString(obj[k]);
+            obj[hook] = coerceOnHookString(obj[hook]);
         }
     }
 }
@@ -474,10 +460,10 @@ function stripV3Common(item, dropped)
         if (dropped)
             dropped.push({ item: item.id ?? "?", total: before, lifted, textOnly: before - lifted });
     }
-    for (const k of ["active_effects", "flavorDescription", "brew", "deprecated"])
+    for (const key of ["active_effects", "flavorDescription", "brew", "deprecated"])
     {
-        if (item[k] !== undefined)
-            delete item[k];
+        if (item[key] !== undefined)
+            delete item[key];
     }
 }
 
@@ -486,24 +472,24 @@ function mergeEffectArrayToHtml(arr)
 {
     if (!Array.isArray(arr))
         return "";
-    const renderToken = t =>
+    const renderToken = token =>
     {
-        if (t == null)
+        if (token == null)
             return "";
-        if (typeof t === "string")
-            return t;
-        if (typeof t === "object")
-            return t.name ?? t.lid ?? t.id ?? "";
-        return String(t);
+        if (typeof token === "string")
+            return token;
+        if (typeof token === "object")
+            return token.name ?? token.lid ?? token.id ?? "";
+        return String(token);
     };
-    const renderTokens = v => (Array.isArray(v) ? v : [v]).map(renderToken).filter(Boolean).join(", ");
-    const renderDamage = v => (Array.isArray(v) ? v : [v]).map(d =>
+    const renderTokens = value => (Array.isArray(value) ? value : [value]).map(renderToken).filter(Boolean).join(", ");
+    const renderDamage = value => (Array.isArray(value) ? value : [value]).map(damageEntry =>
     {
-        if (typeof d === "string")
-            return d;
-        if (typeof d === "object")
-            return [d.val ?? d.damage ?? "", d.type ?? ""].filter(Boolean).join(" ");
-        return String(d);
+        if (typeof damageEntry === "string")
+            return damageEntry;
+        if (typeof damageEntry === "object")
+            return [damageEntry.val ?? damageEntry.damage ?? "", damageEntry.type ?? ""].filter(Boolean).join(" ");
+        return String(damageEntry);
     }).filter(Boolean).join(", ");
 
     const parts = [];
@@ -524,33 +510,33 @@ function mergeEffectArrayToHtml(arr)
         const extras = [];
         if (ae.add_status)
         {
-            const s = renderTokens(ae.add_status); if (s)
-                extras.push(`Applies status: ${s}`);
+            const text = renderTokens(ae.add_status); if (text)
+                extras.push(`Applies status: ${text}`);
         }
         if (ae.add_resist)
         {
-            const s = renderTokens(ae.add_resist); if (s)
-                extras.push(`Grants resistance: ${s}`);
+            const text = renderTokens(ae.add_resist); if (text)
+                extras.push(`Grants resistance: ${text}`);
         }
         if (ae.add_special)
         {
-            const s = renderTokens(ae.add_special); if (s)
-                extras.push(`Special: ${s}`);
+            const text = renderTokens(ae.add_special); if (text)
+                extras.push(`Special: ${text}`);
         }
         if (ae.remove_special)
         {
-            const s = renderTokens(ae.remove_special); if (s)
-                extras.push(`Removes special: ${s}`);
+            const text = renderTokens(ae.remove_special); if (text)
+                extras.push(`Removes special: ${text}`);
         }
         if (ae.damage)
         {
-            const s = renderDamage(ae.damage); if (s)
-                extras.push(`Damage: ${s}`);
+            const text = renderDamage(ae.damage); if (text)
+                extras.push(`Damage: ${text}`);
         }
         if (ae.bonus_damage)
         {
-            const s = renderDamage(ae.bonus_damage); if (s)
-                extras.push(`Bonus damage: ${s}`);
+            const text = renderDamage(ae.bonus_damage); if (text)
+                extras.push(`Bonus damage: ${text}`);
         }
         if (ae.save !== undefined && ae.save !== null && ae.save !== "")
         {
@@ -583,37 +569,34 @@ function mergeEffectArrayToHtml(arr)
     return parts.join("");
 }
 
-// v2 `integrated: ArrayField(LIDField())` — must be string LIDs, not inline objects.
-// v3 `integrated` is already `string[]` per compcon's MechWeapon.ts, so this is defensive:
-// if an inline object somehow slips in, we preserve its id. We deliberately do NOT fan out
-// into buckets — that would require a second translator pass to normalize the extracted
-// items, and v3 never actually ships inline integrateds.
+// v2 `integrated` must be string LIDs, not inline objects. v3 already ships
+// string[] (compcon MechWeapon.ts), so this is defensive id-extraction only.
 function flattenIntegrated(item)
 {
     if (!Array.isArray(item?.integrated))
         return;
     item.integrated = item.integrated
-        .map(e => typeof e === "string" ? e : e?.id)
+        .map(entry => typeof entry === "string" ? entry : entry?.id)
         .filter(Boolean);
 }
 
-// v2 unpackAction calls .map() on damage/range — v3 may ship scalars or objects there.
-// Normalize every action object to have array-shaped damage/range/synergy_locations.
-function normalizeAction(a)
+// v2 unpackAction calls .map() on damage/range; v3 may ship scalars or objects.
+// Normalize each action to array-shaped damage/range/synergy_locations.
+function normalizeAction(action)
 {
-    if (!a || typeof a !== "object")
+    if (!action || typeof action !== "object")
         return;
-    if (a.damage !== undefined && !Array.isArray(a.damage))
+    if (action.damage !== undefined && !Array.isArray(action.damage))
     {
-        a.damage = a.damage ? [a.damage] : [];
+        action.damage = action.damage ? [action.damage] : [];
     }
-    if (a.range !== undefined && !Array.isArray(a.range))
+    if (action.range !== undefined && !Array.isArray(action.range))
     {
-        a.range = a.range ? [a.range] : [];
+        action.range = action.range ? [action.range] : [];
     }
-    if (a.synergy_locations !== undefined && !Array.isArray(a.synergy_locations))
+    if (action.synergy_locations !== undefined && !Array.isArray(action.synergy_locations))
     {
-        a.synergy_locations = a.synergy_locations ? [a.synergy_locations] : [];
+        action.synergy_locations = action.synergy_locations ? [action.synergy_locations] : [];
     }
 }
 
@@ -621,25 +604,25 @@ function normalizeActionsList(list)
 {
     if (!Array.isArray(list))
         return;
-    for (const a of list)
-        normalizeAction(a);
+    for (const action of list)
+        normalizeAction(action);
 }
 
 // v2 unpackBonus does `data.val.toString()` blindly (lancer-c22b4371.mjs:34215).
 // v3 bonuses can omit `val`, so guarantee a stringifiable value.
-function normalizeBonus(b)
+function normalizeBonus(bonus)
 {
-    if (!b || typeof b !== "object")
+    if (!bonus || typeof bonus !== "object")
         return;
-    if (b.val === undefined || b.val === null)
-        b.val = "0";
-    else if (typeof b.val !== "string")
-        b.val = String(b.val);
+    if (bonus.val === undefined || bonus.val === null)
+        bonus.val = "0";
+    else if (typeof bonus.val !== "string")
+        bonus.val = String(bonus.val);
     // checklist-array fields: coerce to arrays in case v3 ships scalars
-    for (const k of ["damage_types", "range_types", "weapon_sizes", "weapon_types"])
+    for (const key of ["damage_types", "range_types", "weapon_sizes", "weapon_types"])
     {
-        if (b[k] !== undefined && !Array.isArray(b[k]))
-            b[k] = b[k] ? [b[k]] : [];
+        if (bonus[key] !== undefined && !Array.isArray(bonus[key]))
+            bonus[key] = bonus[key] ? [bonus[key]] : [];
     }
 }
 
@@ -647,8 +630,8 @@ function normalizeBonusesList(list)
 {
     if (!Array.isArray(list))
         return;
-    for (const b of list)
-        normalizeBonus(b);
+    for (const bonus of list)
+        normalizeBonus(bonus);
 }
 
 // Recursively strip v3-only fields from embedded structures and normalize
@@ -659,19 +642,19 @@ function stripNested(item, droppedAE)
         return;
     if (Array.isArray(item.deployables))
     {
-        for (const d of item.deployables)
-            if (d && typeof d === "object")
+        for (const deployable of item.deployables)
+            if (deployable && typeof deployable === "object")
             {
-                stripV3Common(d, droppedAE);
-                normalizeActionsList(d.actions);
-                normalizeBonusesList(d.bonuses);
+                stripV3Common(deployable, droppedAE);
+                normalizeActionsList(deployable.actions);
+                normalizeBonusesList(deployable.bonuses);
             }
     }
     if (Array.isArray(item.actions))
     {
-        for (const a of item.actions)
-            if (a && typeof a === "object")
-                stripV3Common(a, droppedAE);
+        for (const action of item.actions)
+            if (action && typeof action === "object")
+                stripV3Common(action, droppedAE);
         normalizeActionsList(item.actions);
     }
     normalizeBonusesList(item.bonuses);
@@ -682,10 +665,8 @@ function stripNested(item, droppedAE)
     normalizeBonusesList(item.passive_bonuses);
 }
 
-// Lift v3 core_system `active_effects[]` / `passive_effects[]` into the v2 core_system schema.
-// v2 schema (lancer-c22b4371.mjs:34724-34754) uses prefixed keys: active_bonuses/active_actions
-// /active_synergies and passive_bonuses/passive_actions/passive_synergies. Free-form text goes to
-// `active_effect` / `passive_effect` HTMLFields.
+// Lift v3 core_system active_effects[]/passive_effects[] into the v2 core_system
+// schema: prefixed active_*/passive_* keys, free-form text to *_effect HTMLFields.
 function liftCoreSystemEffects(core, kind)
 {
     const key = `${kind}_effects`;
@@ -731,75 +712,74 @@ function liftCoreSystemEffects(core, kind)
 function translateFrame(frame, droppedAE)
 {
     stripV3Common(frame, droppedAE);
-    for (const k of ["specialty", "variant", "y_pos"])
-        delete frame[k];
+    for (const key of ["specialty", "variant", "y_pos"])
+        delete frame[key];
     if (frame.image_url && !frame.img)
         frame.img = frame.image_url;
     delete frame.image_url;
     if (frame.core_system)
     {
-        // Handle active_effects/passive_effects BEFORE stripping common fields,
-        // because stripV3Common would send them to wrong keys (core_system lacks
-        // top-level `bonuses`/`actions`; it uses active_*/passive_* prefixed fields).
+        // Handle active/passive effects BEFORE stripV3Common: core_system has no
+        // top-level bonuses/actions, only active_*/passive_* prefixed fields.
         liftCoreSystemEffects(frame.core_system, "active");
         liftCoreSystemEffects(frame.core_system, "passive");
-        for (const k of ["flavorDescription", "brew", "deprecated"])
-            delete frame.core_system[k];
+        for (const key of ["flavorDescription", "brew", "deprecated"])
+            delete frame.core_system[key];
         flattenIntegrated(frame.core_system);
         stripNested(frame.core_system, droppedAE);
     }
     if (Array.isArray(frame.traits))
     {
-        for (const t of frame.traits)
+        for (const trait of frame.traits)
         {
-            stripV3Common(t, droppedAE);
-            stripNested(t, droppedAE);
+            stripV3Common(trait, droppedAE);
+            stripNested(trait, droppedAE);
         }
     }
     flattenIntegrated(frame);
     stripNested(frame, droppedAE);
 }
 
-function translateMechWeapon(w, droppedAE)
+function translateMechWeapon(weapon, droppedAE)
 {
-    stripV3Common(w, droppedAE);
+    stripV3Common(weapon, droppedAE);
     // Drop truly v2-unsupported fields only.
-    delete w.mod_type_override;
-    delete w.mod_size_override;
-    // Alias v3 plural forms → v2 singular (unpacker reads singular at lancer-c22b4371.mjs:34670-34674).
-    if (w.no_bonuses !== undefined && w.no_bonus === undefined)
-        w.no_bonus = w.no_bonuses;
-    if (w.no_synergies !== undefined && w.no_synergy === undefined)
-        w.no_synergy = w.no_synergies;
-    if (w.no_core_bonuses !== undefined && w.no_core_bonus === undefined)
-        w.no_core_bonus = w.no_core_bonuses;
-    // `no_attack` is a real v2 field (MechWeaponModel:34601) — keep it.
-    translateOnHooks(w);
-    flattenIntegrated(w);
-    stripNested(w, droppedAE);
-    if (Array.isArray(w.profiles))
+    delete weapon.mod_type_override;
+    delete weapon.mod_size_override;
+    // Alias v3 plural forms -> v2 singular (unpacker reads singular at lancer-c22b4371.mjs:34670-34674).
+    if (weapon.no_bonuses !== undefined && weapon.no_bonus === undefined)
+        weapon.no_bonus = weapon.no_bonuses;
+    if (weapon.no_synergies !== undefined && weapon.no_synergy === undefined)
+        weapon.no_synergy = weapon.no_synergies;
+    if (weapon.no_core_bonuses !== undefined && weapon.no_core_bonus === undefined)
+        weapon.no_core_bonus = weapon.no_core_bonuses;
+    // `no_attack` is a real v2 field (MechWeaponModel:34601), keep it.
+    translateOnHooks(weapon);
+    flattenIntegrated(weapon);
+    stripNested(weapon, droppedAE);
+    if (Array.isArray(weapon.profiles))
     {
-        for (const p of w.profiles)
+        for (const profile of weapon.profiles)
         {
-            stripV3Common(p, droppedAE);
-            translateOnHooks(p);
-            flattenIntegrated(p);
-            stripNested(p, droppedAE);
+            stripV3Common(profile, droppedAE);
+            translateOnHooks(profile);
+            flattenIntegrated(profile);
+            stripNested(profile, droppedAE);
         }
     }
 }
 
-function translateMechSystem(s, droppedAE)
+function translateMechSystem(system, droppedAE)
 {
-    stripV3Common(s, droppedAE);
-    flattenIntegrated(s);
-    stripNested(s, droppedAE);
+    stripV3Common(system, droppedAE);
+    flattenIntegrated(system);
+    stripNested(system, droppedAE);
 }
 
-function translateWeaponMod(m, droppedAE)
+function translateWeaponMod(mod, droppedAE)
 {
-    stripV3Common(m, droppedAE);
-    translateOnHooks(m);
+    stripV3Common(mod, droppedAE);
+    translateOnHooks(mod);
     // v3 `allowed_types` / `allowed_sizes` are native in Lancer 2.x WeaponModModel
     // (lancer-c22b4371.mjs:35424-35425). Pass through unchanged.
 }
@@ -811,69 +791,69 @@ function translatePilotGear(item, droppedAE)
     stripNested(item, droppedAE);
 }
 
-function translateTalent(t, droppedAE)
+function translateTalent(talent, droppedAE)
 {
-    stripV3Common(t, droppedAE);
-    for (const k of ["icon_url", "svg"])
-        delete t[k];
-    if (Array.isArray(t.ranks))
+    stripV3Common(talent, droppedAE);
+    for (const key of ["icon_url", "svg"])
+        delete talent[key];
+    if (Array.isArray(talent.ranks))
     {
-        for (const r of t.ranks)
+        for (const rank of talent.ranks)
         {
-            stripV3Common(r, droppedAE);
-            stripNested(r, droppedAE);
+            stripV3Common(rank, droppedAE);
+            stripNested(rank, droppedAE);
         }
     }
 }
 
-function translateReserve(r, droppedAE)
+function translateReserve(reserve, droppedAE)
 {
-    stripV3Common(r, droppedAE);
-    stripNested(r, droppedAE);
+    stripV3Common(reserve, droppedAE);
+    stripNested(reserve, droppedAE);
 }
 
-function translateBond(b, droppedAE)
+function translateBond(bond, droppedAE)
 {
-    stripV3Common(b, droppedAE);
-    if (Array.isArray(b.powers))
+    stripV3Common(bond, droppedAE);
+    if (Array.isArray(bond.powers))
     {
-        for (const p of b.powers)
-            stripV3Common(p, droppedAE);
+        for (const power of bond.powers)
+            stripV3Common(power, droppedAE);
     }
 }
 
-function translateNpcClass(c, droppedAE)
+function translateNpcClass(npcClass, droppedAE)
 {
-    stripV3Common(c, droppedAE);
-    stripNested(c, droppedAE);
+    stripV3Common(npcClass, droppedAE);
+    stripNested(npcClass, droppedAE);
 }
 
-function translateNpcTemplate(t, droppedAE)
+function translateNpcTemplate(template, droppedAE)
 {
-    stripV3Common(t, droppedAE);
-    stripNested(t, droppedAE);
+    stripV3Common(template, droppedAE);
+    stripNested(template, droppedAE);
 }
 
-function renderTierVal(v)
+function renderTierVal(value)
 {
-    if (Array.isArray(v))
-        return v.join("/");
-    if (v === null || v === undefined)
+    if (Array.isArray(value))
+        return value.join("/");
+    if (value === null || value === undefined)
         return "";
-    return String(v);
+    return String(value);
 }
 
 function renderRangeList(ranges)
 {
     if (!Array.isArray(ranges) || !ranges.length)
         return "";
-    return ranges.map(r =>
+    return ranges.map(range =>
     {
-        if (!r || typeof r !== "object")
+        if (!range || typeof range !== "object")
             return "";
-        const t = r.type ?? "";
-        const v = r.val !== undefined ? renderTierVal(r.val) : "";
-        return v !== "" ? `${t} ${v}` : t;
+        const type = range.type ?? "";
+        const value = range.val !== undefined ? renderTierVal(range.val) : "";
+        return value !== "" ? `${type} ${value}` : type;
     }).filter(Boolean).join(", ");
 }
 
@@ -881,12 +861,12 @@ function renderDamageList(damages)
 {
     if (!Array.isArray(damages) || !damages.length)
         return "";
-    return damages.map(d =>
+    return damages.map(damage =>
     {
-        if (!d || typeof d !== "object")
+        if (!damage || typeof damage !== "object")
             return "";
-        const v = renderTierVal(d.val ?? d.damage);
-        return v ? `${v} ${d.type ?? ""}`.trim() : (d.type ?? "");
+        const value = renderTierVal(damage.val ?? damage.damage);
+        return value ? `${value} ${damage.type ?? ""}`.trim() : (damage.type ?? "");
     }).filter(Boolean).join(" + ");
 }
 
@@ -894,16 +874,16 @@ function renderStatusList(statuses)
 {
     if (!Array.isArray(statuses) || !statuses.length)
         return "";
-    return statuses.map(s =>
+    return statuses.map(status =>
     {
-        if (!s)
+        if (!status)
             return "";
-        if (typeof s === "string")
-            return s;
-        const id = s.id ?? s.name ?? "";
+        if (typeof status === "string")
+            return status;
+        const id = status.id ?? status.name ?? "";
         if (!id)
             return "";
-        return s.save ? `${id} (${s.save} save)` : id;
+        return status.save ? `${id} (${status.save} save)` : id;
     }).filter(Boolean).join(", ");
 }
 
@@ -912,34 +892,34 @@ function renderNpcActionsAsHtml(actions)
     if (!Array.isArray(actions) || !actions.length)
         return "";
     const blocks = [];
-    for (const a of actions)
+    for (const action of actions)
     {
-        if (!a || typeof a !== "object")
+        if (!action || typeof action !== "object")
             continue;
         const meta = [];
-        if (a.activation)
-            meta.push(a.activation);
-        if (a.frequency)
-            meta.push(a.frequency);
-        const range = renderRangeList(a.range);
+        if (action.activation)
+            meta.push(action.activation);
+        if (action.frequency)
+            meta.push(action.frequency);
+        const range = renderRangeList(action.range);
         if (range)
             meta.push(range);
-        const dmg = renderDamageList(a.damage);
+        const dmg = renderDamageList(action.damage);
         if (dmg)
             meta.push(dmg);
-        const header = `<strong>${a.name ?? "Action"}</strong>`
+        const header = `<strong>${action.name ?? "Action"}</strong>`
             + (meta.length ? ` <em>(${meta.join(", ")})</em>` : "");
         const parts = [header];
-        const detail = typeof a.detail === "string" ? a.detail
-            : (a.detail ? coerceOnHookString(a.detail) : "");
+        const detail = typeof action.detail === "string" ? action.detail
+            : (action.detail ? coerceOnHookString(action.detail) : "");
         if (detail)
             parts.push(detail);
-        if (a.trigger)
-            parts.push(`<strong>Trigger:</strong> ${typeof a.trigger === "string" ? a.trigger : coerceOnHookString(a.trigger)}`);
-        const statuses = renderStatusList(a.add_status);
+        if (action.trigger)
+            parts.push(`<strong>Trigger:</strong> ${typeof action.trigger === "string" ? action.trigger : coerceOnHookString(action.trigger)}`);
+        const statuses = renderStatusList(action.add_status);
         if (statuses)
             parts.push(`<em>Applies status:</em> ${statuses}`);
-        const conditions = renderStatusList(a.add_condition);
+        const conditions = renderStatusList(action.add_condition);
         if (conditions)
             parts.push(`<em>Applies condition:</em> ${conditions}`);
         blocks.push(parts.join("<br>"));
@@ -947,71 +927,69 @@ function renderNpcActionsAsHtml(actions)
     return blocks.join("<br><br>");
 }
 
-function translateNpcFeatureCommon(f, droppedAE)
+function translateNpcFeatureCommon(feature, droppedAE)
 {
-    if (!f)
+    if (!feature)
         return;
-    if (Array.isArray(f.actions) && f.actions.length)
+    if (Array.isArray(feature.actions) && feature.actions.length)
     {
-        if (f.type === "Reaction" && !f.trigger)
+        if (feature.type === "Reaction" && !feature.trigger)
         {
-            const firstTrigger = f.actions.find(a => a?.trigger)?.trigger;
+            const firstTrigger = feature.actions.find(action => action?.trigger)?.trigger;
             if (firstTrigger)
-                f.trigger = typeof firstTrigger === "string" ? firstTrigger : coerceOnHookString(firstTrigger);
+                feature.trigger = typeof firstTrigger === "string" ? firstTrigger : coerceOnHookString(firstTrigger);
         }
-        const html = renderNpcActionsAsHtml(f.actions);
+        const html = renderNpcActionsAsHtml(feature.actions);
         if (html)
         {
-            const existing = typeof f.effect === "string" ? f.effect : "";
-            f.effect = existing ? `${existing}<br><br>${html}` : html;
+            const existing = typeof feature.effect === "string" ? feature.effect : "";
+            feature.effect = existing ? `${existing}<br><br>${html}` : html;
         }
-        delete f.actions;
+        delete feature.actions;
     }
-    // Lancer NPC feature only has `on_hit` as HTML (NpcFeatureModel:35331).
-    // v3 NpcWeapon also carries `on_attack` / `on_crit` (compcon NpcWeapon.ts:22-24).
-    // Coerce each to a string, then merge on_attack/on_crit into the feature's `effect`
-    // so the content survives (no native v2 home).
-    if (f.on_hit !== undefined && typeof f.on_hit !== "string")
+    // Lancer NPC feature only has `on_hit` as HTML; v3 NpcWeapon also carries
+    // `on_attack`/`on_crit`, so coerce and merge those into `effect` (no v2 home).
+    if (feature.on_hit !== undefined && typeof feature.on_hit !== "string")
     {
-        f.on_hit = coerceOnHookString(f.on_hit);
+        feature.on_hit = coerceOnHookString(feature.on_hit);
     }
     const extraHookChunks = [];
-    for (const [k, label] of [["on_attack", "On Attack"], ["on_crit", "On Crit"]])
+    for (const [key, label] of [["on_attack", "On Attack"], ["on_crit", "On Crit"]])
     {
-        if (f[k] === undefined)
+        if (feature[key] === undefined)
             continue;
-        const text = typeof f[k] === "string" ? f[k] : coerceOnHookString(f[k]);
+        const text = typeof feature[key] === "string" ? feature[key] : coerceOnHookString(feature[key]);
         if (text)
             extraHookChunks.push(`<strong>${label}:</strong> ${text}`);
-        delete f[k];
+        delete feature[key];
     }
     if (extraHookChunks.length)
     {
-        const existing = typeof f.effect === "string" ? f.effect : "";
+        const existing = typeof feature.effect === "string" ? feature.effect : "";
         const block = extraHookChunks.join("<br><br>");
-        f.effect = existing ? `${existing}<br><br>${block}` : block;
+        feature.effect = existing ? `${existing}<br><br>${block}` : block;
     }
-    // v3 NPC feature damage val guarded to tier array — unpacker iterates d.damage.length.
-    if (Array.isArray(f.damage))
+    // v3 NPC feature damage val guarded to tier array; unpacker iterates damage.length.
+    if (Array.isArray(feature.damage))
     {
-        for (const d of f.damage)
+        for (const damageEntry of feature.damage)
         {
-            if (d?.damage !== undefined && !Array.isArray(d.damage))
+            if (damageEntry?.damage !== undefined && !Array.isArray(damageEntry.damage))
             {
-                d.damage = [d.damage, d.damage, d.damage];
+                damageEntry.damage = [damageEntry.damage, damageEntry.damage, damageEntry.damage];
             }
         }
     }
-    // Weapon-type NPC features must have damage and range as arrays — unpackNpcFeature
+    // Weapon-type NPC features must have damage and range as arrays: unpackNpcFeature
     // iterates them directly (npc_feature.ts:162). Some v3 utility weapons omit these.
-    if (f.type === "Weapon")
+    if (feature.type === "Weapon")
     {
-        if (!Array.isArray(f.damage))
-            f.damage = [];
-        if (!Array.isArray(f.range))
-            f.range = [];
+        if (!Array.isArray(feature.damage))
+            feature.damage = [];
+        if (!Array.isArray(feature.range))
+            feature.range = [];
     }
-    stripNested(f, droppedAE);
+    stripNested(feature, droppedAE);
 }
 
 function translateGeneric(item, droppedAE)
@@ -1026,24 +1004,24 @@ function applyItemTranslators(type, arr, droppedAE)
         return;
     switch (type)
     {
-    case "frames": for (const x of arr)
-        translateFrame(x, droppedAE); break;
-    case "weapons": for (const x of arr)
-        translateMechWeapon(x, droppedAE); break;
-    case "systems": for (const x of arr)
-        translateMechSystem(x, droppedAE); break;
-    case "mods": for (const x of arr)
-        translateWeaponMod(x, droppedAE); break;
-    case "pilot_gear": for (const x of arr)
-        translatePilotGear(x, droppedAE); break;
-    case "talents": for (const x of arr)
-        translateTalent(x, droppedAE); break;
-    case "reserves": for (const x of arr)
-        translateReserve(x, droppedAE); break;
-    case "bonds": for (const x of arr)
-        translateBond(x, droppedAE); break;
-    default: for (const x of arr)
-        translateGeneric(x, droppedAE);
+    case "frames": for (const entry of arr)
+        translateFrame(entry, droppedAE); break;
+    case "weapons": for (const entry of arr)
+        translateMechWeapon(entry, droppedAE); break;
+    case "systems": for (const entry of arr)
+        translateMechSystem(entry, droppedAE); break;
+    case "mods": for (const entry of arr)
+        translateWeaponMod(entry, droppedAE); break;
+    case "pilot_gear": for (const entry of arr)
+        translatePilotGear(entry, droppedAE); break;
+    case "talents": for (const entry of arr)
+        translateTalent(entry, droppedAE); break;
+    case "reserves": for (const entry of arr)
+        translateReserve(entry, droppedAE); break;
+    case "bonds": for (const entry of arr)
+        translateBond(entry, droppedAE); break;
+    default: for (const entry of arr)
+        translateGeneric(entry, droppedAE);
     }
 }
 
@@ -1067,16 +1045,14 @@ function classifyLicenseChild(entry)
     return "systems";
 }
 
-// ── Zip extraction helpers ──────────────────────────────────────────────────
-
 async function readJsonIfExists(zip, name)
 {
-    const f = zip.file(name);
-    if (!f)
+    const file = zip.file(name);
+    if (!file)
         return null;
     try
     {
-        return JSON.parse(await f.async("string"));
+        return JSON.parse(await file.async("string"));
     }
     catch (e)
     {
@@ -1091,15 +1067,13 @@ function pickCollectionHeader(arr, kind)
     if (!Array.isArray(arr) || arr.length === 0)
         return null;
     if (kind === "Class")
-        return arr.find(x => x?.role) ?? null;
+        return arr.find(entry => entry?.role) ?? null;
     // Template: compcon v3 marks the header with `template: true` (ContentPackParser.ts:185).
     // Fall back to first entry with no `origin` string for older pre-release LCPs.
-    return arr.find(x => x?.template === true)
-        ?? arr.find(x => x && (typeof x.origin !== "string" || !x.origin))
+    return arr.find(entry => entry?.template === true)
+        ?? arr.find(entry => entry && (typeof entry.origin !== "string" || !entry.origin))
         ?? null;
 }
-
-// ── Main translation ───────────────────────────────────────────────────────
 
 export async function translateV3LcpBlob(inputBlob)
 {
@@ -1160,9 +1134,8 @@ export async function translateV3LcpBlob(inputBlob)
             contentBuckets[bucket].push(...arr);
     }
 
-    // v3 may split pilot_gear.json into pilot_armor.json + pilot_weapons.json.
-    // Lancer 2.x expects a single pilot_gear.json with `type: "Armor"|"Weapon"|"Gear"` per entry
-    // (split is done in importCP at lancer-c22b4371.mjs:35640 via `g.type == "Armor"` filters).
+    // v3 may split pilot_gear.json into pilot_armor.json + pilot_weapons.json;
+    // Lancer 2.x wants one pilot_gear.json with per-entry type Armor/Weapon/Gear.
     for (const [file, typeTag] of [["pilot_armor.json", "Armor"], ["pilot_weapons.json", "Weapon"]])
     {
         const arr = await readJsonIfExists(inZip, file);
@@ -1192,32 +1165,32 @@ export async function translateV3LcpBlob(inputBlob)
             const bondId = bond?.id;
             if (!bondId)
                 continue;
-            const match = bondPowers.filter(p => p?.origin === bondId || p?.bond_id === bondId);
+            const match = bondPowers.filter(power => power?.origin === bondId || power?.bond_id === bondId);
             if (match.length)
                 bond.powers = (bond.powers ?? []).concat(match);
         }
     }
 
-    // Files the Lancer 2.x system ignores but that might still be useful downstream — pass through untouched.
+    // Files the Lancer 2.x system ignores but that might still be useful downstream: pass through untouched.
     const miscPassthrough = [
         "manufacturers.json", "backgrounds.json", "environments.json",
         "factions.json", "sitreps.json"
     ];
     for (const name of miscPassthrough)
     {
-        const f = inZip.file(name);
-        if (f)
-            outZip.file(name, await f.async("string"));
+        const file = inZip.file(name);
+        if (file)
+            outZip.file(name, await file.async("string"));
     }
 
     // v3 license collection files: fan out into frames/weapons/systems/mods.
-    const licenseNames = Object.keys(inZip.files).filter(n => /^license_.+\.json$/i.test(n));
+    const licenseNames = Object.keys(inZip.files).filter(fileName => /^license_.+\.json$/i.test(fileName));
     for (const name of licenseNames)
     {
         const arr = await readJsonIfExists(inZip, name);
         if (!Array.isArray(arr))
             continue;
-        const frame = arr.find(x => x?.mechtype);
+        const frame = arr.find(entry => entry?.mechtype);
         if (!frame)
         {
             console.warn(`[v3-lcp-shim] ${name}: no frame header (mechtype field)`); continue;
@@ -1250,7 +1223,7 @@ export async function translateV3LcpBlob(inputBlob)
     const allTemplates = (await readJsonIfExists(inZip, "npc_templates.json")) || [];
     const allFeatures = [];
     const featureFileNames = Object.keys(inZip.files)
-        .filter(n => /^npc_(?!classes(?:\.json)?$|templates(?:\.json)?$).+\.json$/i.test(n));
+        .filter(fileName => /^npc_(?!classes(?:\.json)?$|templates(?:\.json)?$).+\.json$/i.test(fileName));
     for (const name of featureFileNames)
     {
         const arr = await readJsonIfExists(inZip, name);
@@ -1259,7 +1232,7 @@ export async function translateV3LcpBlob(inputBlob)
     }
 
     // Per-class v3 collection files.
-    const npccNames = Object.keys(inZip.files).filter(n => /^npcc_.+\.json$/i.test(n));
+    const npccNames = Object.keys(inZip.files).filter(fileName => /^npcc_.+\.json$/i.test(fileName));
     for (const name of npccNames)
     {
         const arr = await readJsonIfExists(inZip, name);
@@ -1271,7 +1244,7 @@ export async function translateV3LcpBlob(inputBlob)
             console.warn(`[v3-lcp-shim] ${name}: no class header found`); continue;
         }
         translateClassStats(cls);
-        const feats = arr.filter(x => x && x !== cls);
+        const feats = arr.filter(entry => entry && entry !== cls);
         for (const feat of feats)
         {
             translateFeature(feat, cls, "Class", droppedEffects);
@@ -1281,7 +1254,7 @@ export async function translateV3LcpBlob(inputBlob)
     }
 
     // Per-template v3 collection files.
-    const npctNames = Object.keys(inZip.files).filter(n => /^npct_.+\.json$/i.test(n));
+    const npctNames = Object.keys(inZip.files).filter(fileName => /^npct_.+\.json$/i.test(fileName));
     for (const name of npctNames)
     {
         const arr = await readJsonIfExists(inZip, name);
@@ -1292,7 +1265,7 @@ export async function translateV3LcpBlob(inputBlob)
         {
             console.warn(`[v3-lcp-shim] ${name}: no template header found`); continue;
         }
-        const feats = arr.filter(x => x && x !== tmpl);
+        const feats = arr.filter(entry => entry && entry !== tmpl);
         for (const feat of feats)
         {
             translateFeature(feat, tmpl, "Template", droppedEffects);
@@ -1310,8 +1283,8 @@ export async function translateV3LcpBlob(inputBlob)
         {
             // Feature lived in legacy npc_features.json but uses v3 origin string.
             // Resolve parent from already-collected classes/templates.
-            const parent = allClasses.find(c => c.id === feat.origin) || allTemplates.find(t => t.id === feat.origin);
-            const parentType = allTemplates.some(t => t.id === feat.origin) ? "Template" : "Class";
+            const parent = allClasses.find(cls => cls.id === feat.origin) || allTemplates.find(tmpl => tmpl.id === feat.origin);
+            const parentType = allTemplates.some(tmpl => tmpl.id === feat.origin) ? "Template" : "Class";
             translateFeature(feat, parent, parentType, droppedEffects);
         }
         else if (feat.active_effects)
@@ -1321,22 +1294,19 @@ export async function translateV3LcpBlob(inputBlob)
         }
         if (Array.isArray(feat.damage))
         {
-            for (const d of feat.damage)
+            for (const damageEntry of feat.damage)
             {
-                if (d?.val !== undefined && d.damage === undefined)
+                if (damageEntry?.val !== undefined && damageEntry.damage === undefined)
                 {
-                    d.damage = d.val;
-                    delete d.val;
+                    damageEntry.damage = damageEntry.val;
+                    delete damageEntry.val;
                 }
             }
         }
     }
 
-    // Eidolon layers: translate each layer → an NPC template, its features → NPC features.
-    // v2 has no native "swappable layer" mechanic, so this dumps the content into the
-    // compendium for GM use — no automation, no stat swapping. GM drops whichever layer
-    // template onto their Eidolon NPC manually. Layer content is tagged so it can be
-    // moved into a dedicated "Eidolons" subfolder after import.
+    // Eidolon layers become NPC templates + features (v2 has no swappable-layer mechanic):
+    // dumped into the compendium for manual GM use, tagged for an "Eidolons" subfolder.
     const eidolonTemplateLids = [];
     const eidolonFeatureLids = [];
     const eidolonZipFile = inZip.file("eidolon_layers.json");
@@ -1353,10 +1323,8 @@ export async function translateV3LcpBlob(inputBlob)
                     continue;
                 }
                 eidolonTemplateLids.push(layer.id);
-                // NPC template schema has ONLY `description` (HTMLField) + base_features +
-                // optional_features (NpcTemplateModel at lancer-c22b4371.mjs:35261). Keep
-                // the description to the appearance flavor only; rules/hints and shards
-                // become their own synthesized features so they render like native content.
+                // NPC template schema has only description + base/optional_features. Keep
+                // description to appearance flavor; rules/hints/shards become own features.
                 allTemplates.push({
                     id: layer.id,
                     name: layer.name,
@@ -1391,18 +1359,18 @@ export async function translateV3LcpBlob(inputBlob)
                 // than a wall of text in the template description.
                 if (layer.shards)
                 {
-                    const s = layer.shards;
-                    const count = s.count ?? "";
-                    const dmg = Array.isArray(s.damage)
-                        ? s.damage.map(d =>
+                    const shards = layer.shards;
+                    const count = shards.count ?? "";
+                    const dmg = Array.isArray(shards.damage)
+                        ? shards.damage.map(damageEntry =>
                         {
-                            const aoe = (typeof d?.aoe === "string" && d.aoe.trim()) ? ` (${d.aoe})` : "";
-                            return `${d?.val ?? ""} ${d?.type ?? ""}${aoe}`.trim();
+                            const aoe = (typeof damageEntry?.aoe === "string" && damageEntry.aoe.trim()) ? ` (${damageEntry.aoe})` : "";
+                            return `${damageEntry?.val ?? ""} ${damageEntry?.type ?? ""}${aoe}`.trim();
                         }).filter(Boolean).join(", ")
                         : "";
                     const shardEffect = [
                         count ? `<p><strong>Spawns:</strong> ${count} shard${count === 1 ? "" : "s"}</p>` : "",
-                        s.detail ? `<p>${s.detail}</p>` : "",
+                        shards.detail ? `<p>${shards.detail}</p>` : "",
                         dmg ? `<p><strong>Shard damage:</strong> ${dmg}</p>` : ""
                     ].filter(Boolean).join("");
                     layerFeatures.push({
@@ -1417,53 +1385,46 @@ export async function translateV3LcpBlob(inputBlob)
 
                 for (const feat of layerFeatures)
                 {
-                    // All eidolon layer features are always-available while the layer is
-                    // attached — there's no "optional" concept in v3. Force `base: true`
-                    // so they show up under the template's Base Features (not Optional).
+                    // Eidolon layer features are always available (v3 has no "optional"),
+                    // so force base: true to list them under Base Features.
                     feat.base = true;
                     // Pad scalar attack_bonus / accuracy to tier-array shape v2 expects.
                     if (typeof feat.attack_bonus === "number")
                         feat.attack_bonus = [feat.attack_bonus, feat.attack_bonus, feat.attack_bonus];
                     if (typeof feat.accuracy === "number")
                         feat.accuracy = [feat.accuracy, feat.accuracy, feat.accuracy];
-                    // System/Trait/Reaction/Tech features ship their prose in actions[].detail
-                    // rather than `effect`. Fold action prose into effect, and emit activation
-                    // tags (tg_quick / tg_full / tg_free / tg_protocol / tg_reaction) so the
-                    // Lancer sheet can show the activation badge like Comp/Con does.
-                    // Tag LIDs from the Lancer system's registered tag set
-                    // (lancer-c22b4371.mjs — tg_*_action form, not bare tg_*).
+                    // System/Trait/Reaction/Tech features carry prose in actions[].detail, not
+                    // `effect`: fold it in and emit tg_*_action activation tags for the badge.
                     const activationTagMap = { Quick: "tg_quick_action", Full: "tg_full_action", Free: "tg_free_action", Protocol: "tg_protocol", Reaction: "tg_reaction" };
                     const tagsToAdd = [];
                     if (Array.isArray(feat.actions) && feat.actions.length)
                     {
                         if (!feat.effect)
                         {
-                            const actionChunks = feat.actions.map(a =>
+                            const actionChunks = feat.actions.map(action =>
                             {
-                                if (!a)
+                                if (!action)
                                     return "";
                                 const bits = [];
-                                if (a.name)
-                                    bits.push(`<strong>${a.name}</strong>`);
-                                if (a.activation)
-                                    bits.push(`<em>(${a.activation})</em>`);
+                                if (action.name)
+                                    bits.push(`<strong>${action.name}</strong>`);
+                                if (action.activation)
+                                    bits.push(`<em>(${action.activation})</em>`);
                                 const header = bits.join(" ");
-                                return [header, a.detail].filter(Boolean).join(": ");
+                                return [header, action.detail].filter(Boolean).join(": ");
                             }).filter(Boolean);
                             if (actionChunks.length)
                                 feat.effect = actionChunks.join("<br>");
                         }
-                        for (const a of feat.actions)
+                        for (const action of feat.actions)
                         {
-                            const tag = activationTagMap[a?.activation];
+                            const tag = activationTagMap[action?.activation];
                             if (tag)
                                 tagsToAdd.push({ id: tag });
                         }
                     }
-                    // v3 eidolon extras → appended to effect in human-readable form.
-                    // `attacks: N` (N>1) becomes Comp/Con-style multi-attack prose.
-                    // `aoe: true` bare boolean is dropped (not meaningful); string AoE shapes
-                    // ("burst 2", "cone 3") do get surfaced.
+                    // v3 eidolon extras appended to effect: `attacks: N` (N>1) becomes
+                    // multi-attack prose; string AoE shapes surface, bare `aoe: true` drops.
                     if (feat.attacks && feat.attacks > 1)
                     {
                         const prose = `This weapon can make ${feat.attacks}/${feat.attacks}/${feat.attacks} attacks at a time. Multiple attacks may be made against the same or different targets.`;
@@ -1471,22 +1432,22 @@ export async function translateV3LcpBlob(inputBlob)
                     }
                     if (Array.isArray(feat.damage))
                     {
-                        for (const d of feat.damage)
+                        for (const damageEntry of feat.damage)
                         {
-                            if (d?.aoe && typeof d.aoe === "string" && d.aoe.trim())
+                            if (damageEntry?.aoe && typeof damageEntry.aoe === "string" && damageEntry.aoe.trim())
                             {
-                                feat.effect = (feat.effect ?? "") + (feat.effect ? "<br>" : "") + `<em>AoE:</em> ${d.aoe}`;
+                                feat.effect = (feat.effect ?? "") + (feat.effect ? "<br>" : "") + `<em>AoE:</em> ${damageEntry.aoe}`;
                             }
-                            delete d?.aoe;
+                            delete damageEntry?.aoe;
                         }
                     }
                     delete feat.attacks;
                     // Defensive: clean up feat.tags (drop empty/invalid entries), then append
                     // our activation tags.
-                    feat.tags = (Array.isArray(feat.tags) ? feat.tags : []).filter(t => t && typeof t.id === "string" && t.id);
-                    for (const t of tagsToAdd)
-                        if (!feat.tags.some(x => x.id === t.id))
-                            feat.tags.push(t);
+                    feat.tags = (Array.isArray(feat.tags) ? feat.tags : []).filter(tag => tag && typeof tag.id === "string" && tag.id);
+                    for (const tag of tagsToAdd)
+                        if (!feat.tags.some(existing => existing.id === tag.id))
+                            feat.tags.push(tag);
                     translateFeature(feat, layerTmpl, "Template", droppedEffects);
                     allFeatures.push(feat);
                     eidolonFeatureLids.push(feat.id);
@@ -1570,8 +1531,6 @@ export async function translateV3LcpBlob(inputBlob)
     };
 }
 
-// ── UI helpers ──────────────────────────────────────────────────────────────
-
 // Dynamically resolve the Lancer system's main bundle (hashed filename varies per release)
 // and grab parseContentPack + importCP so we can import the translated LCP in-place.
 let _lancerApi = null;
@@ -1579,7 +1538,7 @@ export async function getLancerApi()
 {
     if (_lancerApi)
         return _lancerApi;
-    const entrySrc = await fetch("/systems/lancer/lancer.mjs").then(r => r.text());
+    const entrySrc = await fetch("/systems/lancer/lancer.mjs").then(resp => resp.text());
 
     const actorMatch = entrySrc.match(/(?:from|import)\s+['"](\.\/)?(lancer-actor-[^'"]+\.mjs)['"]/);
     const compMatch  = entrySrc.match(/(?:from|import)\s+['"](\.\/)?(comp-builder-[^'"]+\.mjs)['"]/);
@@ -1590,8 +1549,8 @@ export async function getLancerApi()
     const findFn = (mod, preferred, sig) =>
     {
         if (typeof mod?.[preferred] === "function") return mod[preferred];
-        for (const v of Object.values(mod ?? {}))
-            if (typeof v === "function") { try { if (sig.test(v.toString())) return v; } catch (_) {} }
+        for (const value of Object.values(mod ?? {}))
+            if (typeof value === "function") { try { if (sig.test(value.toString())) return value; } catch (_) {} }
         return null;
     };
     const [actorMod, compMod] = await Promise.all([
@@ -1629,12 +1588,12 @@ async function triggerDownload(blob, filename)
         reader.onerror = reject;
         reader.readAsDataURL(blob);
     });
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const anchor = document.createElement("a");
+    anchor.href = dataUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
 }
 
 export async function pickAndTranslateV3Lcp()
@@ -1659,9 +1618,9 @@ export async function pickAndTranslateV3Lcp()
         }
         const baseName = picked.name.replace(/\.lcp$/i, "");
         triggerDownload(blob, `${baseName}.v2.lcp`);
-        const sumAE = (entries) => entries.reduce((acc, e) =>
+        const sumAE = (entries) => entries.reduce((acc, entry) =>
         {
-            acc.total += e.total ?? 0; acc.lifted += e.lifted ?? 0; acc.textOnly += e.textOnly ?? 0; return acc;
+            acc.total += entry.total ?? 0; acc.lifted += entry.lifted ?? 0; acc.textOnly += entry.textOnly ?? 0; return acc;
         }, { total: 0, lifted: 0, textOnly: 0 });
         const notes = [];
         const npcAE = sumAE(summary.droppedActiveEffects);
@@ -1686,7 +1645,6 @@ export async function pickAndTranslateV3Lcp()
     }
 }
 
-// ── LCP Manager integration ─────────────────────────────────────────────────
 // The translate button ONLY appears when the currently selected file is a v3 LCP,
 // and it replaces the native "Import LCP" button in-place so the flow feels native.
 
@@ -1747,7 +1705,7 @@ function renderV3Summary(root, anchor, summary)
     // De-dupe: there can be at most one summary element across the whole manager root,
     // and it must live under the current anchor. Remove any strays from previous renders.
     const existing = Array.from(root.querySelectorAll(".lni-v3-summary"));
-    let el = existing.find(e => e.parentElement === anchor);
+    let el = existing.find(node => node.parentElement === anchor);
     for (const stray of existing)
         if (stray !== el)
             stray.remove();
@@ -1774,21 +1732,21 @@ function renderV3Summary(root, anchor, summary)
     const rows = [];
     for (const [key, label] of V3_SUMMARY_ITEMS)
     {
-        const n = summary[key] ?? 0;
-        if (n > 0)
-            rows.push([n, label]);
+        const count = summary[key] ?? 0;
+        if (count > 0)
+            rows.push([count, label]);
     }
     for (const [key, label] of Object.entries(V3_ITEM_LABELS))
     {
-        const n = summary.items?.[key] ?? 0;
-        if (n > 0)
-            rows.push([n, label]);
+        const count = summary.items?.[key] ?? 0;
+        if (count > 0)
+            rows.push([count, label]);
     }
     const droppedAe = (summary.droppedActiveEffects?.length ?? 0) + (summary.droppedItemActiveEffects?.length ?? 0);
     const droppedLayers = summary.droppedEidolonLayers?.length ?? 0;
-    el.innerHTML = rows.map(([n, label]) =>
+    el.innerHTML = rows.map(([count, label]) =>
         `<li style="display: flex; align-items: center; gap: 8px; margin: 2px 0;">
-            <span style="display: inline-block; min-width: 28px; padding: 2px 6px; background: #a91c1c; color: #fff; border-radius: 12px; text-align: center; font-weight: bold;">${n}</span>
+            <span style="display: inline-block; min-width: 28px; padding: 2px 6px; background: #a91c1c; color: #fff; border-radius: 12px; text-align: center; font-weight: bold;">${count}</span>
             <span>${label}</span>
         </li>`
     ).join("") + (droppedAe || droppedLayers
@@ -1812,7 +1770,7 @@ async function sortEidolonContentIntoFolder(summary)
     {
         if (!pack || !lids.length)
             return;
-        const docs = pack.index.filter(e => lids.includes(e.system?.lid));
+        const docs = pack.index.filter(entry => lids.includes(entry.system?.lid));
         if (!docs.length)
             return;
         // Lancer's importCP locks packs on completion; unlock to modify, relock after.
@@ -1821,7 +1779,7 @@ async function sortEidolonContentIntoFolder(summary)
             await pack.configure({ locked: false });
         try
         {
-            let folder = pack.folders.find(f => f.name === "Eidolons");
+            let folder = pack.folders.find(candidate => candidate.name === "Eidolons");
             if (!folder)
             {
                 folder = await Folder.create(
@@ -1829,7 +1787,7 @@ async function sortEidolonContentIntoFolder(summary)
                     { pack: pack.collection }
                 );
             }
-            const updates = docs.map(d => ({ _id: d._id, folder: folder.id }));
+            const updates = docs.map(doc => ({ _id: doc._id, folder: folder.id }));
             const docCls = CONFIG[pack.metadata.type].documentClass;
             await docCls.updateDocuments(updates, { pack: pack.collection });
         }
@@ -1839,9 +1797,9 @@ async function sortEidolonContentIntoFolder(summary)
                 await pack.configure({ locked: true });
         }
     };
-    const templatePack = game.packs.find(p => p.metadata.type === "Item" && /npc.template/i.test(p.collection))
+    const templatePack = game.packs.find(pack => pack.metadata.type === "Item" && /npc.template/i.test(pack.collection))
         ?? game.packs.get("world.npc-templates");
-    const featurePack = game.packs.find(p => p.metadata.type === "Item" && /npc.feature/i.test(p.collection))
+    const featurePack = game.packs.find(pack => pack.metadata.type === "Item" && /npc.feature/i.test(pack.collection))
         ?? game.packs.get("world.npc-features");
     const itemsPack = game.packs.get("world.npc-items"); // fallback if templates + features live in one pack
     await worked(templatePack ?? itemsPack, tmplLids);
@@ -1883,9 +1841,9 @@ async function translateSelectedV3(file)
         // each pack so GMs don't confuse layer templates / features with regular NPC content.
         await sortEidolonContentIntoFolder(summary);
 
-        const sumAE = (entries) => entries.reduce((acc, e) =>
+        const sumAE = (entries) => entries.reduce((acc, entry) =>
         {
-            acc.total += e.total ?? 0; acc.lifted += e.lifted ?? 0; acc.textOnly += e.textOnly ?? 0; return acc;
+            acc.total += entry.total ?? 0; acc.lifted += entry.lifted ?? 0; acc.textOnly += entry.textOnly ?? 0; return acc;
         }, { total: 0, lifted: 0, textOnly: 0 });
         const notes = [];
         const npcAE = sumAE(summary.droppedActiveEffects);
@@ -1904,7 +1862,7 @@ async function translateSelectedV3(file)
         console.log("[v3-lcp-shim] import complete", summary);
 
         // Refresh the Compendium Manager so the installed/current column reflects the new import.
-        const manager = Object.values(ui.windows).find(w => w?.constructor?.name === "LCPManager");
+        const manager = Object.values(ui.windows).find(win => win?.constructor?.name === "LCPManager");
         manager?.render?.(false);
     }
     catch (e)
@@ -1914,10 +1872,8 @@ async function translateSelectedV3(file)
     }
 }
 
-// Update the button visibility in response to the current file selection.
-// The native "Import LCP" button is only rendered when the Lancer system
-// successfully parses an LCP — v3 LCPs fail that parse, so for v3 we inject
-// the translate button into the details panel ourselves instead of swapping.
+// Toggle the translate button per file selection. Lancer only renders its native
+// "Import LCP" for parseable LCPs (v3 fails), so for v3 we inject our own button.
 async function refreshButtonState(root)
 {
     const importBtn = root.querySelector("button.lcp-import");
@@ -1968,10 +1924,8 @@ async function refreshButtonState(root)
         console.error("[v3-lcp-shim] preview translation failed", e);
     }
 
-    // If the Lancer system rendered its own content-summary list (happens when a v3
-    // zip also contains legacy flat files the system can partially read), skip ours to
-    // avoid duplication. Detect by finding a <li> under .lcp-details that actually has
-    // count-shaped text content — ignore empty lists or non-count bullet items.
+    // Skip our summary if the Lancer system rendered its own content-summary list
+    // (detected as a .lcp-details <li> with count-shaped text) to avoid duplication.
     const nativeItems = Array.from(root.querySelectorAll(".lcp-details ul li, .lcp-details .content-summary li"))
         .filter(li =>
         {
@@ -2012,14 +1966,12 @@ async function refreshButtonState(root)
     }
     else
     {
-        root.querySelectorAll(".lni-v3-summary").forEach(e => e.remove());
+        root.querySelectorAll(".lni-v3-summary").forEach(node => node.remove());
     }
 }
 
-// Watch for file-input changes AND Svelte re-renders of the right panel.
-// Mutation-loop prevention uses a time-gated flag: refreshButtonState sets _muting=true
-// while running, and the observer skips callbacks during that window. The flag clears
-// via setTimeout so MO-queued microtasks from our mutations are drained first.
+// Watch file-input changes and Svelte re-renders. A time-gated _muting flag set
+// during refreshButtonState makes the observer ignore our own mutations.
 let _muting = false;
 
 function wireLcpManager(_app, html)
@@ -2082,7 +2034,7 @@ function wireLcpManager(_app, html)
     const observer = new MutationObserver(() =>
     {
         if (_muting)
-            return; // our own mutations — ignore
+            return; // our own mutations, ignore
         attachInputListener();
         schedule();
     });

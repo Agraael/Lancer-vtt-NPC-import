@@ -25,10 +25,10 @@ async function simulateImport(file)
     const captured = {};
     const captureInto = (arr) =>
     {
-        for (const d of arr)
+        for (const doc of arr)
         {
-            const t = d.type ?? "unknown";
-            (captured[t] ??= []).push(d);
+            const type = doc.type ?? "unknown";
+            (captured[type] ??= []).push(doc);
         }
     };
 
@@ -46,19 +46,19 @@ async function simulateImport(file)
     ItemCls.createDocuments = async function (data)
     {
         captureInto(data ?? []);
-        return (data ?? []).map(d => ({ id: d._id ?? foundry.utils.randomID(), ...d }));
+        return (data ?? []).map(doc => ({ id: doc._id ?? foundry.utils.randomID(), ...doc }));
     };
     ItemCls.updateDocuments = async function (data)
     {
         captureInto(data ?? []);
         return data ?? [];
     };
-    const stubActor = (d) =>
+    const stubActor = (doc) =>
     {
-        const id = d._id ?? foundry.utils.randomID();
+        const id = doc._id ?? foundry.utils.randomID();
         return {
             id,
-            ...d,
+            ...doc,
             items: [],
             npcClassSwapPromises: [],
             removeClassFeatures: async () => {},
@@ -136,12 +136,12 @@ function stableStringify(value)
     if (Array.isArray(value))
         return `[${value.map(stableStringify).join(",")}]`;
     const keys = Object.keys(value).sort();
-    return `{${keys.map(k => JSON.stringify(k) + ":" + stableStringify(value[k])).join(",")}}`;
+    return `{${keys.map(key => JSON.stringify(key) + ":" + stableStringify(value[key])).join(",")}}`;
 }
 
-function _isPlainObj(v)
+function _isPlainObj(value)
 {
-    return v !== null && typeof v === "object" && !Array.isArray(v);
+    return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function fieldDiff(a, b, path = "", out = [])
@@ -152,10 +152,10 @@ function fieldDiff(a, b, path = "", out = [])
     if (_isPlainObj(a) && _isPlainObj(b))
     {
         const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-        for (const k of keys)
+        for (const key of keys)
         {
-            const subPath = path ? `${path}.${k}` : k;
-            fieldDiff(a[k], b[k], subPath, out);
+            const subPath = path ? `${path}.${key}` : key;
+            fieldDiff(a[key], b[key], subPath, out);
         }
         return out;
     }
@@ -171,35 +171,35 @@ function fieldDiff(a, b, path = "", out = [])
     return out;
 }
 
-function diffBuckets(a, b)
+function diffBuckets(bucketsA, bucketsB)
 {
-    const allBuckets = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+    const allBuckets = new Set([...Object.keys(bucketsA ?? {}), ...Object.keys(bucketsB ?? {})]);
     const out = {};
     for (const bucket of allBuckets)
     {
-        const ma = indexBucket(a?.[bucket] ?? []);
-        const mb = indexBucket(b?.[bucket] ?? []);
+        const ma = indexBucket(bucketsA?.[bucket] ?? []);
+        const mb = indexBucket(bucketsB?.[bucket] ?? []);
         const added = [];
         const removed = [];
         const changed = [];
         const unchanged = [];
-        for (const [k, v] of mb)
-            if (!ma.has(k))
-                added.push({ key: k, item: v });
-        for (const [k, v] of ma)
-            if (!mb.has(k))
-                removed.push({ key: k, item: v });
-        for (const [k, va] of ma)
+        for (const [key, item] of mb)
+            if (!ma.has(key))
+                added.push({ key, item });
+        for (const [key, item] of ma)
+            if (!mb.has(key))
+                removed.push({ key, item });
+        for (const [key, itemA] of ma)
         {
-            if (!mb.has(k))
+            if (!mb.has(key))
                 continue;
-            const vb = mb.get(k);
-            if (stableStringify(va) === stableStringify(vb))
+            const itemB = mb.get(key);
+            if (stableStringify(itemA) === stableStringify(itemB))
             {
-                unchanged.push({ key: k, item: va });
+                unchanged.push({ key, item: itemA });
                 continue;
             }
-            changed.push({ key: k, a: va, b: vb, fields: fieldDiff(va, vb) });
+            changed.push({ key, a: itemA, b: itemB, fields: fieldDiff(itemA, itemB) });
         }
         if (added.length || removed.length || changed.length || unchanged.length || ma.size || mb.size)
         {
@@ -216,31 +216,31 @@ function diffBuckets(a, b)
     return out;
 }
 
-function escapeHtml(s)
+function escapeHtml(str)
 {
-    return String(s).replace(/[&<>"']/g, c => ({
+    return String(str).replace(/[&<>"']/g, ch => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
-    }[c]));
+    }[ch]));
 }
 
-function previewValue(v)
+function previewValue(value)
 {
-    if (v === undefined)
+    if (value === undefined)
         return "<em>undefined</em>";
-    let s;
+    let str;
     try
     {
-        s = JSON.stringify(v);
+        str = JSON.stringify(value);
     }
     catch
     {
-        s = String(v);
+        str = String(value);
     }
-    if (s == null)
-        s = String(v);
-    if (s.length > 200)
-        s = s.slice(0, 200) + "…";
-    return escapeHtml(s);
+    if (str == null)
+        str = String(value);
+    if (str.length > 200)
+        str = str.slice(0, 200) + "…";
+    return escapeHtml(str);
 }
 
 function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed")
@@ -258,7 +258,7 @@ function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed")
 
     const head = `
         <div class="lcp-diff-head">
-            <div style="font-size:11px;color:#555;margin-bottom:4px;">${mode === "simulated" ? "Diff of <strong>simulated import</strong> output (what would land in compendia, no write performed)." : "Diff of <code>parseContentPack</code> output (translator + parser only, before <code>importCP</code>)."}</div>
+            <div style="font-size:11px;color:var(--la-ink-dim);margin-bottom:4px;">${mode === "simulated" ? "Diff of <strong>simulated import</strong> output (what would land in compendia, no write performed)." : "Diff of <code>parseContentPack</code> output (translator + parser only, before <code>importCP</code>)."}</div>
             <div><strong>A:</strong> ${escapeHtml(manifestA?.name ?? "(no manifest)")}
                  <span class="lcp-diff-ver">${escapeHtml(manifestA?.version ?? "")}</span></div>
             <div><strong>B:</strong> ${escapeHtml(manifestB?.name ?? "(no manifest)")}
@@ -283,56 +283,56 @@ function renderDiffHtml(manifestA, manifestB, diff, mode = "parsed")
 
         const rows = [];
         const fullJson = (item) => escapeHtml(JSON.stringify(item, null, 2));
-        for (const e of info.added)
+        for (const entry of info.added)
             rows.push(`
                 <li class="lcp-diff-row lcp-diff-row-add">
                     <details>
-                        <summary><span class="lcp-diff-tag">ADDED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></summary>
-                        <pre class="lcp-diff-full">${fullJson(e.item)}</pre>
+                        <summary><span class="lcp-diff-tag">ADDED</span><code>${escapeHtml(entry.key)}</code> <span class="lcp-diff-name">${escapeHtml(entry.item?.name ?? "")}</span></summary>
+                        <pre class="lcp-diff-full">${fullJson(entry.item)}</pre>
                     </details>
                 </li>
             `);
-        for (const e of info.removed)
+        for (const entry of info.removed)
             rows.push(`
                 <li class="lcp-diff-row lcp-diff-row-rem">
                     <details>
-                        <summary><span class="lcp-diff-tag">REMOVED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></summary>
-                        <pre class="lcp-diff-full">${fullJson(e.item)}</pre>
+                        <summary><span class="lcp-diff-tag">REMOVED</span><code>${escapeHtml(entry.key)}</code> <span class="lcp-diff-name">${escapeHtml(entry.item?.name ?? "")}</span></summary>
+                        <pre class="lcp-diff-full">${fullJson(entry.item)}</pre>
                     </details>
                 </li>
             `);
-        for (const e of info.changed)
+        for (const entry of info.changed)
         {
-            const fields = e.fields.slice(0, 12).map(f => `
+            const fields = entry.fields.slice(0, 12).map(field => `
                 <li class="lcp-diff-field">
-                    <code>${escapeHtml(f.key)}</code>
-                    <span class="lcp-diff-from">A: ${previewValue(f.a)}</span>
-                    <span class="lcp-diff-to">B: ${previewValue(f.b)}</span>
+                    <code>${escapeHtml(field.key)}</code>
+                    <span class="lcp-diff-from">A: ${previewValue(field.a)}</span>
+                    <span class="lcp-diff-to">B: ${previewValue(field.b)}</span>
                 </li>
             `).join("");
-            const more = e.fields.length > 12 ? `<li class="lcp-diff-field-more">+${e.fields.length - 12} more</li>` : "";
+            const more = entry.fields.length > 12 ? `<li class="lcp-diff-field-more">+${entry.fields.length - 12} more</li>` : "";
             rows.push(`
                 <li class="lcp-diff-row lcp-diff-row-chg">
                     <details open>
-                        <summary><span class="lcp-diff-tag">CHANGED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.b?.name ?? e.a?.name ?? "")}</span> <span class="lcp-diff-field-count">(${e.fields.length} field${e.fields.length === 1 ? "" : "s"})</span></summary>
+                        <summary><span class="lcp-diff-tag">CHANGED</span><code>${escapeHtml(entry.key)}</code> <span class="lcp-diff-name">${escapeHtml(entry.b?.name ?? entry.a?.name ?? "")}</span> <span class="lcp-diff-field-count">(${entry.fields.length} field${entry.fields.length === 1 ? "" : "s"})</span></summary>
                         <ul class="lcp-diff-fields">${fields}${more}</ul>
                         <details>
                             <summary class="lcp-diff-full-toggle">Show full A &amp; B</summary>
                             <div class="lcp-diff-full-pair">
-                                <div><div class="lcp-diff-full-label">A (full)</div><pre class="lcp-diff-full">${fullJson(e.a)}</pre></div>
-                                <div><div class="lcp-diff-full-label">B (full)</div><pre class="lcp-diff-full">${fullJson(e.b)}</pre></div>
+                                <div><div class="lcp-diff-full-label">A (full)</div><pre class="lcp-diff-full">${fullJson(entry.a)}</pre></div>
+                                <div><div class="lcp-diff-full-label">B (full)</div><pre class="lcp-diff-full">${fullJson(entry.b)}</pre></div>
                             </div>
                         </details>
                     </details>
                 </li>
             `);
         }
-        for (const e of info.unchanged ?? [])
+        for (const entry of info.unchanged ?? [])
             rows.push(`
                 <li class="lcp-diff-row lcp-diff-row-unc">
                     <details>
-                        <summary><span class="lcp-diff-tag">UNCHANGED</span><code>${escapeHtml(e.key)}</code> <span class="lcp-diff-name">${escapeHtml(e.item?.name ?? "")}</span></summary>
-                        <pre class="lcp-diff-full">${fullJson(e.item)}</pre>
+                        <summary><span class="lcp-diff-tag">UNCHANGED</span><code>${escapeHtml(entry.key)}</code> <span class="lcp-diff-name">${escapeHtml(entry.item?.name ?? "")}</span></summary>
+                        <pre class="lcp-diff-full">${fullJson(entry.item)}</pre>
                     </details>
                 </li>
             `);
@@ -366,9 +366,9 @@ function inlineStyles()
                 font-size: 13px !important;
                 flex: 0 0 auto !important;
             }
-            .lcp-diff-root { font-size: 12px; color: #1c1c1c; }
-            .lcp-diff-head { padding: 6px 8px; border: 1px solid #888; border-radius: 4px; margin-bottom: 8px; background: rgba(0,0,0,0.05); }
-            .lcp-diff-ver { color: #555; margin-left: 4px; }
+            .lcp-diff-root { font-size: 12px; color: var(--la-ink); }
+            .lcp-diff-head { padding: 6px 8px; border: 1px solid var(--la-edge); border-radius: 4px; margin-bottom: 8px; background: rgba(0,0,0,0.05); }
+            .lcp-diff-ver { color: var(--la-ink-dim); margin-left: 4px; }
             .lcp-diff-totals { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
             .lcp-diff-pill { padding: 1px 6px; border-radius: 8px; font-weight: bold; color: #fff; }
             .lcp-diff-a { background: #2c3e50; }
@@ -376,10 +376,10 @@ function inlineStyles()
             .lcp-diff-add { background: #1e6f3a; }
             .lcp-diff-rem { background: #7a2424; }
             .lcp-diff-chg { background: #7a5c1c; }
-            .lcp-diff-bucket { margin: 4px 0; border: 1px solid #888; border-radius: 4px; background: rgba(0,0,0,0.02); }
-            .lcp-diff-bucket > summary { padding: 4px 8px; cursor: pointer; background: rgba(0,0,0,0.06); font-weight: bold; color: #1c1c1c; }
+            .lcp-diff-bucket { margin: 4px 0; border: 1px solid var(--la-edge); border-radius: 4px; background: rgba(0,0,0,0.02); }
+            .lcp-diff-bucket > summary { padding: 4px 8px; cursor: pointer; background: rgba(0,0,0,0.06); font-weight: bold; color: var(--la-ink); }
             .lcp-diff-rows { list-style: none; margin: 0; padding: 4px 8px; max-height: 320px; overflow: auto; }
-            .lcp-diff-row { padding: 2px 0; border-bottom: 1px dotted #aaa; }
+            .lcp-diff-row { padding: 2px 0; border-bottom: 1px dotted var(--la-edge); }
             .lcp-diff-tag {
                 display: inline-block; min-width: 64px; padding: 1px 4px;
                 font-weight: bold; font-size: 10px; border-radius: 3px; margin-right: 6px; color: #fff;
@@ -389,18 +389,18 @@ function inlineStyles()
             .lcp-diff-row-chg .lcp-diff-tag { background: #7a5c1c; }
             .lcp-diff-row-unc .lcp-diff-tag { background: #555; }
             .lcp-diff-row-unc { opacity: 0.75; }
-            .lcp-diff-name { color: #444; margin-left: 6px; font-style: italic; }
-            .lcp-diff-row > code { background: rgba(0,0,0,0.08); padding: 1px 4px; border-radius: 2px; color: #1c1c1c; }
+            .lcp-diff-name { color: var(--la-ink-dim); margin-left: 6px; font-style: italic; }
+            .lcp-diff-row > code { background: rgba(0,0,0,0.08); padding: 1px 4px; border-radius: 2px; color: var(--la-ink); }
             .lcp-diff-fields { margin: 4px 0 6px 16px; padding: 0; list-style: none; }
-            .lcp-diff-field { padding: 2px 0; border-left: 2px solid #ccc; padding-left: 6px; margin-bottom: 4px; }
+            .lcp-diff-field { padding: 2px 0; border-left: 2px solid var(--la-edge); padding-left: 6px; margin-bottom: 4px; }
             .lcp-diff-field > code {
                 display: inline-block; background: #2c3e50; color: #fff;
                 padding: 1px 6px; border-radius: 2px; font-weight: bold; font-size: 11px;
             }
             .lcp-diff-from { display: block; color: #8a1d1d; padding-left: 12px; word-break: break-all; }
             .lcp-diff-to { display: block; color: #1e6f3a; padding-left: 12px; word-break: break-all; }
-            .lcp-diff-field-more { color: #555; font-style: italic; padding: 2px 0 0 6px; }
-            .lcp-diff-empty { color: #555; font-style: italic; }
+            .lcp-diff-field-more { color: var(--la-ink-dim); font-style: italic; padding: 2px 0 0 6px; }
+            .lcp-diff-empty { color: var(--la-ink-dim); font-style: italic; }
             .lcp-diff-row > details > summary { cursor: pointer; list-style: revert; }
             .lcp-diff-full {
                 margin: 4px 0 6px 16px; padding: 6px 8px;
@@ -409,10 +409,10 @@ function inlineStyles()
                 max-height: 300px; overflow: auto;
                 white-space: pre-wrap; word-break: break-word;
             }
-            .lcp-diff-full-toggle { cursor: pointer; color: #555; font-size: 11px; padding: 2px 0 2px 16px; font-style: italic; }
+            .lcp-diff-full-toggle { cursor: pointer; color: var(--la-ink-dim); font-size: 11px; padding: 2px 0 2px 16px; font-style: italic; }
             .lcp-diff-full-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-left: 16px; }
             .lcp-diff-full-pair .lcp-diff-full { margin-left: 0; }
-            .lcp-diff-full-label { font-weight: bold; font-size: 11px; color: #444; padding: 2px 0; }
+            .lcp-diff-full-label { font-weight: bold; font-size: 11px; color: var(--la-ink-dim); padding: 2px 0; }
             .lcp-diff-pickers { display: flex; gap: 12px; margin-bottom: 8px; }
             .lcp-diff-pickers > label { flex: 1; }
             .lcp-diff-pickers input[type=file] { width: 100%; }
@@ -474,24 +474,24 @@ class LcpDebugDiffApp extends Application
             return;
         root.dataset.lcpDiffWired = "1";
 
-        root.addEventListener("change", (e) =>
+        root.addEventListener("change", (event) =>
         {
-            const t = e.target;
-            if (!(t instanceof HTMLInputElement) || t.type !== "file")
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement) || target.type !== "file")
                 return;
-            if (t.classList.contains("lcp-diff-a"))
-                this._pickedA = t.files?.[0] ?? null;
-            else if (t.classList.contains("lcp-diff-b"))
-                this._pickedB = t.files?.[0] ?? null;
+            if (target.classList.contains("lcp-diff-a"))
+                this._pickedA = target.files?.[0] ?? null;
+            else if (target.classList.contains("lcp-diff-b"))
+                this._pickedB = target.files?.[0] ?? null;
         });
 
-        root.addEventListener("click", async (e) =>
+        root.addEventListener("click", async (event) =>
         {
-            const btn = e.target.closest("button");
+            const btn = event.target.closest("button");
             if (!btn || !root.contains(btn))
                 return;
-            e.preventDefault();
-            e.stopPropagation();
+            event.preventDefault();
+            event.stopPropagation();
             if (btn.classList.contains("lcp-diff-run-single"))
                 await this._runCompareSingle();
             else if (btn.classList.contains("lcp-diff-run-sim"))
@@ -524,14 +524,14 @@ class LcpDebugDiffApp extends Application
         out.innerHTML = `<em>${label}</em>`;
         try
         {
-            const a = await loadLcpAsBuckets(this._pickedA, mode);
-            const b = await loadLcpAsBuckets(this._pickedB, mode);
-            this._lastA = a;
-            this._lastB = b;
+            const resultA = await loadLcpAsBuckets(this._pickedA, mode);
+            const resultB = await loadLcpAsBuckets(this._pickedB, mode);
+            this._lastA = resultA;
+            this._lastB = resultB;
             this._lastMode = mode;
-            this._lastDiff = diffBuckets(a.buckets, b.buckets);
-            out.innerHTML = renderDiffHtml(a.manifest, b.manifest, this._lastDiff, mode);
-            console.log(`[lcp-debug-diff] result (${mode})`, { a, b, diff: this._lastDiff });
+            this._lastDiff = diffBuckets(resultA.buckets, resultB.buckets);
+            out.innerHTML = renderDiffHtml(resultA.manifest, resultB.manifest, this._lastDiff, mode);
+            console.log(`[lcp-debug-diff] result (${mode})`, { a: resultA, b: resultB, diff: this._lastDiff });
         }
         catch (e)
         {
@@ -609,12 +609,12 @@ class LcpDebugDiffApp extends Application
         }
         const blob = new Blob([json], { type: "application/json" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
         ui.notifications.info(`Exported ${filename}`);
     }
