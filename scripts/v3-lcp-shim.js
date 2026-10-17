@@ -1,7 +1,8 @@
 // V3 -> V2 LCP translator: rewrites a Comp/Con v3 LCP zip into the legacy v2 shape.
-// active_effects lift into native bonuses/actions/deployables or effect text; eidolon layers drop.
+// active_effects become native bonuses/actions/deployables or effect text. Eidolon layers become NPC templates.
 
-const MODULE_ID = "lancer-npc-import";
+import { MODULE_ID } from "./utils.js";
+
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 
 let _jszipPromise = null;
@@ -125,8 +126,8 @@ function stripSidecar(feat)
     delete feat.__v3_base;
 }
 
-// v3 active_effect -> v2 translation. Lancer 2.x natively models action damage/range/
-// frequency/trigger and bonuses (save/attack/armor, added_damage); the rest falls back to text.
+// v3 active_effect -> v2 translation. Lancer 2.x models action damage/range/frequency/trigger
+// and bonuses (save/attack/armor, added_damage) natively. The rest falls back to text.
 
 const FREQUENCY_RE = /^\s*(\d+\s*\/\s*(turn|round|encounter|scene|mission|unlimited)|unlimited)\s*$/i;
 
@@ -182,8 +183,7 @@ function normalizeFrequency(freq)
     return "";
 }
 
-// Text fragments with no Lancer v2 schema equivalent on items. Returns "" when the
-// active_effect has nothing beyond its name label, so we don't emit bare `**Name**` trailers.
+// Text with no v2 schema home. Returns "" for a name-only active_effect so no bare `**Name**` trailer is emitted.
 function renderResidualText(ae, handled)
 {
     if (!ae)
@@ -226,8 +226,7 @@ function renderResidualText(ae, handled)
         const text = renderTokens(ae.remove_special); if (text)
             extras.push(`Removes special: ${text}`);
     }
-    // Structured save object: surface stat/dc/on_success/on_fail in text.
-    // Scalar save is already lifted into bonuses by liftActiveEffects.
+    // Object save goes to text. A scalar save is already a bonus (liftActiveEffects).
     if (ae.save && typeof ae.save === "object")
     {
         const parts = [];
@@ -267,16 +266,15 @@ function existingContainsBody(existing, chunk)
 {
     if (!existing || !chunk)
         return false;
-    // Skip the "**Name** — " header so we compare actual body content.
+    // Skip the bold name header so only the body is compared.
     const body = chunk.split(" — ").slice(1).join(" — ");
     if (!body)
-        return true; // header-only; already filtered but guard anyway
+        return true; // header-only, also filtered earlier
     const existingNorm = textNormalize(existing);
     const bodyNorm = textNormalize(body);
     return bodyNorm.length > 12 && existingNorm.includes(bodyNorm);
 }
 
-// Detect whether this active_effect describes an action (has attack/damage/range/trigger-shaped data).
 function aeLooksLikeAction(ae)
 {
     return !!(ae && (ae.damage || ae.range || ae.attack || ae.accuracy !== undefined || ae.condition || ae.frequency));
@@ -365,8 +363,7 @@ function liftActiveEffects(item)
         const newBonuses = [];
         if (ae.save !== undefined && ae.save !== null && ae.save !== "")
         {
-            // v3 save can be scalar (legacy) or structured {stat, dc, on_success, on_fail}.
-            // Use dc as the bonus value; full structure surfaces in residual text.
+            // v3 save is a scalar (legacy) or {stat, dc, on_success, on_fail}. dc becomes the bonus, the rest goes to text.
             const scalarSave = typeof ae.save === "object" ? ae.save.dc : ae.save;
             if (scalarSave !== undefined && scalarSave !== null && scalarSave !== "")
                 newBonuses.push({ lid: "save", val: String(scalarSave) });
@@ -378,8 +375,8 @@ function liftActiveEffects(item)
         }
         if (ae.bonus_damage)
         {
-            const bds = Array.isArray(ae.bonus_damage) ? ae.bonus_damage : [ae.bonus_damage];
-            const added_damage = bds.map(toV2Damage).filter(Boolean);
+            const bonusDamages = Array.isArray(ae.bonus_damage) ? ae.bonus_damage : [ae.bonus_damage];
+            const added_damage = bonusDamages.map(toV2Damage).filter(Boolean);
             if (added_damage.length)
             {
                 // added_damage attaches to a bonus. Use lid "damage" as the neutral carrier.
@@ -420,7 +417,7 @@ function renderActiveEffectAsText(ae)
     return renderResidualText(ae, {});
 }
 
-// v3 on_* hooks can be { detail, ... } objects; v2 expects string.
+// v3 on_* hooks can be { detail, ... } objects, v2 expects a string.
 function coerceOnHookString(value)
 {
     if (value == null)
@@ -468,9 +465,9 @@ function stripV3Common(item, dropped)
 }
 
 // v3 active_effects/passive_effects arrays on core_system/traits → v2 HTMLField string.
-function mergeEffectArrayToHtml(arr)
+function mergeEffectArrayToHtml(effects)
 {
-    if (!Array.isArray(arr))
+    if (!Array.isArray(effects))
         return "";
     const renderToken = token =>
     {
@@ -493,7 +490,7 @@ function mergeEffectArrayToHtml(arr)
     }).filter(Boolean).join(", ");
 
     const parts = [];
-    for (const ae of arr)
+    for (const ae of effects)
     {
         if (!ae)
             continue;
@@ -569,8 +566,7 @@ function mergeEffectArrayToHtml(arr)
     return parts.join("");
 }
 
-// v2 `integrated` must be string LIDs, not inline objects. v3 already ships
-// string[] (compcon MechWeapon.ts), so this is defensive id-extraction only.
+// v2 `integrated` needs string LIDs. v3 already ships string[], this only guards inline objects.
 function flattenIntegrated(item)
 {
     if (!Array.isArray(item?.integrated))
@@ -580,8 +576,7 @@ function flattenIntegrated(item)
         .filter(Boolean);
 }
 
-// v2 unpackAction calls .map() on damage/range; v3 may ship scalars or objects.
-// Normalize each action to array-shaped damage/range/synergy_locations.
+// v2 unpackAction calls .map() on damage/range/synergy_locations, so v3 scalars and objects become arrays.
 function normalizeAction(action)
 {
     if (!action || typeof action !== "object")
@@ -634,8 +629,7 @@ function normalizeBonusesList(list)
         normalizeBonus(bonus);
 }
 
-// Recursively strip v3-only fields from embedded structures and normalize
-// actions/bonuses so they survive Lancer's blind .map/.toString calls.
+// Strips v3-only fields and normalizes nested actions/bonuses for Lancer's .map/.toString calls.
 function stripNested(item, droppedAE)
 {
     if (!item || typeof item !== "object")
@@ -670,14 +664,14 @@ function stripNested(item, droppedAE)
 function liftCoreSystemEffects(core, kind)
 {
     const key = `${kind}_effects`;
-    const arr = core?.[key];
-    if (!Array.isArray(arr) || arr.length === 0)
+    const effects = core?.[key];
+    if (!Array.isArray(effects) || effects.length === 0)
         return;
     const bonusKey = `${kind}_bonuses`;
     const actionKey = `${kind}_actions`;
     const synergyKey = `${kind}_synergies`;
     const effectKey = `${kind}_effect`;
-    for (const ae of arr)
+    for (const ae of effects)
     {
         if (!ae)
             continue;
@@ -703,7 +697,7 @@ function liftCoreSystemEffects(core, kind)
             core.counters = (core.counters ?? []).concat(ae.counters);
         }
     }
-    const html = mergeEffectArrayToHtml(arr);
+    const html = mergeEffectArrayToHtml(effects);
     if (html)
         core[effectKey] = (core[effectKey] || "") + html;
     delete core[key];
@@ -904,9 +898,9 @@ function renderNpcActionsAsHtml(actions)
         const range = renderRangeList(action.range);
         if (range)
             meta.push(range);
-        const dmg = renderDamageList(action.damage);
-        if (dmg)
-            meta.push(dmg);
+        const damageText = renderDamageList(action.damage);
+        if (damageText)
+            meta.push(damageText);
         const header = `<strong>${action.name ?? "Action"}</strong>`
             + (meta.length ? ` <em>(${meta.join(", ")})</em>` : "");
         const parts = [header];
@@ -947,8 +941,7 @@ function translateNpcFeatureCommon(feature, droppedAE)
         }
         delete feature.actions;
     }
-    // Lancer NPC feature only has `on_hit` as HTML; v3 NpcWeapon also carries
-    // `on_attack`/`on_crit`, so coerce and merge those into `effect` (no v2 home).
+    // v3 on_attack/on_crit have no v2 home, so they are folded into `effect`.
     if (feature.on_hit !== undefined && typeof feature.on_hit !== "string")
     {
         feature.on_hit = coerceOnHookString(feature.on_hit);
@@ -969,7 +962,7 @@ function translateNpcFeatureCommon(feature, droppedAE)
         const block = extraHookChunks.join("<br><br>");
         feature.effect = existing ? `${existing}<br><br>${block}` : block;
     }
-    // v3 NPC feature damage val guarded to tier array; unpacker iterates damage.length.
+    // The unpacker iterates damage.length, so each damage val becomes a tier array.
     if (Array.isArray(feature.damage))
     {
         for (const damageEntry of feature.damage)
@@ -998,29 +991,29 @@ function translateGeneric(item, droppedAE)
     stripNested(item, droppedAE);
 }
 
-function applyItemTranslators(type, arr, droppedAE)
+function applyItemTranslators(type, entries, droppedAE)
 {
-    if (!Array.isArray(arr))
+    if (!Array.isArray(entries))
         return;
     switch (type)
     {
-    case "frames": for (const entry of arr)
+    case "frames": for (const entry of entries)
         translateFrame(entry, droppedAE); break;
-    case "weapons": for (const entry of arr)
+    case "weapons": for (const entry of entries)
         translateMechWeapon(entry, droppedAE); break;
-    case "systems": for (const entry of arr)
+    case "systems": for (const entry of entries)
         translateMechSystem(entry, droppedAE); break;
-    case "mods": for (const entry of arr)
+    case "mods": for (const entry of entries)
         translateWeaponMod(entry, droppedAE); break;
-    case "pilot_gear": for (const entry of arr)
+    case "pilot_gear": for (const entry of entries)
         translatePilotGear(entry, droppedAE); break;
-    case "talents": for (const entry of arr)
+    case "talents": for (const entry of entries)
         translateTalent(entry, droppedAE); break;
-    case "reserves": for (const entry of arr)
+    case "reserves": for (const entry of entries)
         translateReserve(entry, droppedAE); break;
-    case "bonds": for (const entry of arr)
+    case "bonds": for (const entry of entries)
         translateBond(entry, droppedAE); break;
-    default: for (const entry of arr)
+    default: for (const entry of entries)
         translateGeneric(entry, droppedAE);
     }
 }
@@ -1056,23 +1049,39 @@ async function readJsonIfExists(zip, name)
     }
     catch (e)
     {
-        console.warn(`[v3-lcp-shim] Failed to parse ${name}`, e); return null;
+        console.warn(`lancer-npc-import | v3-lcp | Failed to parse ${name}`, e); return null;
     }
 }
 
 // Find the class/template "header" entry inside a per-file collection.
 // v3 convention: the header has no `origin` field (or has `role` for classes).
-function pickCollectionHeader(arr, kind)
+function pickCollectionHeader(entries, kind)
 {
-    if (!Array.isArray(arr) || arr.length === 0)
+    if (!Array.isArray(entries) || entries.length === 0)
         return null;
     if (kind === "Class")
-        return arr.find(entry => entry?.role) ?? null;
+        return entries.find(entry => entry?.role) ?? null;
     // Template: compcon v3 marks the header with `template: true` (ContentPackParser.ts:185).
     // Fall back to first entry with no `origin` string for older pre-release LCPs.
-    return arr.find(entry => entry?.template === true)
-        ?? arr.find(entry => entry && (typeof entry.origin !== "string" || !entry.origin))
+    return entries.find(entry => entry?.template === true)
+        ?? entries.find(entry => entry && (typeof entry.origin !== "string" || !entry.origin))
         ?? null;
+}
+
+function sumActiveEffects(entries)
+{
+    return entries.reduce((totals, entry) =>
+    {
+        totals.total += entry.total ?? 0;
+        totals.lifted += entry.lifted ?? 0;
+        totals.textOnly += entry.textOnly ?? 0;
+        return totals;
+    }, { total: 0, lifted: 0, textOnly: 0 });
+}
+
+function itemCountText(summary)
+{
+    return Object.entries(summary.items ?? {}).map(([type, count]) => `${count} ${type}`).join(", ");
 }
 
 export async function translateV3LcpBlob(inputBlob)
@@ -1097,8 +1106,7 @@ export async function translateV3LcpBlob(inputBlob)
     delete outManifest.v3;
     outZip.file("lcp_manifest.json", JSON.stringify(outManifest, null, 2));
 
-    // Load + translate non-NPC content files.
-    // Files the Lancer 2.x system actually reads get translated; others pass through.
+    // Files Lancer 2.x reads get translated, the others pass through.
     const contentBuckets = {
         frames: [],
         weapons: [],
@@ -1129,24 +1137,23 @@ export async function translateV3LcpBlob(inputBlob)
     };
     for (const [bucket, file] of Object.entries(bucketFilename))
     {
-        const arr = await readJsonIfExists(inZip, file);
-        if (Array.isArray(arr))
-            contentBuckets[bucket].push(...arr);
+        const entries = await readJsonIfExists(inZip, file);
+        if (Array.isArray(entries))
+            contentBuckets[bucket].push(...entries);
     }
 
-    // v3 may split pilot_gear.json into pilot_armor.json + pilot_weapons.json;
-    // Lancer 2.x wants one pilot_gear.json with per-entry type Armor/Weapon/Gear.
+    // v3 may split pilot gear into pilot_armor.json and pilot_weapons.json. Lancer 2.x wants one pilot_gear.json.
     for (const [file, typeTag] of [["pilot_armor.json", "Armor"], ["pilot_weapons.json", "Weapon"]])
     {
-        const arr = await readJsonIfExists(inZip, file);
-        if (Array.isArray(arr))
+        const entries = await readJsonIfExists(inZip, file);
+        if (Array.isArray(entries))
         {
-            for (const entry of arr)
+            for (const entry of entries)
             {
                 if (entry && entry.type === undefined)
                     entry.type = typeTag;
             }
-            contentBuckets.pilot_gear.push(...arr);
+            contentBuckets.pilot_gear.push(...entries);
         }
     }
     // Ensure any pre-existing pilot_gear entries without a type default to "Gear".
@@ -1156,7 +1163,7 @@ export async function translateV3LcpBlob(inputBlob)
             entry.type = "Gear";
     }
 
-    // v3 may ship bond_powers.json separately; Lancer reads powers[] inside each bond (unpackBond:35039).
+    // v3 may ship bond_powers.json separately. Lancer reads powers[] inside each bond.
     const bondPowers = await readJsonIfExists(inZip, "bond_powers.json");
     if (Array.isArray(bondPowers) && contentBuckets.bonds.length)
     {
@@ -1187,13 +1194,13 @@ export async function translateV3LcpBlob(inputBlob)
     const licenseNames = Object.keys(inZip.files).filter(fileName => /^license_.+\.json$/i.test(fileName));
     for (const name of licenseNames)
     {
-        const arr = await readJsonIfExists(inZip, name);
-        if (!Array.isArray(arr))
+        const entries = await readJsonIfExists(inZip, name);
+        if (!Array.isArray(entries))
             continue;
-        const frame = arr.find(entry => entry?.mechtype);
+        const frame = entries.find(entry => entry?.mechtype);
         if (!frame)
         {
-            console.warn(`[v3-lcp-shim] ${name}: no frame header (mechtype field)`); continue;
+            console.warn(`lancer-npc-import | v3-lcp | ${name}: no frame header (mechtype field)`); continue;
         }
         contentBuckets.frames.push(frame);
         const licenseMeta = {
@@ -1201,17 +1208,17 @@ export async function translateV3LcpBlob(inputBlob)
             license_id: frame.id,
             source: frame.source
         };
-        for (const child of arr)
+        for (const child of entries)
         {
             if (!child || child === frame)
                 continue;
             const bucket = classifyLicenseChild(child);
             if (!bucket)
                 continue;
-            for (const [k, v] of Object.entries(licenseMeta))
+            for (const [field, value] of Object.entries(licenseMeta))
             {
-                if (child[k] === undefined && v !== undefined)
-                    child[k] = v;
+                if (child[field] === undefined && value !== undefined)
+                    child[field] = value;
             }
             contentBuckets[bucket].push(child);
         }
@@ -1226,25 +1233,25 @@ export async function translateV3LcpBlob(inputBlob)
         .filter(fileName => /^npc_(?!classes(?:\.json)?$|templates(?:\.json)?$).+\.json$/i.test(fileName));
     for (const name of featureFileNames)
     {
-        const arr = await readJsonIfExists(inZip, name);
-        if (Array.isArray(arr))
-            allFeatures.push(...arr);
+        const entries = await readJsonIfExists(inZip, name);
+        if (Array.isArray(entries))
+            allFeatures.push(...entries);
     }
 
     // Per-class v3 collection files.
     const npccNames = Object.keys(inZip.files).filter(fileName => /^npcc_.+\.json$/i.test(fileName));
     for (const name of npccNames)
     {
-        const arr = await readJsonIfExists(inZip, name);
-        if (!Array.isArray(arr))
+        const entries = await readJsonIfExists(inZip, name);
+        if (!Array.isArray(entries))
             continue;
-        const cls = pickCollectionHeader(arr, "Class");
+        const cls = pickCollectionHeader(entries, "Class");
         if (!cls)
         {
-            console.warn(`[v3-lcp-shim] ${name}: no class header found`); continue;
+            console.warn(`lancer-npc-import | v3-lcp | ${name}: no class header found`); continue;
         }
         translateClassStats(cls);
-        const feats = arr.filter(entry => entry && entry !== cls);
+        const feats = entries.filter(entry => entry && entry !== cls);
         for (const feat of feats)
         {
             translateFeature(feat, cls, "Class", droppedEffects);
@@ -1257,15 +1264,15 @@ export async function translateV3LcpBlob(inputBlob)
     const npctNames = Object.keys(inZip.files).filter(fileName => /^npct_.+\.json$/i.test(fileName));
     for (const name of npctNames)
     {
-        const arr = await readJsonIfExists(inZip, name);
-        if (!Array.isArray(arr))
+        const entries = await readJsonIfExists(inZip, name);
+        if (!Array.isArray(entries))
             continue;
-        const tmpl = pickCollectionHeader(arr, "Template");
+        const tmpl = pickCollectionHeader(entries, "Template");
         if (!tmpl)
         {
-            console.warn(`[v3-lcp-shim] ${name}: no template header found`); continue;
+            console.warn(`lancer-npc-import | v3-lcp | ${name}: no template header found`); continue;
         }
-        const feats = arr.filter(entry => entry && entry !== tmpl);
+        const feats = entries.filter(entry => entry && entry !== tmpl);
         for (const feat of feats)
         {
             translateFeature(feat, tmpl, "Template", droppedEffects);
@@ -1305,8 +1312,7 @@ export async function translateV3LcpBlob(inputBlob)
         }
     }
 
-    // Eidolon layers become NPC templates + features (v2 has no swappable-layer mechanic):
-    // dumped into the compendium for manual GM use, tagged for an "Eidolons" subfolder.
+    // v2 has no layer swap, so each Eidolon layer becomes an NPC template plus features in an "Eidolons" folder.
     const eidolonTemplateLids = [];
     const eidolonFeatureLids = [];
     const eidolonZipFile = inZip.file("eidolon_layers.json");
@@ -1323,8 +1329,7 @@ export async function translateV3LcpBlob(inputBlob)
                     continue;
                 }
                 eidolonTemplateLids.push(layer.id);
-                // NPC template schema has only description + base/optional_features. Keep
-                // description to appearance flavor; rules/hints/shards become own features.
+                // A template only has a description, so rules, hints and shards become their own features.
                 allTemplates.push({
                     id: layer.id,
                     name: layer.name,
@@ -1336,8 +1341,7 @@ export async function translateV3LcpBlob(inputBlob)
                 const layerTmpl = allTemplates[allTemplates.length - 1];
                 const layerFeatures = Array.isArray(layer.features) ? [...layer.features] : [];
 
-                // Rules + Hints become a synthesized Trait feature "<LayerName>'s Rules" so
-                // the passive layer effect reads like a normal trait entry on the sheet.
+                // Rules and hints become a "<Layer>'s Rules" trait.
                 if (layer.rules || layer.hints)
                 {
                     const rulesParts = [];
@@ -1361,7 +1365,7 @@ export async function translateV3LcpBlob(inputBlob)
                 {
                     const shards = layer.shards;
                     const count = shards.count ?? "";
-                    const dmg = Array.isArray(shards.damage)
+                    const shardDamage = Array.isArray(shards.damage)
                         ? shards.damage.map(damageEntry =>
                         {
                             const aoe = (typeof damageEntry?.aoe === "string" && damageEntry.aoe.trim()) ? ` (${damageEntry.aoe})` : "";
@@ -1371,7 +1375,7 @@ export async function translateV3LcpBlob(inputBlob)
                     const shardEffect = [
                         count ? `<p><strong>Spawns:</strong> ${count} shard${count === 1 ? "" : "s"}</p>` : "",
                         shards.detail ? `<p>${shards.detail}</p>` : "",
-                        dmg ? `<p><strong>Shard damage:</strong> ${dmg}</p>` : ""
+                        shardDamage ? `<p><strong>Shard damage:</strong> ${shardDamage}</p>` : ""
                     ].filter(Boolean).join("");
                     layerFeatures.push({
                         id: `${layer.id}_shard`,
@@ -1423,8 +1427,7 @@ export async function translateV3LcpBlob(inputBlob)
                                 tagsToAdd.push({ id: tag });
                         }
                     }
-                    // v3 eidolon extras appended to effect: `attacks: N` (N>1) becomes
-                    // multi-attack prose; string AoE shapes surface, bare `aoe: true` drops.
+                    // attacks > 1 becomes multi-attack text. String AoE shapes are kept, a bare `aoe: true` is dropped.
                     if (feat.attacks && feat.attacks > 1)
                     {
                         const prose = `This weapon can make ${feat.attacks}/${feat.attacks}/${feat.attacks} attacks at a time. Multiple attacks may be made against the same or different targets.`;
@@ -1456,7 +1459,7 @@ export async function translateV3LcpBlob(inputBlob)
         }
         catch (e)
         {
-            console.error("[v3-lcp-shim] eidolon layer translation failed", e);
+            console.error("lancer-npc-import | v3-lcp | eidolon layer translation failed", e);
             droppedLayers.push("eidolon_layers.json (parse error)");
         }
     }
@@ -1495,23 +1498,23 @@ export async function translateV3LcpBlob(inputBlob)
         "skills", "talents", "bonds", "reserves", "tags", "statuses", "core_bonuses"];
     for (const bucket of translateOrder)
     {
-        const arr = contentBuckets[bucket];
-        if (!arr?.length)
+        const entries = contentBuckets[bucket];
+        if (!entries?.length)
             continue;
-        applyItemTranslators(bucket, arr, droppedItemEffects);
+        applyItemTranslators(bucket, entries, droppedItemEffects);
     }
-    for (const [bucket, arr] of Object.entries(contentBuckets))
+    for (const [bucket, entries] of Object.entries(contentBuckets))
     {
-        if (!arr.length)
+        if (!entries.length)
             continue;
-        outZip.file(bucketFilename[bucket], JSON.stringify(arr, null, 2));
+        outZip.file(bucketFilename[bucket], JSON.stringify(entries, null, 2));
     }
 
     // (Eidolon layers were already translated into templates/features above.)
 
     const outBlob = await outZip.generateAsync({ type: "blob" });
     const itemCounts = Object.fromEntries(
-        Object.entries(contentBuckets).filter(([, arr]) => arr.length).map(([k, arr]) => [k, arr.length])
+        Object.entries(contentBuckets).filter(([, entries]) => entries.length).map(([bucket, entries]) => [bucket, entries.length])
     );
     return {
         blob: outBlob,
@@ -1531,8 +1534,7 @@ export async function translateV3LcpBlob(inputBlob)
     };
 }
 
-// Dynamically resolve the Lancer system's main bundle (hashed filename varies per release)
-// and grab parseContentPack + importCP so we can import the translated LCP in-place.
+// The Lancer bundle file names are hashed per release, so parseContentPack and importCP are looked up at runtime.
 let _lancerApi = null;
 export async function getLancerApi()
 {
@@ -1566,7 +1568,7 @@ export async function getLancerApi()
     return _lancerApi;
 }
 
-// Kept for optional download path (unused by default; the button now imports directly).
+// Download path, used when the translated pack is saved instead of imported.
 async function triggerDownload(blob, filename)
 {
     const save = globalThis.saveDataToFile ?? foundry.utils?.saveDataToFile;
@@ -1578,7 +1580,7 @@ async function triggerDownload(blob, filename)
         }
         catch (e)
         {
-            console.warn("[v3-lcp-shim] saveDataToFile failed, falling back", e);
+            console.warn("lancer-npc-import | v3-lcp | saveDataToFile failed, falling back", e);
         }
     }
     const dataUrl = await new Promise((resolve, reject) =>
@@ -1613,34 +1615,30 @@ export async function pickAndTranslateV3Lcp()
         const { blob, manifest, summary } = await translateV3LcpBlob(picked);
         if (summary.alreadyV2)
         {
-            ui.notifications.info(`"${manifest.name}" is already v2 — nothing to translate.`);
+            ui.notifications.info(`"${manifest.name}" is already v2. Nothing to translate.`);
             return;
         }
         const baseName = picked.name.replace(/\.lcp$/i, "");
         triggerDownload(blob, `${baseName}.v2.lcp`);
-        const sumAE = (entries) => entries.reduce((acc, entry) =>
-        {
-            acc.total += entry.total ?? 0; acc.lifted += entry.lifted ?? 0; acc.textOnly += entry.textOnly ?? 0; return acc;
-        }, { total: 0, lifted: 0, textOnly: 0 });
         const notes = [];
-        const npcAE = sumAE(summary.droppedActiveEffects);
-        if (npcAE.total)
-            notes.push(`NPC active_effects: ${npcAE.lifted} lifted to bonuses/actions, ${npcAE.textOnly} text-only (of ${npcAE.total})`);
-        const itemAE = sumAE(summary.droppedItemActiveEffects);
-        if (itemAE.total)
-            notes.push(`Item active_effects: ${itemAE.lifted} lifted, ${itemAE.textOnly} text-only (of ${itemAE.total})`);
+        const npcEffects = sumActiveEffects(summary.droppedActiveEffects);
+        if (npcEffects.total)
+            notes.push(`NPC active_effects: ${npcEffects.lifted} lifted to bonuses/actions, ${npcEffects.textOnly} text-only (of ${npcEffects.total})`);
+        const itemEffects = sumActiveEffects(summary.droppedItemActiveEffects);
+        if (itemEffects.total)
+            notes.push(`Item active_effects: ${itemEffects.lifted} lifted, ${itemEffects.textOnly} text-only (of ${itemEffects.total})`);
         if (summary.droppedEidolonLayers.length)
             notes.push(`${summary.droppedEidolonLayers.length} eidolon layers dropped`);
-        const itemBits = Object.entries(summary.items ?? {}).map(([k, v]) => `${v} ${k}`).join(", ");
-        const msg = `Translated "${manifest.name}" → v2 (${summary.classes} classes, ${summary.features} features, ${summary.templates} templates`
-            + (itemBits ? `; ${itemBits}` : "") + ")"
+        const itemCounts = itemCountText(summary);
+        const message = `Translated "${manifest.name}" → v2 (${summary.classes} classes, ${summary.features} features, ${summary.templates} templates`
+            + (itemCounts ? `; ${itemCounts}` : "") + ")"
             + (notes.length ? `. ${notes.join("; ")}.` : ".");
-        ui.notifications.info(msg);
-        console.log("[v3-lcp-shim] translation summary", summary);
+        ui.notifications.info(message);
+        console.log("lancer-npc-import | v3-lcp | translation summary", summary);
     }
     catch (e)
     {
-        console.error("[v3-lcp-shim] translation failed", e);
+        console.error("lancer-npc-import | v3-lcp | translation failed", e);
         ui.notifications.error(`V3 LCP translation failed: ${e.message}`);
     }
 }
@@ -1661,7 +1659,7 @@ async function detectV3File(file)
     }
     catch (e)
     {
-        console.warn("[v3-lcp-shim] v3 detection failed", e);
+        console.warn("lancer-npc-import | v3-lcp | v3 detection failed", e);
         return false;
     }
 }
@@ -1762,16 +1760,16 @@ function renderV3Summary(root, anchor, summary)
 // "Eidolons" folder within their compendium pack so GMs can tell them apart at a glance.
 async function sortEidolonContentIntoFolder(summary)
 {
-    const tmplLids = summary?.eidolonTemplateLids ?? [];
-    const featLids = summary?.eidolonFeatureLids ?? [];
-    if (!tmplLids.length && !featLids.length)
+    const templateLids = summary?.eidolonTemplateLids ?? [];
+    const featureLids = summary?.eidolonFeatureLids ?? [];
+    if (!templateLids.length && !featureLids.length)
         return;
-    const worked = async (pack, lids) =>
+    const moveToEidolonFolder = async (pack, lids) =>
     {
         if (!pack || !lids.length)
             return;
-        const docs = pack.index.filter(entry => lids.includes(entry.system?.lid));
-        if (!docs.length)
+        const indexEntries = pack.index.filter(entry => lids.includes(entry.system?.lid));
+        if (!indexEntries.length)
             return;
         // Lancer's importCP locks packs on completion; unlock to modify, relock after.
         const wasLocked = pack.locked;
@@ -1787,9 +1785,9 @@ async function sortEidolonContentIntoFolder(summary)
                     { pack: pack.collection }
                 );
             }
-            const updates = docs.map(doc => ({ _id: doc._id, folder: folder.id }));
-            const docCls = CONFIG[pack.metadata.type].documentClass;
-            await docCls.updateDocuments(updates, { pack: pack.collection });
+            const updates = indexEntries.map(entry => ({ _id: entry._id, folder: folder.id }));
+            const documentClass = CONFIG[pack.metadata.type].documentClass;
+            await documentClass.updateDocuments(updates, { pack: pack.collection });
         }
         finally
         {
@@ -1802,8 +1800,8 @@ async function sortEidolonContentIntoFolder(summary)
     const featurePack = game.packs.find(pack => pack.metadata.type === "Item" && /npc.feature/i.test(pack.collection))
         ?? game.packs.get("world.npc-features");
     const itemsPack = game.packs.get("world.npc-items"); // fallback if templates + features live in one pack
-    await worked(templatePack ?? itemsPack, tmplLids);
-    await worked(featurePack ?? itemsPack, featLids);
+    await moveToEidolonFolder(templatePack ?? itemsPack, templateLids);
+    await moveToEidolonFolder(featurePack ?? itemsPack, featureLids);
 }
 
 async function translateSelectedV3(file)
@@ -1813,7 +1811,7 @@ async function translateSelectedV3(file)
         const { blob, manifest, summary } = await getOrTranslate(file);
         if (summary.alreadyV2)
         {
-            ui.notifications.info(`"${manifest.name}" is already v2 — nothing to translate.`);
+            ui.notifications.info(`"${manifest.name}" is already v2. Nothing to translate.`);
             return;
         }
 
@@ -1823,16 +1821,16 @@ async function translateSelectedV3(file)
         const api = await getLancerApi();
         const arrayBuf = await blob.arrayBuffer();
         const contentPack = await api.parseContentPack(arrayBuf);
-        let lastPct = -1;
+        let lastPercent = -1;
         const progress = (done, total) =>
         {
             if (!total)
                 return;
-            const pct = Math.floor((done / total) * 100);
-            if (pct !== lastPct && pct % 10 === 0)
+            const percent = Math.floor((done / total) * 100);
+            if (percent !== lastPercent && percent % 10 === 0)
             {
-                console.log(`[v3-lcp-shim] import progress ${pct}% (${done}/${total})`);
-                lastPct = pct;
+                console.log(`lancer-npc-import | v3-lcp | import progress ${percent}% (${done}/${total})`);
+                lastPercent = percent;
             }
         };
         await api.importCP(contentPack, progress);
@@ -1841,25 +1839,21 @@ async function translateSelectedV3(file)
         // each pack so GMs don't confuse layer templates / features with regular NPC content.
         await sortEidolonContentIntoFolder(summary);
 
-        const sumAE = (entries) => entries.reduce((acc, entry) =>
-        {
-            acc.total += entry.total ?? 0; acc.lifted += entry.lifted ?? 0; acc.textOnly += entry.textOnly ?? 0; return acc;
-        }, { total: 0, lifted: 0, textOnly: 0 });
         const notes = [];
-        const npcAE = sumAE(summary.droppedActiveEffects);
-        if (npcAE.total)
-            notes.push(`NPC active_effects: ${npcAE.lifted} lifted, ${npcAE.textOnly} text-only`);
-        const itemAE = sumAE(summary.droppedItemActiveEffects);
-        if (itemAE.total)
-            notes.push(`Item active_effects: ${itemAE.lifted} lifted, ${itemAE.textOnly} text-only`);
+        const npcEffects = sumActiveEffects(summary.droppedActiveEffects);
+        if (npcEffects.total)
+            notes.push(`NPC active_effects: ${npcEffects.lifted} lifted, ${npcEffects.textOnly} text-only`);
+        const itemEffects = sumActiveEffects(summary.droppedItemActiveEffects);
+        if (itemEffects.total)
+            notes.push(`Item active_effects: ${itemEffects.lifted} lifted, ${itemEffects.textOnly} text-only`);
         if (summary.droppedEidolonLayers.length)
             notes.push(`${summary.droppedEidolonLayers.length} eidolon layers dropped`);
-        const itemBits = Object.entries(summary.items ?? {}).map(([k, v]) => `${v} ${k}`).join(", ");
-        const msg = `Imported "${manifest.name}" (${summary.classes} classes, ${summary.features} features, ${summary.templates} templates`
-            + (itemBits ? `; ${itemBits}` : "") + ")"
+        const itemCounts = itemCountText(summary);
+        const message = `Imported "${manifest.name}" (${summary.classes} classes, ${summary.features} features, ${summary.templates} templates`
+            + (itemCounts ? `; ${itemCounts}` : "") + ")"
             + (notes.length ? `. ${notes.join("; ")}.` : ".");
-        ui.notifications.info(msg);
-        console.log("[v3-lcp-shim] import complete", summary);
+        ui.notifications.info(message);
+        console.log("lancer-npc-import | v3-lcp | import complete", summary);
 
         // Refresh the Compendium Manager so the installed/current column reflects the new import.
         const manager = Object.values(ui.windows).find(win => win?.constructor?.name === "LCPManager");
@@ -1867,7 +1861,7 @@ async function translateSelectedV3(file)
     }
     catch (e)
     {
-        console.error("[v3-lcp-shim] import failed", e);
+        console.error("lancer-npc-import | v3-lcp | import failed", e);
         ui.notifications.error(`V3 LCP import failed: ${e.message}`);
     }
 }
@@ -1921,7 +1915,7 @@ async function refreshButtonState(root)
     }
     catch (e)
     {
-        console.error("[v3-lcp-shim] preview translation failed", e);
+        console.error("lancer-npc-import | v3-lcp | preview translation failed", e);
     }
 
     // Skip our summary if the Lancer system rendered its own content-summary list
@@ -1998,7 +1992,7 @@ function wireLcpManager(_app, html)
         }
         catch (err)
         {
-            console.error("[v3-lcp-shim]", err);
+            console.error("lancer-npc-import | v3-lcp | failed", err);
         }
         finally
         {
@@ -2058,5 +2052,5 @@ export function registerV3LcpShim()
         mod.api.translateV3LcpBlob = translateV3LcpBlob;
         mod.api.pickAndTranslateV3Lcp = pickAndTranslateV3Lcp;
     }
-    console.log("[v3-lcp-shim] registered");
+    console.log("lancer-npc-import | v3-lcp | registered");
 }

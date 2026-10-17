@@ -1,102 +1,63 @@
 // Core NPC import pipeline: normalization, data compare, and actor creation.
 
-import { ImportProgressDialog, uploadPortraitToServer } from "./npc-import-ui.js";
-import { selectActorMappings } from "./npc-import-files.js";
+import { uploadPortraitToServer } from "./npc-import-ui.js";
+import { diffEntries } from "./pilot-import-core.js";
+import { windowLog } from "./sync-log.js";
 
-export async function importSelectedNPCs(npcs, updateExisting = true, customTierMode = 'scaled', manualReplace = false, downloadPortraits = false)
+export async function importSelectedNPCs(selection, { customTierMode = 'scaled', downloadPortraits = false, updateExisting = true } = {}, syncLog = windowLog("Import log", "Comp/Con → Foundry"))
 {
-    let mappings = null;
-    if (manualReplace)
+    syncLog.start(selection.map(entry =>
     {
-        const npcsForMapping = npcs.map(npc => ({ name: npc.name }));
-        mappings = await selectActorMappings(npcsForMapping);
+        const npc = entry.npc || entry;
+        return { name: npc.name, meta: entry.replace ? `Into ${entry.replace.targetActor.name}` : (npc.names?.className || "") };
+    }));
 
-        if (mappings === null)
-        {
-            ui.notifications.info("Import cancelled");
-            return;
-        }
-    }
+    let created = 0;
+    let updated = 0;
+    let replaced = 0;
+    let failed = 0;
+    const results = [];
 
-    const progressDialog = new ImportProgressDialog(npcs.length);
-    progressDialog.render(true);
-    progressDialog.addLog(`Starting import of ${npcs.length} NPC(s) from Comp/Con...`, 'info');
-
-    let successCount = 0;
-    let errorCount = 0;
-    let updateCount = 0;
-    let replaceCount = 0;
-
-    for (let i = 0; i < npcs.length; i++)
+    for (const [index, entry] of selection.entries())
     {
-        const npc = npcs[i];
-        let targetActor = null;
-        let keepName = false;
+        const npc = entry.npc || entry;
+        const targetActor = entry.replace?.targetActor || null;
+        const keepName = !!entry.replace?.keepName;
 
-        if (mappings && mappings[i])
-        {
-            targetActor = mappings[i].targetActor;
-            keepName = mappings[i].keepName;
-        }
-
+        syncLog.begin(index, "Importing…");
         try
         {
-            progressDialog.addLog(`Importing: ${npc.name}...`, 'info');
-            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode, targetActor, keepName, progressDialog, downloadPortraits);
+            if (entry.link)
+            {
+                await entry.link.update({ "system.lid": npc.json.id });
+                syncLog.addLog(`Linked ${entry.link.name}`, 'info');
+            }
+            const result = await importNPCFromCompCon(npc.json, updateExisting, customTierMode, targetActor, keepName, syncLog, downloadPortraits, entry.onlyActors || null);
 
             if (result.updated)
-            {
-                updateCount++;
-                progressDialog.addLog(`✓ Updated: ${npc.name}`, 'success');
-            }
+                updated++;
             else if (result.replaced)
-            {
-                replaceCount++;
-                progressDialog.addLog(`✓ Replaced: ${npc.name}`, 'success');
-            }
+                replaced++;
             else
-            {
-                progressDialog.addLog(`✓ Created: ${npc.name}`, 'success');
-            }
-            successCount++;
-
+                created++;
+            syncLog.finish(index, "ok", result.updated ? "Updated" : (result.replaced ? "Replaced" : "Created"));
+            results.push({ ok: true });
         }
         catch (error)
         {
-            console.error(`Error importing ${npc.name}:`, error);
-            progressDialog.addLog(`✗ Failed: ${npc.name} - ${error.message}`, 'error');
-            errorCount++;
+            console.error(`lancer-npc-import | Error importing ${npc.name}:`, error);
+            syncLog.finish(index, "fail", `Failed: ${error.message}`);
+            failed++;
+            results.push({ ok: false });
         }
-
-        progressDialog.incrementProgress();
     }
 
-    let summaryParts = [];
-    const created = successCount - replaceCount - updateCount;
-    if (created > 0)
-        summaryParts.push(`${created} created`);
-    if (updateCount > 0)
-        summaryParts.push(`${updateCount} updated`);
-    if (replaceCount > 0)
-        summaryParts.push(`${replaceCount} replaced`);
-    if (errorCount > 0)
-        summaryParts.push(`${errorCount} failed`);
-
-    const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
-    progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
-
-    if (successCount > 0)
-    {
-        ui.notifications.info(`✓ Imported ${successCount} NPC(s)`);
-    }
-    if (errorCount > 0)
-    {
-        ui.notifications.warn(`✗ ${errorCount} NPC(s) failed to import`);
-    }
+    syncLog.complete({ updated, created, replaced, failed });
+    return results;
 }
 
-// Appliquer les customisations des features (tier override, custom name, description)
-export async function applyFeatureCustomizations(actor, npcData, progressDialog = null)
+// Comp/Con feature customizations: tier override, custom name, description.
+export async function applyFeatureCustomizations(actor, npcData, syncLog = null)
 {
     try
     {
@@ -154,31 +115,25 @@ export async function applyFeatureCustomizations(actor, npcData, progressDialog 
         if (updates.length > 0)
         {
             await actor.updateEmbeddedDocuments('Item', updates);
-            console.log(`Applied ${updates.length} feature customization(s) for ${actor.name}`);
+            console.log(`lancer-npc-import | Applied ${updates.length} feature customization(s) for ${actor.name}`);
         }
 
         if (tierOverrides.length > 0)
         {
             const featureList = tierOverrides.map(override => `${override.name} (T${override.tier})`).join(', ');
-            if (progressDialog)
-            {
-                progressDialog.addLog(`  ⚠ ${tierOverrides.length} feature(s) with different tiers not applied: ${featureList}`, 'warning');
-            }
-            console.warn(`Features with tier overrides for ${actor.name}:`, tierOverrides);
+            syncLog?.addLog(`${tierOverrides.length} feature(s) with different tiers not applied: ${featureList}`, 'warning');
+            console.warn(`lancer-npc-import | Features with tier overrides for ${actor.name}:`, tierOverrides);
         }
     }
     catch (error)
     {
-        console.error(`Error applying feature customizations:`, error);
-        if (progressDialog)
-        {
-            progressDialog.addLog(`  ⚠ Could not apply feature customizations`, 'warning');
-        }
+        console.error(`lancer-npc-import | Error applying feature customizations:`, error);
+        syncLog?.addLog(`Could not apply feature customizations`, 'warning');
     }
 }
 
-// Appliquer les stats custom aux tiers de la classe NPC (flat ou scaled)
-export async function applyCustomTierStats(actor, npcData, mode = 'scaled', progressDialog = null)
+// Writes custom stats into the NPC class tiers, flat or scaled.
+export async function applyCustomTierStats(actor, npcData, mode = 'scaled', syncLog = null)
 {
     try
     {
@@ -186,7 +141,7 @@ export async function applyCustomTierStats(actor, npcData, mode = 'scaled', prog
 
         if (!npcClass)
         {
-            console.warn(`Could not find NPC class ${npcData.class} in actor items`);
+            console.warn(`lancer-npc-import | Could not find NPC class ${npcData.class} in actor items`);
             return;
         }
 
@@ -248,19 +203,13 @@ export async function applyCustomTierStats(actor, npcData, mode = 'scaled', prog
             'system.base_stats': newBaseStats
         });
 
-        console.log(`Applied custom tier stats (${mode}) to ${newName} for ${actor.name}`);
-        if (progressDialog)
-        {
-            progressDialog.addLog(`  ✓ Applied custom tier stats (${mode})`, 'info');
-        }
+        console.log(`lancer-npc-import | Applied custom tier stats (${mode}) to ${newName} for ${actor.name}`);
+        syncLog?.addLog(`Applied custom tier stats (${mode})`, 'info');
     }
     catch (error)
     {
-        console.error(`Error applying custom tier stats:`, error);
-        if (progressDialog)
-        {
-            progressDialog.addLog(`  ⚠ Could not apply custom tier stats`, 'warning');
-        }
+        console.error(`lancer-npc-import | Error applying custom tier stats:`, error);
+        syncLog?.addLog(`Could not apply custom tier stats`, 'warning');
     }
 }
 
@@ -277,121 +226,127 @@ export function findExistingNPCsByLID(npcData)
     return found;
 }
 
-// Retourne: { status: 'new'|'unlinked'|'synced'|'modified', count: nombre, reasons: [] }
-export function compareNPCWithActor(npcData, actors)
+const NPC_STATS = [
+    ['hp', 'hp', 'HP'],
+    ['armor', 'armor', 'Armor'],
+    ['evade', 'evasion', 'Evasion'],
+    ['edef', 'edef', 'E-Defense'],
+    ['heatcap', 'heatcap', 'Heat Cap'],
+    ['sensor', 'sensor_range', 'Sensors'],
+    ['save', 'save', 'Save'],
+    ['speed', 'speed', 'Speed'],
+    ['size', 'size', 'Size'],
+    ['activations', 'activations', 'Activations'],
+    ['hull', 'hull', 'Hull'],
+    ['agility', 'agi', 'Agility'],
+    ['systems', 'sys', 'Systems'],
+    ['engineering', 'eng', 'Engineering'],
+    ['structure', 'structure', 'Structure'],
+    ['stress', 'stress', 'Stress']
+];
+
+export function findSameNameNPCs(npcData)
+{
+    const nameLower = String(npcData.name || "").toLowerCase();
+    if (!nameLower)
+        return [];
+    return game.actors.filter(actor => actor.type === 'npc' && actor.name.toLowerCase() === nameLower);
+}
+
+export function npcCloudTemplates(npcData, names = {})
+{
+    return (npcData.templates || []).filter(Boolean).map(id => ({ id, name: names.templates?.[id] || id }));
+}
+
+export function npcCloudFeatures(npcData, names = {})
+{
+    return (npcData.items || []).filter(item => item?.itemID).map(item => ({
+        id: item.itemID,
+        name: item.flavorName || names.features?.[item.itemID]?.name || item.itemID,
+        type: names.features?.[item.itemID]?.type || "",
+        weaponType: names.features?.[item.itemID]?.weaponType || "",
+        origin: names.features?.[item.itemID]?.origin || ""
+    }));
+}
+
+function _npcItems(actor, type)
+{
+    return actor.items
+        .filter(item => item.type === type)
+        .map(item => ({ id: item.system?.lid || "", name: item.name, uuid: item.uuid }))
+        .filter(entry => entry.id);
+}
+
+function _npcChanges(npcData, actor, names)
+{
+    const changes = [];
+    const npcTier = parseTier(npcData.tier);
+    if (npcData.tier !== 'custom' && npcTier !== actor.system.tier)
+        changes.push({ field: "Tier", world: `T${actor.system.tier}`, cloud: `T${npcTier}`, effect: "change" });
+
+    const actorClass = actor.items.find(item => item.type === 'npc_class');
+    if ((actorClass?.system.lid || "") !== (npcData.class || ""))
+        changes.push({ field: "Class", world: actorClass?.name || "", cloud: names.className || npcData.class || "", effect: "change", worldUuid: actorClass?.uuid });
+
+    changes.push(
+        ...diffEntries("Template", _npcItems(actor, 'npc_template'), npcCloudTemplates(npcData, names)),
+        ...diffEntries("Feature", _npcItems(actor, 'npc_feature'), npcCloudFeatures(npcData, names))
+    );
+
+    const stats = npcData.stats || {};
+    const tierIndex = npcData.tier === 'custom' ? 0 : Math.max(0, actor.system.tier - 1);
+    const baseStats = actorClass?.system?.base_stats?.[tierIndex];
+    if (baseStats)
+    {
+        for (const [ccKey, baseStatKey, displayName] of NPC_STATS)
+        {
+            if (stats[ccKey] === undefined)
+                continue;
+            if (ccKey === 'size' && actor.system.size > 4)
+                continue;
+            const baseValue = baseStats[baseStatKey];
+            if (baseValue != stats[ccKey])
+                changes.push({ field: displayName, world: String(baseValue ?? ""), cloud: String(stats[ccKey]), effect: "change", stat: ccKey });
+        }
+    }
+    return changes;
+}
+
+export function compareNPCWithActor(npcData, actors, names = {})
 {
     if (!actors || actors.length === 0)
     {
-        // Vérifier si un NPC avec le même nom existe (sans LID correspondant)
-        if (npcData.name)
-        {
-            const nameLower = npcData.name.toLowerCase();
-            const actorsByName = game.actors.filter(actor =>
-                actor.type === 'npc' && actor.name.toLowerCase() === nameLower
-            );
-            if (actorsByName.length > 0)
-            {
-                return { status: 'unlinked', count: actorsByName.length, reasons: [] };
-            }
-        }
-        return { status: 'new', count: 0, reasons: [] };
+        const candidates = findSameNameNPCs(npcData);
+        if (candidates.length > 0)
+            return { status: 'unlinked', count: candidates.length, reasons: [], changes: [], copies: [], candidates };
+        return { status: 'new', count: 0, reasons: [], changes: [], copies: [], candidates: [] };
     }
 
-    const allReasons = [];
-    let anyModified = false;
-
-    for (const actor of actors)
+    const copies = actors.map(actor => ({ actor, changes: _npcChanges(npcData, actor, names) }));
+    const merged = new Map();
+    for (const copy of copies)
     {
-        const perActorReasons = _compareNpcSingleActor(npcData, actor);
-        if (perActorReasons.length === 0)
-            continue;
-        anyModified = true;
-        const prefix = actors.length > 1 ? `[${actor.name}] ` : '';
-        for (const reason of perActorReasons)
-            allReasons.push(`${prefix}${reason}`);
+        const seen = new Map();
+        for (const change of copy.changes)
+        {
+            const base = `${change.field}|${change.world}|${change.cloud}`;
+            const occurrence = (seen.get(base) || 0) + 1;
+            seen.set(base, occurrence);
+            const key = `${base}#${occurrence}`;
+            if (!merged.has(key))
+                merged.set(key, { ...change, copies: 0 });
+            merged.get(key).copies++;
+        }
     }
-
-    if (anyModified)
-        return { status: 'modified', count: actors.length, reasons: allReasons };
-    return { status: 'synced', count: actors.length, reasons: [] };
+    const changes = [...merged.values()];
+    const reasons = changes.map(change => `${change.field}: ${change.world || "none"} → ${change.cloud || "none"}${actors.length > 1 ? ` (${change.copies}/${actors.length} copies)` : ""}`);
+    return { status: changes.length ? 'modified' : 'synced', count: actors.length, reasons, changes, copies, candidates: [] };
 }
 
-function _compareNpcSingleActor(npcData, actor)
+export function cleanLid(value)
 {
-    const reasons = [];
-
-    const npcTier = parseTier(npcData.tier);
-    if (npcData.tier !== 'custom' && npcTier !== actor.system.tier)
-        reasons.push(`tier changed: ${actor.system.tier} → ${npcTier}`);
-
-    const actorClass = actor.items.find(item => item.type === 'npc_class');
-    const actorClassLid = actorClass?.system.lid;
-    if (npcData.class !== actorClassLid)
-        reasons.push(`class: ${actorClassLid || 'none'} → ${npcData.class || 'none'}`);
-
-    const npcTemplates = (npcData.templates || []).filter(lid => lid).sort();
-    const actorTemplates = actor.items
-        .filter(item => item.type === 'npc_template')
-        .map(item => item.system.lid)
-        .filter(lid => lid)
-        .sort();
-    if (npcTemplates.length !== actorTemplates.length
-        || !npcTemplates.every((lid, i) => lid === actorTemplates[i]))
-        reasons.push(`templates: ${actorTemplates.length} → ${npcTemplates.length}`);
-
-    const npcFeatures = (npcData.items || [])
-        .map(item => item.itemID)
-        .filter(lid => lid)
-        .sort();
-    const actorFeatures = actor.items
-        .filter(item => item.type === 'npc_feature')
-        .map(item => item.system.lid)
-        .filter(lid => lid)
-        .sort();
-    if (npcFeatures.length !== actorFeatures.length
-        || !npcFeatures.every((lid, i) => lid === actorFeatures[i]))
-        reasons.push(`features: ${actorFeatures.length} → ${npcFeatures.length}`);
-
-    const stats = npcData.stats || {};
-    const npcClass = actor.items.find(item => item.type === 'npc_class');
-    if (npcClass && npcClass.system.base_stats)
-    {
-        const isCustomTier = npcData.tier === 'custom';
-        const tierIndex = isCustomTier ? 0 : Math.max(0, actor.system.tier - 1);
-        const baseStats = npcClass.system.base_stats[tierIndex];
-        if (baseStats)
-        {
-            const statChecks = [
-                ['hp', 'hp', 'HP'],
-                ['armor', 'armor', 'Armor'],
-                ['evade', 'evasion', 'Evasion'],
-                ['edef', 'edef', 'E-Defense'],
-                ['heatcap', 'heatcap', 'Heat Cap'],
-                ['sensor', 'sensor_range', 'Sensors'],
-                ['save', 'save', 'Save'],
-                ['speed', 'speed', 'Speed'],
-                ['size', 'size', 'Size'],
-                ['activations', 'activations', 'Activations'],
-                ['hull', 'hull', 'Hull'],
-                ['agility', 'agi', 'Agility'],
-                ['systems', 'sys', 'Systems'],
-                ['engineering', 'eng', 'Engineering'],
-                ['structure', 'structure', 'Structure'],
-                ['stress', 'stress', 'Stress']
-            ];
-            for (const [ccKey, baseStatKey, displayName] of statChecks)
-            {
-                if (stats[ccKey] === undefined)
-                    continue;
-                if (ccKey === 'size' && actor.system.size > 4)
-                    continue; // custom sizes preserved
-                const baseValue = baseStats[baseStatKey];
-                if (baseValue != stats[ccKey])
-                    reasons.push(`${displayName}: ${baseValue} → ${stats[ccKey]}`);
-            }
-        }
-    }
-    return reasons;
+    const lid = typeof value === "object" && value ? (value.data?.id || value.id) : value;
+    return typeof lid === "string" ? lid.trim() : "";
 }
 
 // Normalize any comp/con JSON format (v2 full objects or v3 strings) into the format
@@ -399,24 +354,22 @@ function _compareNpcSingleActor(npcData, actor)
 export function normalizeNpcData(npcData)
 {
     // class: object → string LID
-    if (npcData.class && typeof npcData.class !== 'string')
+    if (npcData.class)
     {
-        npcData.class = npcData.class.data?.id || npcData.class.id || npcData.class;
+        npcData.class = cleanLid(npcData.class);
     }
 
     // templates: objects → string LIDs
     if (Array.isArray(npcData.templates))
     {
-        npcData.templates = npcData.templates.map(template =>
-            typeof template === 'string' ? template : (template.data?.id || template.id || template)
-        );
+        npcData.templates = npcData.templates.map(cleanLid).filter(Boolean);
     }
 
     // features (v2) → items (v3)
     if (npcData.features && !npcData.items)
     {
         npcData.items = npcData.features.map(feature => ({
-            itemID: feature.data?.id || feature.id || feature.itemID,
+            itemID: cleanLid(feature) || cleanLid(feature.itemID),
             tier: feature.tier || 1,
             flavorName: feature.flavorName || '',
             description: feature.description || '',
@@ -424,6 +377,14 @@ export function normalizeNpcData(npcData)
             charged: feature.charged ?? true,
             uses: feature.uses || 0
         }));
+    }
+    if (Array.isArray(npcData.items))
+    {
+        for (const item of npcData.items)
+        {
+            if (item)
+                item.itemID = cleanLid(item.itemID);
+        }
     }
 
     // v2 stats: combat_data.stats.max → stats at root (with v3 field names)
@@ -459,7 +420,7 @@ export function normalizeNpcData(npcData)
     return npcData;
 }
 
-export async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled', targetActor = null, keepName = false, progressDialog = null, downloadPortraits = false)
+export async function importNPCFromCompCon(npcData, updateExisting = true, customTierMode = 'scaled', targetActor = null, keepName = false, syncLog = null, downloadPortraits = false, onlyActors = null)
 {
     normalizeNpcData(npcData);
     const isCustomTier = npcData.tier === 'custom';
@@ -471,31 +432,34 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
     const cloudPortrait = npcData.cloud_portrait || npcData.img?.cloud_portrait || '';
     if (downloadPortraits && cloudPortrait)
     {
-        progressDialog?.addLog(`  Uploading portrait to server...`, 'info');
+        syncLog?.addLog(`Uploading portrait to server`, 'info');
         localImagePath = await uploadPortraitToServer(cloudPortrait, npcData.name);
         if (localImagePath)
         {
-            progressDialog?.addLog(`  ✓ Portrait saved: ${localImagePath}`, 'success');
+            syncLog?.addLog(`Portrait saved: ${localImagePath}`, 'success');
         }
     }
 
     if (targetActor)
     {
-        // Manual replace: utiliser l'acteur spécifié
+        // Manual replace targets the chosen actor.
         existingActors = [targetActor];
         isReplace = true;
     }
     else if (updateExisting)
     {
         existingActors = findExistingNPCsByLID(npcData);
+        if (onlyActors)
+        {
+            existingActors = existingActors.filter(actor => onlyActors.has(actor.id));
+            if (!existingActors.length)
+                throw new Error("no copy selected");
+        }
 
         if (existingActors.length > 1)
         {
-            console.log(`Found ${existingActors.length} existing NPCs matching "${npcData.name}". Updating all.`);
-            if (progressDialog)
-            {
-                progressDialog.addLog(`  Found ${existingActors.length} existing copies, updating all...`, 'info');
-            }
+            console.log(`lancer-npc-import | Found ${existingActors.length} existing NPCs matching "${npcData.name}". Updating all.`);
+            syncLog?.addLog(`Found ${existingActors.length} existing copies, updating all`, 'info');
         }
     }
 
@@ -536,17 +500,17 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
     {
         for (const existingActor of existingActors)
         {
-            console.log(`Updating existing NPC: ${existingActor.name}`);
+            console.log(`lancer-npc-import | Updating existing NPC: ${existingActor.name}`);
 
             const finalSystemData = { ...systemData };
-            // Préserver les tailles custom (> 4)
+            // Keep custom sizes above 4.
             if (existingActor.system.size > 4)
             {
                 finalSystemData.size = existingActor.system.size;
-                console.log(`Preserving custom size (${existingActor.system.size}) for ${existingActor.name}`);
+                console.log(`lancer-npc-import | Preserving custom size (${existingActor.system.size}) for ${existingActor.name}`);
             }
 
-            // Changement de nom seulement en replace manuel avec keepName=false; l'update normal garde le nom de l'acteur.
+            // Only a manual replace with keepName off renames. A normal update keeps the actor's name.
             const finalName = (isReplace && !keepName) ? npcData.name : existingActor.name;
 
             await existingActor.update({
@@ -600,10 +564,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
         else
         {
             missingItems.push(`Class: ${npcData.class}`);
-            if (progressDialog)
-            {
-                progressDialog.addLog(`  ⚠ Class not found: ${npcData.class}`, 'warning');
-            }
+            syncLog?.addLog(`Class not found: ${npcData.class}`, 'warning');
         }
     }
 
@@ -619,10 +580,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
             else
             {
                 missingItems.push(`Template: ${templateLid}`);
-                if (progressDialog)
-                {
-                    progressDialog.addLog(`  ⚠ Template not found: ${templateLid}`, 'warning');
-                }
+                syncLog?.addLog(`Template not found: ${templateLid}`, 'warning');
             }
         }
     }
@@ -653,10 +611,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
             else
             {
                 missingFeatures.push(ccItem.itemID);
-                if (progressDialog)
-                {
-                    progressDialog.addLog(`  ⚠ Feature not found: ${ccItem.flavorName || ccItem.itemID}`, 'warning');
-                }
+                syncLog?.addLog(`Feature not found: ${ccItem.flavorName || ccItem.itemID}`, 'warning');
             }
         }
     }
@@ -665,7 +620,6 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
 
     for (const actorToUpdate of actorsToUpdate)
     {
-        // Supprimer les anciennes classes et templates
         const oldClassAndTemplates = actorToUpdate.items.filter(item =>
             item.type === 'npc_class' || item.type === 'npc_template'
         );
@@ -674,18 +628,18 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
             await actorToUpdate.deleteEmbeddedDocuments('Item', oldClassAndTemplates.map(item => item.id));
         }
 
-        // Ajouter class et templates (déclenche automatiquement les base_features via hook)
+        // Adding the class and templates makes Lancer add their base features.
         if (classAndTemplates.length > 0)
         {
             await actorToUpdate.createEmbeddedDocuments('Item', classAndTemplates);
 
-            // Attendre que Lancer finisse d'ajouter les base_features
+            // Wait for Lancer to finish adding them.
             if (actorToUpdate.npcClassSwapPromises && actorToUpdate.npcClassSwapPromises.length > 0)
             {
-                console.log(`Waiting for ${actorToUpdate.npcClassSwapPromises.length} NPC class swap(s) to complete...`);
+                console.log(`lancer-npc-import | Waiting for ${actorToUpdate.npcClassSwapPromises.length} NPC class swap(s) to complete...`);
                 await Promise.all(actorToUpdate.npcClassSwapPromises);
                 actorToUpdate.npcClassSwapPromises = [];
-                console.log('NPC class swaps completed');
+                console.log('lancer-npc-import | NPC class swaps completed');
             }
         }
 
@@ -716,10 +670,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
                             if (npcData.stats[ccKey] !== base[baseKey])
                             {
                                 needsCustomStats = true;
-                                if (progressDialog)
-                                {
-                                    progressDialog.addLog(`  Stats differ from class base (${baseKey}: ${base[baseKey]} → ${npcData.stats[ccKey]}), applying custom stats`, 'info');
-                                }
+                                syncLog?.addLog(`Stats differ from class base (${baseKey}: ${base[baseKey]} → ${npcData.stats[ccKey]}), applying custom stats`, 'info');
                                 break;
                             }
                         }
@@ -730,7 +681,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
 
         if (needsCustomStats && npcData.class)
         {
-            await applyCustomTierStats(actorToUpdate, npcData, customTierMode, progressDialog);
+            await applyCustomTierStats(actorToUpdate, npcData, customTierMode, syncLog);
         }
         else if (npcData.class && npcData.stats?.size)
         {
@@ -746,11 +697,11 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
             }
         }
 
-        // Supprimer TOUTES les features (y compris celles ajoutées par les templates)
+        // Removes every feature, including the ones the templates just added.
         const allFeatures = actorToUpdate.items.filter(item => item.type === 'npc_feature');
         if (allFeatures.length > 0)
         {
-            console.log(`Removing ${allFeatures.length} auto-added features before adding Comp/Con features`);
+            console.log(`lancer-npc-import | Removing ${allFeatures.length} auto-added features before adding Comp/Con features`);
             await actorToUpdate.deleteEmbeddedDocuments('Item', allFeatures.map(item => item.id));
             await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -760,7 +711,7 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
             await actorToUpdate.createEmbeddedDocuments('Item', featuresToAdd);
         }
 
-        await applyFeatureCustomizations(actorToUpdate, npcData, progressDialog);
+        await applyFeatureCustomizations(actorToUpdate, npcData, syncLog);
 
         // Reset HP, structure et stress au max, heat à 0
         await actorToUpdate.update({
@@ -784,21 +735,13 @@ export async function importNPCFromCompCon(npcData, updateExisting = true, custo
 
     if (missingFeatures.length > 0)
     {
-        if (progressDialog)
-        {
-            progressDialog.addLog(`  ⚠ ${missingFeatures.length} feature(s) not found in compendiums`, 'warning');
-        }
-        console.warn(`Missing features for ${npcData.name}:`, missingFeatures);
+        syncLog?.addLog(`${missingFeatures.length} feature(s) not found in compendiums`, 'warning');
+        console.warn(`lancer-npc-import | Missing features for ${npcData.name}:`, missingFeatures);
     }
 
-    if (missingItems.length > 0 || missingFeatures.length > 0)
-    {
-        const total = missingItems.length + missingFeatures.length;
-        if (progressDialog)
-        {
-            progressDialog.addLog(`  ⚠ Imported with ${total} missing item(s)`, 'warning');
-        }
-    }
+    const missingTotal = missingItems.length + missingFeatures.length;
+    if (missingTotal > 0)
+        syncLog?.addLog(`Imported with ${missingTotal} missing item(s)`, 'warning');
 
     return { actor, updated: wasUpdated, replaced: wasReplaced };
 }

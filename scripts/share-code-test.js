@@ -2,8 +2,9 @@ import {
     CORS_PROXIES,
     getV3ApiBase,
     getV3ApiKey,
-    getV3Cdn
+    cdnFetch
 } from "./v3-api.js";
+import { escapeHtml } from "./utils.js";
 
 async function testOne(proxy, v3Url, headers)
 {
@@ -37,10 +38,9 @@ async function fetchCdnFromEntry(entry)
     const uri = entry?.uri;
     if (!uri)
         return null;
-    const url = `${getV3Cdn()}/${uri}?cb=${Date.now()}`;
     try
     {
-        const resp = await fetch(url, { cache: "no-store" });
+        const resp = await cdnFetch(uri);
         const text = await resp.text();
         try
         {
@@ -57,14 +57,6 @@ async function fetchCdnFromEntry(entry)
     }
 }
 
-function escapeHtml(value)
-{
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
 
 function copyBtn(label = "Copy JSON")
 {
@@ -141,7 +133,7 @@ function wireCopyButtons(rootEl)
             }
             catch (e)
             {
-                console.warn("[share-code-test] clipboard write failed:", e);
+                console.warn("lancer-npc-import | share-code-test | clipboard write failed:", e);
                 ui.notifications?.warn("Copy failed - select the JSON manually");
             }
         });
@@ -215,7 +207,7 @@ export function openShareCodeTest()
             <div class="sct-output"></div>
         </div>
     `;
-    const dlg = new Dialog({
+    const dialog = new Dialog({
         title: "Share Code Test",
         content,
         buttons: {
@@ -226,16 +218,16 @@ export function openShareCodeTest()
         {
             const root = html instanceof HTMLElement ? html : html[0];
             const input = root.querySelector(".sct-code");
-            const go = root.querySelector(".sct-go");
-            const fire = () =>
+            const testButton = root.querySelector(".sct-go");
+            const runEnteredCode = () =>
             {
                 const code = (input.value || "").trim().toUpperCase();
                 if (!code)
                     return;
                 runTest(root, code);
             };
-            go.addEventListener("click", ev => { ev.preventDefault(); fire(); });
-            input.addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); fire(); } });
+            testButton.addEventListener("click", event => { event.preventDefault(); runEnteredCode(); });
+            input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); runEnteredCode(); } });
             input.focus();
         }
     }, {
@@ -244,7 +236,7 @@ export function openShareCodeTest()
         resizable: true,
         classes: ["lancer-share-code-test", "lancer-dialog-base", "lancer-no-title"]
     });
-    dlg.render(true);
+    dialog.render(true);
 }
 
 export class ShareCodeTestMenu extends FormApplication

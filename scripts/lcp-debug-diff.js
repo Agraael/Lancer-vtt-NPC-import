@@ -1,4 +1,5 @@
 import { translateV3LcpBlob, getLancerApi } from "./v3-lcp-shim.js";
+import { escapeHtml } from "./utils.js";
 
 async function parsePackOnly(file)
 {
@@ -177,23 +178,23 @@ function diffBuckets(bucketsA, bucketsB)
     const out = {};
     for (const bucket of allBuckets)
     {
-        const ma = indexBucket(bucketsA?.[bucket] ?? []);
-        const mb = indexBucket(bucketsB?.[bucket] ?? []);
+        const entriesA = indexBucket(bucketsA?.[bucket] ?? []);
+        const entriesB = indexBucket(bucketsB?.[bucket] ?? []);
         const added = [];
         const removed = [];
         const changed = [];
         const unchanged = [];
-        for (const [key, item] of mb)
-            if (!ma.has(key))
+        for (const [key, item] of entriesB)
+            if (!entriesA.has(key))
                 added.push({ key, item });
-        for (const [key, item] of ma)
-            if (!mb.has(key))
+        for (const [key, item] of entriesA)
+            if (!entriesB.has(key))
                 removed.push({ key, item });
-        for (const [key, itemA] of ma)
+        for (const [key, itemA] of entriesA)
         {
-            if (!mb.has(key))
+            if (!entriesB.has(key))
                 continue;
-            const itemB = mb.get(key);
+            const itemB = entriesB.get(key);
             if (stableStringify(itemA) === stableStringify(itemB))
             {
                 unchanged.push({ key, item: itemA });
@@ -201,11 +202,11 @@ function diffBuckets(bucketsA, bucketsB)
             }
             changed.push({ key, a: itemA, b: itemB, fields: fieldDiff(itemA, itemB) });
         }
-        if (added.length || removed.length || changed.length || unchanged.length || ma.size || mb.size)
+        if (added.length || removed.length || changed.length || unchanged.length || entriesA.size || entriesB.size)
         {
             out[bucket] = {
-                countA: ma.size,
-                countB: mb.size,
+                countA: entriesA.size,
+                countB: entriesB.size,
                 added,
                 removed,
                 changed,
@@ -216,12 +217,6 @@ function diffBuckets(bucketsA, bucketsB)
     return out;
 }
 
-function escapeHtml(str)
-{
-    return String(str).replace(/[&<>"']/g, ch => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
-    }[ch]));
-}
 
 function previewValue(value)
 {
@@ -455,7 +450,7 @@ class LcpDebugDiffApp extends Application
             </div>
             <div class="lcp-diff-actions flex0" style="display:flex;gap:6px;margin:6px 0 10px;flex-wrap:wrap;align-items:flex-start;">
                 <button type="button" class="lcp-diff-run" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Diff parsed content pack (translator output)"><i class="fas fa-not-equal"></i> Compare (Parsed)</button>
-                <button type="button" class="lcp-diff-run-sim" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Run a real importCP through patched globals — diff what would land in compendia. No write."><i class="fas fa-vial"></i> Compare (Import Sim)</button>
+                <button type="button" class="lcp-diff-run-sim" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Runs the real importCP through patched globals and compares what would land in the compendiums. Writes nothing."><i class="fas fa-vial"></i> Compare (Import Sim)</button>
                 <button type="button" class="lcp-diff-run-single" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;" title="Single LCP (slot A only): diff parseContentPack output vs simulated import output. Reveals what importCP transforms or drops."><i class="fas fa-search"></i> Single (Parsed vs Sim)</button>
                 <button type="button" class="lcp-diff-log" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-terminal"></i> Log to Console</button>
                 <button type="button" class="lcp-diff-export" style="width:auto !important;height:auto !important;min-height:0 !important;max-height:32px !important;padding:3px 10px !important;line-height:22px !important;font-size:13px !important;flex:0 0 auto !important;"><i class="fas fa-file-export"></i> Export Both (JSON)</button>
@@ -531,11 +526,11 @@ class LcpDebugDiffApp extends Application
             this._lastMode = mode;
             this._lastDiff = diffBuckets(resultA.buckets, resultB.buckets);
             out.innerHTML = renderDiffHtml(resultA.manifest, resultB.manifest, this._lastDiff, mode);
-            console.log(`[lcp-debug-diff] result (${mode})`, { a: resultA, b: resultB, diff: this._lastDiff });
+            console.log(`lancer-npc-import | lcp-diff | result (${mode})`, { a: resultA, b: resultB, diff: this._lastDiff });
         }
         catch (e)
         {
-            console.error("[lcp-debug-diff]", e);
+            console.error("lancer-npc-import | lcp-diff | failed", e);
             out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;
         }
     }
@@ -561,7 +556,7 @@ class LcpDebugDiffApp extends Application
             this._lastMode = "single";
             this._lastDiff = diffBuckets(parsed.buckets, simulated.buckets);
             out.innerHTML = renderDiffHtml(parsed.manifest, simulated.manifest, this._lastDiff, "simulated");
-            console.log("[lcp-debug-diff] single-file (parsed vs sim)", {
+            console.log("lancer-npc-import | lcp-diff | single-file (parsed vs sim)", {
                 file: file.name,
                 parsed,
                 simulated,
@@ -570,7 +565,7 @@ class LcpDebugDiffApp extends Application
         }
         catch (e)
         {
-            console.error("[lcp-debug-diff]", e);
+            console.error("lancer-npc-import | lcp-diff | failed", e);
             out.innerHTML = `<span style="color:#d56565">Error: ${escapeHtml(e.message)}</span>`;
         }
     }
@@ -626,9 +621,9 @@ class LcpDebugDiffApp extends Application
             ui.notifications.warn("Run Compare first.");
             return;
         }
-        console.log("[lcp-debug-diff] A", this._lastA);
-        console.log("[lcp-debug-diff] B", this._lastB);
-        console.log("[lcp-debug-diff] diff", this._lastDiff);
+        console.log("lancer-npc-import | lcp-diff | A", this._lastA);
+        console.log("lancer-npc-import | lcp-diff | B", this._lastB);
+        console.log("lancer-npc-import | lcp-diff | diff", this._lastDiff);
         ui.notifications.info("LCP diff dumped to console.");
     }
 }

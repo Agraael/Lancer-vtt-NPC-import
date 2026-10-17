@@ -1,7 +1,7 @@
 // Compendium snapshot utility for comparing LCP imports.
 // Produces a deterministic JSON dump so you can diff v2-import vs v3-import results.
 
-const MODULE_ID = "lancer-npc-import";
+import { MODULE_ID } from "./utils.js";
 
 // Fields whose values change between imports but don't represent content differences.
 const VOLATILE_KEYS = new Set([
@@ -15,35 +15,35 @@ const VOLATILE_SYSTEM_KEYS = new Set([
     "maxUses", "isUsed", "selected_profile_index"
 ]);
 
-export function stripVolatile(obj)
+export function stripVolatile(value)
 {
-    if (obj === null || obj === undefined)
-        return obj;
-    if (Array.isArray(obj))
-        return obj.map(stripVolatile);
-    if (typeof obj !== "object")
-        return obj;
+    if (value === null || value === undefined)
+        return value;
+    if (Array.isArray(value))
+        return value.map(stripVolatile);
+    if (typeof value !== "object")
+        return value;
     const out = {};
-    const keys = Object.keys(obj).sort();
+    const keys = Object.keys(value).sort();
     for (const key of keys)
     {
         if (VOLATILE_KEYS.has(key))
             continue;
         if (key === "flags")
             continue; // import timestamps, folder refs, etc.
-        if (key === "system" && obj[key] && typeof obj[key] === "object")
+        if (key === "system" && value[key] && typeof value[key] === "object")
         {
-            const sys = {};
-            for (const sk of Object.keys(obj[key]).sort())
+            const system = {};
+            for (const systemKey of Object.keys(value[key]).sort())
             {
-                if (VOLATILE_SYSTEM_KEYS.has(sk))
+                if (VOLATILE_SYSTEM_KEYS.has(systemKey))
                     continue;
-                sys[sk] = stripVolatile(obj[key][sk]);
+                system[systemKey] = stripVolatile(value[key][systemKey]);
             }
-            out[key] = sys;
+            out[key] = system;
             continue;
         }
-        out[key] = stripVolatile(obj[key]);
+        out[key] = stripVolatile(value[key]);
     }
     return out;
 }
@@ -111,7 +111,7 @@ export async function dumpLcpSnapshot({ prefix = "", download = true, logToConso
             snapshot[pack.collection] = entries;
     }
     if (logToConsole)
-        console.log(`[compendium-snapshot] ${label}`, snapshot);
+        console.log(`lancer-npc-import | snapshot | ${label}`, snapshot);
     const json = JSON.stringify(snapshot, null, 2);
     if (download)
     {
@@ -189,5 +189,5 @@ export function registerSnapshotApi()
     mod.api = mod.api || {};
     mod.api.dumpLcpSnapshot = dumpLcpSnapshot;
     mod.api.diffSnapshots = diffSnapshots;
-    console.log("[compendium-snapshot] api registered");
+    console.log("lancer-npc-import | snapshot | api registered");
 }

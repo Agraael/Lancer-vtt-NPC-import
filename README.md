@@ -1,60 +1,55 @@
-# Lancer NPC Import
+# Lancer Comp/Con Sync
 
-[![Latest module version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2FAgraael%2FLancer-vtt-NPC-import-Macro%2Freleases%2Flatest%2Fdownload%2Fmodule.json&query=%24.version&prefix=v&style=for-the-badge&label=module%20version)](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro/releases/latest)
-![Latest Foundry version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2FAgraael%2FLancer-vtt-NPC-import-Macro%2Freleases%2Flatest%2Fdownload%2Fmodule.json&query=%24.compatibility.verified&style=for-the-badge&label=foundry%20version&color=fe6a1f)
+[![Latest module version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2FAgraael%2FLancer-vtt-NPC-import%2Freleases%2Flatest%2Fdownload%2Fmodule.json&query=%24.version&prefix=v&style=for-the-badge&label=module%20version)](https://github.com/Agraael/Lancer-vtt-NPC-import/releases/latest)
+![Latest Foundry version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2FAgraael%2FLancer-vtt-NPC-import%2Freleases%2Flatest%2Fdownload%2Fmodule.json&query=%24.compatibility.verified&style=for-the-badge&label=foundry%20version&color=fe6a1f)
 <br/>
-[![GitHub downloads (total)](https://img.shields.io/github/downloads/Agraael/Lancer-vtt-NPC-import-Macro/module.zip?style=for-the-badge&label=downloads%20(total))](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro/releases/latest)
-[![GitHub downloads (latest version)](https://img.shields.io/github/downloads/Agraael/Lancer-vtt-NPC-import-Macro/latest/module.zip?style=for-the-badge&label=downloads%20(latest))](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro/releases/latest)
+[![GitHub downloads (total)](https://img.shields.io/github/downloads/Agraael/Lancer-vtt-NPC-import/module.zip?style=for-the-badge&label=downloads%20(total))](https://github.com/Agraael/Lancer-vtt-NPC-import/releases/latest)
+[![GitHub downloads (latest version)](https://img.shields.io/github/downloads/Agraael/Lancer-vtt-NPC-import/latest/module.zip?style=for-the-badge&label=downloads%20(latest))](https://github.com/Agraael/Lancer-vtt-NPC-import/releases/latest)
 
 ---
 
-Pulls Lancer content out of Comp/Con and into FoundryVTT. The name says NPC import, but at this point it does a bit more than that.
+Syncs Lancer pilots and NPCs between Comp/Con and FoundryVTT, both ways. Used to be Lancer NPC Import, it grew a bit.
 
 ## What it does
 
-- **NPC import** from Comp/Con cloud or JSON files, with tier scaling and update-in-place.
-- **Comp/Con sign in**: Lancer v2.12 dropped the built-in login, so we talk to AWS Cognito directly. Only a refresh token is stored, never your password.
-- **Pilot import patch**: brings in organizations, fills bonds, and refills HP/structure/stress on import. Reserves are deduped by LID so the new system's native reserves import doesn't double up.
-- **V3 LCP import**: open the Compendium Manager, pick a v3 `.lcp` file, and an **Import v3 LCP** button appears in place of the native one.
-- **Refresh items from LCPs**: re-pull compendium item data into existing actors after an LCP update, with a per-item diff preview and per-row opt-in.
-
-Pilot share codes and pilot cloud sync are now handled by the Lancer system itself.
+- **Comp/Con Sync**: import pilots (with their mechs) and NPCs from your Comp/Con cloud, or export your Foundry changes back to Comp/Con.
+- **JSON import**: Comp/Con export files, pilots or NPCs, v2 and v3.
+- **V3 LCP import**: an **Import v3 LCP** button in the Compendium Manager.
+- **Refresh items from LCPs**: re-pull updated compendium items onto existing actors, with a diff first.
+- **LCP Diff Tool** and **Fix Token Sizes** in the module settings.
 
 ## Install
 
 Manifest URL:
 
 ```
-https://github.com/Agraael/Lancer-vtt-NPC-import-Macro/releases/latest/download/module.json
+https://github.com/Agraael/Lancer-vtt-NPC-import/releases/latest/download/module.json
 ```
 
-Requires:
-- [Lancer system](https://foundryvtt.com/packages/lancer) v2.12.0+
-- [Lancer Style Library](https://github.com/Agraael/lancer-style-library)
+Requires Foundry v13, the [Lancer system](https://foundryvtt.com/packages/lancer) 2.12.0+ and [Lancer Style Library](https://github.com/Agraael/lancer-style-library).
 
 ## Using it
 
-Click **Import NPCs** in the Actors sidebar.
+Click **Comp/Con Sync** in the Actors sidebar and sign in with your Comp/Con account. Lancer v2.12 dropped the built-in login, so the module talks to AWS Cognito directly. Your password is never stored.
 
-- **From the cloud**: hit **Sign in** in the dialog, enter your Comp/Con credentials, then pick NPCs and a scaling mode.
-- **From JSON**: export from Comp/Con, pick the files, pick a scaling mode. Both v2 and v3 export formats are handled.
+A few things worth knowing:
+- Re-importing a pilot rebuilds all its items, so anything you added by hand in Foundry is gone.
+- Export only works on actors that are already linked (ones you imported). Open Comp/Con and sync after. The Comp/Con file is backed up before each export, in `comp-con-backups/`.
+- NPCs with custom stats: **Scaled** keeps the tier-to-tier increments, **Flat** uses the same stats for every tier.
 
-For NPCs with custom tiers:
-- **Scaled** keeps the tier-to-tier increments (custom base + tier delta).
-- **Flat** uses the same custom stats for every tier.
+![Comp/Con Sync](Screenshot.png)
 
-Custom stats are detected by comparing against the class base, so it still works when Comp/Con doesn't flag the tier as "custom".
+## V3 LCP import
 
-![Import Dialog](Screenshot.png)
+Open the Compendium Manager, pick a v3 `.lcp`, and an **Import v3 LCP** button shows up in place of the native one. v2 LCPs go through the normal Lancer importer.
 
-## V3 LCP notes
-
-Button only shows up for v3 LCPs. v2 LCPs go through the normal Lancer importer.
+<details>
+<summary>How v3 content is translated</summary>
 
 | v3 feature | Handling |
 |---|---|
 | `active_effects[]` bonuses / actions / deployables / synergies / counters | Lifted into the item's v2 arrays |
-| Action-shaped `active_effects[]` (damage / range / attack / condition / frequency) | Synthesized as v2 actions |
+| Action-shaped `active_effects[]` (damage / range / attack / accuracy / condition / frequency) | Synthesized as v2 actions. On NPC features they become text in the effect, not rollable actions |
 | `save` (scalar or `.dc`) / `accuracy` / `bonus_damage` scalars | Lifted into bonuses |
 | `on_attack` / `on_hit` / `on_crit` / `on_miss` as objects | String-coerced; `on_attack` / `on_crit` merged into effect |
 | `damage[].val` → `damage[].damage` | Renamed |
@@ -65,37 +60,26 @@ Button only shows up for v3 LCPs. v2 LCPs go through the normal Lancer importer.
 | `duration` / `condition` / `target` (non-action AEs) | Text meta in header |
 | `damage` / `bonus_damage` on non-action AEs | Text in effect |
 | Structured `save.on_success` / `on_fail` | Text in effect (DC still goes to bonus) |
-| Eidolon layers | Each layer → NPC template + features in an `Eidolons` folder. Apply manually, no layer-swap |
+| Eidolon layers | Each layer → NPC template + features, plus a "<Layer>'s Rules" and a "<Layer>'s Shard" trait, in an `Eidolons` folder. Apply manually, no layer-swap |
 | `flavorDescription` / `brew` / `deprecated` | Dropped |
 
-Translation summary in the LCP Manager shows per-bucket counts and how many AE blocks went structured vs text.
-
+</details>
 
 ## Refresh items from LCPs
 
-Re-pulls updated compendium items onto existing actors, with a per-item diff and opt-in.
+**Refresh** in the actor sheet title bar, or **Refresh actors** in the Actors sidebar for all of them. Shows a per-item diff, you pick what to apply.
 
-Per actor: **Refresh** button in the actor sheet title bar.
-Bulk: **Refresh actors** button in the Actors sidebar.
+## LCP Diff Tool
 
-
-## V3 LCP diff tool
-
-There are way too many LCPs out there for me to test them all, so some translation edge cases probably slipped through. To help with that, I added a diff tool in the module configuration.
-
-Open **Module Settings → Lancer NPC Import → Open LCP Diff Tool**, pick two LCPs, and you get a side-by-side breakdown: per-bucket counts, added/removed/changed entries, and field-level diffs on the items that changed. Nothing is actually imported.
-
-Mainly useful for LCP authors who want to sanity-check that their v3 pack translates the way they expect, but it also gives me something concrete to look at when someone reports a bad import.
-
+There are way too many LCPs out there for me to test them all, so some translation edge cases probably slipped through. **Module Settings → Open LCP Diff Tool** compares what two LCPs would import, without importing anything. Mainly for LCP authors, and it gives me something concrete to look at when someone reports a bad import.
 
 ## A note on CORS
 
-The V3 Comp/Con API doesn't allow direct browser calls, so the module routes calls through a CORS proxy: corsproxy.io for localhost, my Cloudflare Worker for everyone else.
+The Comp/Con API doesn't allow direct browser calls, so the module goes through a CORS proxy: corsproxy.io first, then my Cloudflare Worker.
 
 If a red notification says the Worker isn't responding, it's hit its daily limit. Try again in a few hours.
 
-**Bonus:** the Lancer v2.12 system's own pilot share-code button hits `api.compcon.app/v3/code` directly and gets blocked by the same CORS rule. Installing this module silently routes that call through the proxy too, so the system's native share-code import starts working again. Real fix would be Comp/Con adding `Access-Control-Allow-Origin: *` on `/v3/code` and `/share`.
-
+**Bonus:** the Lancer system's own share-code button gets blocked by the same CORS rule. With this module installed it works again.
 
 <details>
 <summary>Advanced: endpoint overrides</summary>
@@ -107,7 +91,6 @@ If Massif rotates keys or moves hosts, you can update these endpoints in the set
 - `V3 CDN Base URL`
 
 </details>
-
 
 ---
 

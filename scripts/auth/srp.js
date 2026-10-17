@@ -14,8 +14,8 @@ const N_HEX =
   + "D87602733EC86A64521F2B18177B200CBBE117577A615D6C770988C0BAD946E2"
   + "08E24FA074E5AB3143DB5BFCE0FD108E4B82D120A93AD2CAFFFFFFFFFFFFFFFF";
 
-const N = BigInt("0x" + N_HEX);
-const g = 2n;
+const SRP_PRIME = BigInt("0x" + N_HEX);
+const SRP_GENERATOR = 2n;
 const INFO_BITS = new TextEncoder().encode("Caldera Derived Key");
 
 function hexToBytes(hex)
@@ -31,9 +31,9 @@ function bytesToHex(bytes)
 {
     return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
 }
-function bigIntToHex(bi)
+function bigIntToHex(value)
 {
-    return bi.toString(16);
+    return value.toString(16);
 }
 function bytesToBigInt(bytes)
 {
@@ -58,8 +58,8 @@ function padHex(input)
 
 async function sha256(bytes)
 {
-    const buf = await crypto.subtle.digest("SHA-256", bytes);
-    return new Uint8Array(buf);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return new Uint8Array(digest);
 }
 async function sha256Hex(hex)
 {
@@ -70,8 +70,8 @@ async function hmacSha256(keyBytes, dataBytes)
     const key = await crypto.subtle.importKey(
         "raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
     );
-    const sig = await crypto.subtle.sign("HMAC", key, dataBytes);
-    return new Uint8Array(sig);
+    const signature = await crypto.subtle.sign("HMAC", key, dataBytes);
+    return new Uint8Array(signature);
 }
 async function hkdf16(ikm, salt)
 {
@@ -104,14 +104,14 @@ function randomBigInt(bits)
     return bytesToBigInt(bytes);
 }
 
-function concatBytes(...arrs)
+function concatBytes(...parts)
 {
-    let len = 0;
-    for (const arr of arrs)
-        len += arr.length;
-    const out = new Uint8Array(len);
-    let off = 0;
-    for (const arr of arrs) { out.set(arr, off); off += arr.length; }
+    let length = 0;
+    for (const part of parts)
+        length += part.length;
+    const out = new Uint8Array(length);
+    let offset = 0;
+    for (const part of parts) { out.set(part, offset); offset += part.length; }
     return out;
 }
 
@@ -119,39 +119,39 @@ function concatBytes(...arrs)
 function cognitoTimestamp()
 {
     const now = new Date();
-    const wk = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][now.getUTCDay()];
-    const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][now.getUTCMonth()];
+    const weekday = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][now.getUTCDay()];
+    const month = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][now.getUTCMonth()];
     const day = now.getUTCDate();
-    const hh = String(now.getUTCHours()).padStart(2, "0");
-    const mm = String(now.getUTCMinutes()).padStart(2, "0");
-    const ss = String(now.getUTCSeconds()).padStart(2, "0");
-    return `${wk} ${mo} ${day} ${hh}:${mm}:${ss} UTC ${now.getUTCFullYear()}`;
+    const hours = String(now.getUTCHours()).padStart(2, "0");
+    const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+    const seconds = String(now.getUTCSeconds()).padStart(2, "0");
+    return `${weekday} ${month} ${day} ${hours}:${minutes}:${seconds} UTC ${now.getUTCFullYear()}`;
 }
 
 export function generateSrpA()
 {
-    let a;
-    let A;
+    let privateKey;
+    let publicKey;
     do
     {
-        a = randomBigInt(256);
-        A = modPow(g, a, N);
-    } while (A % N === 0n);
-    return { a, A };
+        privateKey = randomBigInt(256);
+        publicKey = modPow(SRP_GENERATOR, privateKey, SRP_PRIME);
+    } while (publicKey % SRP_PRIME === 0n);
+    return { privateKey, publicKey };
 }
 
 export async function computePasswordSignature({
-    a, A, srpBHex, saltHex,
+    privateKey, publicKey, srpBHex, saltHex,
     poolId, userIdForSrp, password, secretBlockB64
 })
 {
-    const B = BigInt("0x" + srpBHex);
-    if (B % N === 0n)
+    const serverPublic = BigInt("0x" + srpBHex);
+    if (serverPublic % SRP_PRIME === 0n)
         throw new Error("Invalid SRP B from server");
 
-    const k = BigInt("0x" + bytesToHex(await sha256Hex(padHex(N) + padHex(g))));
-    const u = BigInt("0x" + bytesToHex(await sha256Hex(padHex(A) + padHex(B))));
-    if (u === 0n)
+    const multiplier = BigInt("0x" + bytesToHex(await sha256Hex(padHex(SRP_PRIME) + padHex(SRP_GENERATOR))));
+    const scrambler = BigInt("0x" + bytesToHex(await sha256Hex(padHex(publicKey) + padHex(serverPublic))));
+    if (scrambler === 0n)
         throw new Error("SRP u cannot be zero");
 
     const poolName = poolId.split("_")[1];
@@ -160,26 +160,26 @@ export async function computePasswordSignature({
 
     const innerInput = new TextEncoder().encode(`${poolName}${userIdForSrp}:${password}`);
     const innerHashHex = bytesToHex(await sha256(innerInput));
-    const x = BigInt("0x" + bytesToHex(await sha256Hex(padHex(saltHex) + innerHashHex)));
+    const passwordHash = BigInt("0x" + bytesToHex(await sha256Hex(padHex(saltHex) + innerHashHex)));
 
-    const gx = modPow(g, x, N);
-    let base = (B - (k * gx)) % N;
+    const verifier = modPow(SRP_GENERATOR, passwordHash, SRP_PRIME);
+    let base = (serverPublic - (multiplier * verifier)) % SRP_PRIME;
     if (base < 0n)
-        base += N;
-    const S = modPow(base, a + (u * x), N);
+        base += SRP_PRIME;
+    const sharedSecret = modPow(base, privateKey + (scrambler * passwordHash), SRP_PRIME);
 
-    const hkdfKey = await hkdf16(hexToBytes(padHex(S)), hexToBytes(padHex(u)));
+    const hkdfKey = await hkdf16(hexToBytes(padHex(sharedSecret)), hexToBytes(padHex(scrambler)));
 
     const timestamp = cognitoTimestamp();
-    const secretBlockBytes = Uint8Array.from(atob(secretBlockB64), ch => ch.charCodeAt(0));
+    const secretBlockBytes = Uint8Array.from(atob(secretBlockB64), char => char.charCodeAt(0));
     const sigInput = concatBytes(
         new TextEncoder().encode(poolName),
         new TextEncoder().encode(userIdForSrp),
         secretBlockBytes,
         new TextEncoder().encode(timestamp)
     );
-    const sig = await hmacSha256(hkdfKey, sigInput);
-    const signatureB64 = btoa(String.fromCharCode(...sig));
+    const signature = await hmacSha256(hkdfKey, sigInput);
+    const signatureB64 = btoa(String.fromCharCode(...signature));
 
     return { signatureB64, timestamp };
 }

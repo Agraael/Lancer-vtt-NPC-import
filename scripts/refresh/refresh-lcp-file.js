@@ -20,10 +20,10 @@ function collectIds(data, out)
         return;
     for (const key of ITEM_ARRAYS)
     {
-        const arr = root[key];
-        if (!Array.isArray(arr))
+        const entries = root[key];
+        if (!Array.isArray(entries))
             continue;
-        for (const item of arr)
+        for (const item of entries)
         {
             if (item && typeof item.id === "string" && item.id.length)
                 out.add(item.id);
@@ -55,7 +55,7 @@ async function parseFromZip(buffer)
         }
         catch (err)
         {
-            console.warn(`refresh: skip ${name}`, err);
+            console.warn(`lancer-npc-import | refresh | skip ${name}`, err);
         }
     }
     return { lids, manifest };

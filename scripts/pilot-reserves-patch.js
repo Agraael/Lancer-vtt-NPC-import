@@ -1,7 +1,8 @@
-// Pilot import patch: extends Lancer's _onPilotJsonParsed to also import
-// reserves/organizations and refill pool resources.
+// Wraps Lancer's pilot JSON import (_onPilotJsonParsed): active loadout only, then reserves,
+// organizations, bond, mech item state and a resource refill. Also holds the organization helpers.
 
 import { unwrapData, normalizePilotData } from "./v3-api.js";
+import { trimText, sameJson } from "./utils.js";
 
 export function patchPilotImportReserves()
 {
@@ -24,7 +25,8 @@ export function patchPilotImportReserves()
                 pilotData = unwrapData(pilotData);
                 normalizePilotData(pilotData);
                 _preserveMechCurrentStats(pilotData);
-                normalizedFileData = JSON.stringify(pilotData);
+                const activeOnly = Array.isArray(pilotData.loadouts) && pilotData.loadouts.length > 1 && pilotData.loadout;
+                normalizedFileData = JSON.stringify(activeOnly ? { ...pilotData, loadouts: [pilotData.loadout] } : pilotData);
             }
             catch
             {
@@ -32,6 +34,7 @@ export function patchPilotImportReserves()
             }
         }
         await orig.call(this, normalizedFileData);
+        await _backfillMechItemState(this.actor, pilotData);
         if (pilotData?.reserves?.length > 0)
             await _importReserves(this.actor, pilotData.reserves);
         if (pilotData?.orgs?.length > 0)
@@ -55,8 +58,8 @@ const _MECH_STAT_MAP = [
     ["activations", "activations.value"],
 ];
 
-// CompCon exports mech stats.current.hp as 0; the importer writes it, and hp<=0 auto-fires Lancer's
-// structure-damage flow, wrecking a live mech. Carry each existing mech's real current stats instead.
+// Comp/Con exports mech current HP as 0, and HP at 0 fires Lancer's structure flow on a live mech.
+// Carry each existing mech's real current stats instead.
 function _preserveMechCurrentStats(pilotData)
 {
     if (!Array.isArray(pilotData?.mechs))
@@ -76,6 +79,80 @@ function _preserveMechCurrentStats(pilotData)
             if (typeof value === "number" && Number.isFinite(value))
                 current[key] = value;
         }
+    }
+}
+
+function _cloudMechWeaponEntries(loadout)
+{
+    const mounts = [
+        loadout.integratedWeapon,
+        loadout.improved_armament,
+        loadout.superheavy_mounting,
+        ...(loadout.integratedMounts || []).map(mount => ({ slots: [{ weapon: mount?.weapon }] })),
+        ...(loadout.mounts || [])
+    ];
+    return mounts
+        .flatMap(mount => [...(mount?.slots || []), ...(mount?.extra || [])])
+        .map(slot => slot?.weapon)
+        .filter(weapon => weapon?.id);
+}
+
+function _takeByLid(pool, lid)
+{
+    const index = pool.findIndex(entry => entry.id === lid);
+    return index < 0 ? null : pool.splice(index, 1)[0];
+}
+
+async function _backfillMechItemState(pilot, pilotData)
+{
+    if (!pilot)
+        return;
+    for (const mechData of (Array.isArray(pilotData?.mechs) ? pilotData.mechs : []))
+    {
+        const loadout = mechData?.loadouts?.[mechData.active_loadout_index || 0];
+        if (!loadout)
+            continue;
+        const candidates = game.actors.filter(actor => typeof actor.is_mech === "function" && actor.is_mech() && actor.system?.lid === mechData.id);
+        const mech = candidates.find(actor => actor.system?.pilot?.value === pilot || actor.system?.pilot?.value?.id === pilot.id) || candidates[0];
+        if (!mech)
+            continue;
+        const updates = [];
+        const apply = (item, entry, withProfile) =>
+        {
+            const update = {};
+            if (item.system && "destroyed" in item.system && !!item.system.destroyed !== !!entry.destroyed)
+                update["system.destroyed"] = !!entry.destroyed;
+            if (withProfile)
+            {
+                const last = Math.max(0, (item.system?.profiles?.length || 1) - 1);
+                const profile = Math.min(last, Math.max(0, Number(entry.selectedProfile) || 0));
+                if ((item.system?.selected_profile_index ?? 0) !== profile)
+                    update["system.selected_profile_index"] = profile;
+            }
+            if (Object.keys(update).length)
+                updates.push({ _id: item.id, ...update });
+        };
+        const weapons = _cloudMechWeaponEntries(loadout);
+        for (const mount of (mech.system?.loadout?.weapon_mounts || []))
+        {
+            for (const slot of (mount?.slots || []))
+            {
+                const item = slot?.weapon?.value;
+                const entry = item?.system?.lid ? _takeByLid(weapons, item.system.lid) : null;
+                if (entry)
+                    apply(item, entry, true);
+            }
+        }
+        const systems = [...(loadout.integratedSystems || []), ...(loadout.systems || [])].filter(entry => entry?.id);
+        for (const link of (mech.system?.loadout?.systems || []))
+        {
+            const item = link?.value;
+            const entry = item?.system?.lid ? _takeByLid(systems, item.system.lid) : null;
+            if (entry)
+                apply(item, entry, false);
+        }
+        if (updates.length)
+            await mech.updateEmbeddedDocuments("Item", updates);
     }
 }
 
@@ -110,15 +187,27 @@ export async function _importReserves(pilot, reserves)
 {
     if (!pilot || !reserves?.length)
         return;
-    const existingLids = new Set(
-        pilot.items.filter(item => item.type === 'reserve').map(item => item.system?.lid)
-    );
+    const existing = pilot.items.filter(item => item.type === 'reserve');
+    const existingLids = new Set(existing.map(item => item.system?.lid));
+    const claimed = new Set();
+    const toUpdate = [];
     const toCreate = [];
     for (const reserve of reserves)
     {
         const lid = reserve.id;
-        if (!lid || existingLids.has(lid))
+        if (!lid)
             continue;
+        if (existingLids.has(lid))
+        {
+            const item = existing.find(entry => entry.system?.lid === lid && !claimed.has(entry.id));
+            if (item)
+            {
+                claimed.add(item.id);
+                if (reserve.used !== undefined && !!item.system?.used !== !!reserve.used)
+                    toUpdate.push({ _id: item.id, 'system.used': !!reserve.used });
+            }
+            continue;
+        }
         let found = null;
         for (const pack of game.packs)
         {
@@ -169,6 +258,8 @@ export async function _importReserves(pilot, reserves)
             });
         }
     }
+    if (toUpdate.length > 0)
+        await pilot.updateEmbeddedDocuments('Item', toUpdate);
     if (toCreate.length > 0)
     {
         await pilot.createEmbeddedDocuments('Item', toCreate);
@@ -176,41 +267,182 @@ export async function _importReserves(pilot, reserves)
     }
 }
 
+export const ORG_PURPOSES = ["Military", "Scientific", "Academic", "Criminal", "Humanitarian", "Industrial", "Entertainment", "Political"];
+
+function _orgText(value)
+{
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, "<br>");
+}
+
+export function isOrgReserve(item)
+{
+    return item?.type === "reserve" && item.system?.type === "Organization";
+}
+
+export function orgHtml(org)
+{
+    const parts = [];
+    if (org.purpose)
+        parts.push(`<b>Purpose:</b> ${_orgText(org.purpose)}`);
+    if (org.efficiency !== undefined)
+        parts.push(`<b>Efficiency:</b> ${_orgText(org.efficiency)}`);
+    if (org.influence !== undefined)
+        parts.push(`<b>Influence:</b> ${_orgText(org.influence)}`);
+    if (org.description)
+        parts.push(_orgText(org.description));
+    if (org.actions)
+        parts.push(`<b>Actions:</b> ${_orgText(org.actions)}`);
+    return parts.join("<br>");
+}
+
+export function formatOrg(org)
+{
+    return {
+        name: trimText(org.name),
+        type: "reserve",
+        img: "systems/lancer/assets/icons/reserve.svg",
+        system: {
+            type: "Organization",
+            label: org.purpose || "Organization",
+            description: orgHtml(org),
+            consumable: false,
+            used: !!org.used
+        }
+    };
+}
+
+function _htmlLines(html)
+{
+    const text = String(html ?? "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/(?:p|div|li|h\d)>/gi, "\n");
+    const body = new DOMParser().parseFromString(text, "text/html").body;
+    return (body?.textContent || "").split("\n").map(line => line.trim());
+}
+
+function _parseOrg(label, html)
+{
+    const org = { label: _htmlLines(label).filter(Boolean).join(" "), purpose: "", efficiency: undefined, influence: undefined, description: "", actions: "" };
+    const rest = [];
+    const seen = new Set();
+    const header = (key, line, pattern) => !rest.length && !seen.has(key) && pattern.exec(line);
+    for (const line of _htmlLines(html))
+    {
+        if (!rest.length && !line)
+            continue;
+        const purpose = header("purpose", line, /^Purpose:\s*(.*)$/i);
+        const efficiency = !purpose && header("efficiency", line, /^Efficiency:\s*(-?\d+)/i);
+        const influence = !purpose && !efficiency && header("influence", line, /^Influence:\s*(-?\d+)/i);
+        if (purpose)
+        {
+            seen.add("purpose");
+            org.purpose = purpose[1];
+        }
+        else if (efficiency)
+        {
+            seen.add("efficiency");
+            org.efficiency = Number(efficiency[1]);
+        }
+        else if (influence)
+        {
+            seen.add("influence");
+            org.influence = Number(influence[1]);
+        }
+        else
+            rest.push(line);
+    }
+    const actionsAt = rest.findLastIndex(line => /^Actions:/i.test(line));
+    if (actionsAt >= 0)
+    {
+        org.actions = [rest[actionsAt].replace(/^Actions:\s*/i, ""), ...rest.slice(actionsAt + 1)].join("\n").trim();
+        rest.length = actionsAt;
+    }
+    org.description = rest.join("\n").trim();
+    return org;
+}
+
+function _orgPurpose(value)
+{
+    const text = trimText(value).toLowerCase();
+    return ORG_PURPOSES.find(purpose => purpose.toLowerCase() === text) || "";
+}
+
+function _orgLevel(value, fallback)
+{
+    return Number.isFinite(value) ? Math.min(6, Math.max(0, Math.trunc(value))) : fallback;
+}
+
+export function orgFromItem(item, base = null)
+{
+    const found = _parseOrg(item.system?.label, item.system?.description);
+    const used = !!item.system?.used;
+    if (!base)
+    {
+        return {
+            name: trimText(item.name),
+            purpose: _orgPurpose(found.label) || _orgPurpose(found.purpose) || "Military",
+            description: found.description,
+            efficiency: _orgLevel(found.efficiency, 0),
+            influence: _orgLevel(found.influence, 0),
+            actions: found.actions,
+            used
+        };
+    }
+    const was = _parseOrg(base.purpose || "Organization", orgHtml(base));
+    const next = { ...base };
+    if (trimText(item.name) !== trimText(base.name))
+        next.name = trimText(item.name);
+    const purpose = _orgPurpose(found.label) || _orgPurpose(found.purpose);
+    if (purpose && purpose !== _orgPurpose(base.purpose))
+        next.purpose = purpose;
+    if (found.efficiency !== was.efficiency)
+        next.efficiency = _orgLevel(found.efficiency, base.efficiency);
+    if (found.influence !== was.influence)
+        next.influence = _orgLevel(found.influence, base.influence);
+    if (found.description !== was.description)
+        next.description = found.description;
+    if (found.actions !== was.actions)
+        next.actions = found.actions;
+    if (used !== !!base.used)
+        next.used = used;
+    return sameJson(next, base) ? base : next;
+}
+
+export function orgLabel(org)
+{
+    return `${trimText(org.name)} (${org.purpose || "Organization"}) E${Number(org.efficiency) || 0}/I${Number(org.influence) || 0}`;
+}
+
+export function matchOrgs(items, orgs)
+{
+    const free = [...orgs];
+    const pairs = [];
+    const worldOnly = [];
+    for (const item of items)
+    {
+        const index = free.findIndex(org => trimText(org?.name) === trimText(item.name));
+        if (index < 0)
+            worldOnly.push(item);
+        else
+            pairs.push({ item, org: free.splice(index, 1)[0] });
+    }
+    return { pairs, cloudOnly: free, worldOnly };
+}
+
 export async function _importOrganizations(pilot, orgs)
 {
     if (!pilot || !orgs?.length)
         return;
     const existingNames = new Set(
-        pilot.items.filter(item => item.type === 'reserve').map(item => item.name)
+        pilot.items.filter(isOrgReserve).map(item => trimText(item.name))
     );
     const toCreate = [];
     for (const org of orgs)
     {
-        if (!org.name || existingNames.has(org.name))
+        const name = trimText(org?.name);
+        if (!name || existingNames.has(name))
             continue;
-        const descParts = [];
-        if (org.purpose)
-            descParts.push(`<b>Purpose:</b> ${org.purpose}`);
-        if (org.efficiency !== undefined)
-            descParts.push(`<b>Efficiency:</b> ${org.efficiency}`);
-        if (org.influence !== undefined)
-            descParts.push(`<b>Influence:</b> ${org.influence}`);
-        if (org.description)
-            descParts.push(org.description);
-        if (org.actions)
-            descParts.push(`<b>Actions:</b> ${org.actions}`);
-        toCreate.push({
-            name: org.name,
-            type: 'reserve',
-            img: 'systems/lancer/assets/icons/reserve.svg',
-            system: {
-                type: 'Organization',
-                label: org.purpose || 'Organization',
-                description: descParts.join('<br>'),
-                consumable: false,
-                used: false,
-            },
-        });
+        toCreate.push(formatOrg(org));
     }
     if (toCreate.length > 0)
     {
@@ -233,8 +465,8 @@ export async function _backfillBondState(pilot, pilotData)
 
     const sanitizeLid = (id) =>
     {
-        const s = String(id ?? "").replace(/[^a-zA-Z0-9_]/g, "_");
-        return /^[a-zA-Z]/.test(s) ? s : `b_${s}`;
+        const lid = String(id ?? "").replace(/[^a-zA-Z0-9_]/g, "_");
+        return /^[a-zA-Z]/.test(lid) ? lid : `b_${lid}`;
     };
     const toCounter = (entry, prefix) => ({
         lid: sanitizeLid(entry.id ?? `${prefix}_${entry.title ?? "x"}`),

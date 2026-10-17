@@ -115,7 +115,7 @@ export class CompconLoginDialog extends Dialog
             }
             catch (e)
             {
-                console.warn("[compcon-login]", e);
+                console.warn("lancer-npc-import | sign-in | failed", e);
                 const msg = _humanizeCognitoError(e);
                 $err.text(msg);
                 $signin.prop('disabled', false).html('<i class="fas fa-sign-in-alt"></i> Sign In');

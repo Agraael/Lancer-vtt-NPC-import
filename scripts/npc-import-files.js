@@ -1,9 +1,9 @@
 // JSON file import. Auto-detects pilot vs NPC per file.
 
 import { unwrapData } from "./v3-api.js";
-import { ImportProgressDialog } from "./npc-import-ui.js";
-import { normalizeNpcData, importNPCFromCompCon } from "./npc-import-core.js";
-import { importOnePilot } from "./pilot-import-core.js";
+import { windowLog } from "./sync-log.js";
+import { normalizeNpcData, importSelectedNPCs } from "./npc-import-core.js";
+import { importSelectedPilots } from "./pilot-import-core.js";
 
 export function detectActorKind(json)
 {
@@ -135,7 +135,7 @@ export async function selectActorMappings(npcsToImport)
         const allActors = game.actors.filter(actor => actor.type === 'npc');
 
         const actorOptions = `<option value="new">── Create New ──</option>
-            ${allActors.map(actor => `<option value="${actor.id}">${actor.name}  (${actor.system.class.name ? actor.system.class.name : 'Unknown'})-(${actor.system.tier ? 'T' + actor.system.tier : 'Unknown'})</option>`).join('')}`;
+            ${allActors.map(actor => `<option value="${actor.id}">${actor.name}  (${actor.system.class?.name || 'Unknown'})-(${actor.system.tier ? 'T' + actor.system.tier : 'Unknown'})</option>`).join('')}`;
 
         const content = `
             <div class="lancer-dialog-base">
@@ -292,13 +292,13 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
             }
             catch (error)
             {
-                console.error(`Error parsing ${file.name}:`, error);
+                console.error(`lancer-npc-import | Error parsing ${file.name}:`, error);
                 ui.notifications.error(`Failed to parse ${file.name}: ${error.message}`);
             }
         }
 
         if (pilotsToImport.length > 0)
-            await _importPilotFiles(pilotsToImport, updateExisting);
+            await importSelectedPilots(pilotsToImport, updateExisting, windowLog("Import log", "JSON → Foundry"));
 
         if (npcsToImport.length === 0)
         {
@@ -319,118 +319,13 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
             }
         }
 
-        const progressDialog = new ImportProgressDialog(npcsToImport.length);
-        progressDialog.render(true);
-        progressDialog.addLog(`Starting import of ${npcsToImport.length} NPC(s)...`, 'info');
-
-        let successCount = 0;
-        let errorCount = 0;
-        let updateCount = 0;
-        let replaceCount = 0;
-
-        for (let i = 0; i < npcsToImport.length; i++)
+        const selection = npcsToImport.map((npcData, npcIndex) =>
         {
-            const npcData = npcsToImport[i];
-            let targetActor = null;
-            let keepName = false;
-
-            if (mappings && mappings[i])
-            {
-                targetActor = mappings[i].targetActor;
-                keepName = mappings[i].keepName;
-            }
-
-            try
-            {
-                progressDialog.addLog(`Importing: ${npcData.name}...`, 'info');
-                const result = await importNPCFromCompCon(npcData, updateExisting, customTierMode, targetActor, keepName, progressDialog);
-
-                if (result.updated)
-                {
-                    updateCount++;
-                    progressDialog.addLog(`✓ Updated: ${npcData.name}`, 'success');
-                }
-                else if (result.replaced)
-                {
-                    replaceCount++;
-                    progressDialog.addLog(`✓ Replaced: ${npcData.name}`, 'success');
-                }
-                else
-                {
-                    progressDialog.addLog(`✓ Created: ${npcData.name}`, 'success');
-                }
-                successCount++;
-            }
-            catch (error)
-            {
-                console.error(`Error importing ${npcData.name}:`, error);
-                progressDialog.addLog(`✗ Failed: ${npcData.name} - ${error.message}`, 'error');
-                errorCount++;
-            }
-
-            progressDialog.incrementProgress();
-        }
-
-        let summaryParts = [];
-        const created = successCount - replaceCount - updateCount;
-        if (created > 0)
-            summaryParts.push(`${created} created`);
-        if (updateCount > 0)
-            summaryParts.push(`${updateCount} updated`);
-        if (replaceCount > 0)
-            summaryParts.push(`${replaceCount} replaced`);
-        if (errorCount > 0)
-            summaryParts.push(`${errorCount} failed`);
-
-        const summaryMessage = `Import completed: ${summaryParts.join(', ')}`;
-        progressDialog.addLog(summaryMessage, errorCount > 0 ? 'warning' : 'success');
-
-        if (successCount > 0)
-        {
-            ui.notifications.info(`✓ Imported ${successCount} NPC(s)`);
-        }
-        if (errorCount > 0)
-        {
-            ui.notifications.warn(`✗ ${errorCount} NPC(s) failed to import`);
-        }
+            const mapping = mappings?.[npcIndex];
+            return { npc: { name: npcData.name, json: npcData }, replace: mapping?.targetActor ? mapping : null };
+        });
+        await importSelectedNPCs(selection, { customTierMode, updateExisting }, windowLog("Import log", "JSON → Foundry"));
     };
 
     input.click();
-}
-
-async function _importPilotFiles(pilots, updateExisting)
-{
-    const progress = new ImportProgressDialog(pilots.length);
-    progress.render(true);
-    progress.addLog(`Starting import of ${pilots.length} pilot(s)...`, "info");
-    let created = 0, updated = 0, failed = 0;
-    for (const pilot of pilots)
-    {
-        try
-        {
-            progress.addLog(`Importing: ${pilot.name}...`, "info");
-            const result = await importOnePilot(pilot.json, { updateExisting });
-            if (result.updated) { updated++; progress.addLog(`✓ Updated: ${pilot.name}`, "success"); }
-            else           { created++; progress.addLog(`✓ Created: ${pilot.name}`, "success"); }
-        }
-        catch (e)
-        {
-            console.error(`pilot import failed for ${pilot.name}:`, e);
-            progress.addLog(`✗ Failed: ${pilot.name} - ${e.message}`, "error");
-            failed++;
-        }
-        progress.incrementProgress();
-    }
-    const parts = [];
-    if (created)
-        parts.push(`${created} created`);
-    if (updated)
-        parts.push(`${updated} updated`);
-    if (failed)
-        parts.push(`${failed} failed`);
-    progress.addLog(`Pilot import done: ${parts.join(", ")}`, failed ? "warning" : "success");
-    if (created + updated > 0)
-        ui.notifications.info(`✓ Imported ${created + updated} pilot(s)`);
-    if (failed > 0)
-        ui.notifications.warn(`✗ ${failed} pilot(s) failed`);
 }

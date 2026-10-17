@@ -7,6 +7,7 @@ import {
     prefetchPackDocs
 } from "./refresh-core.js";
 import { loadLcpFile } from "./refresh-lcp-file.js";
+import { escapeHtml, getModuleSetting, setModuleSetting } from "../utils.js";
 
 const STATUS_LABELS = {
     synced: "Synced",
@@ -52,14 +53,14 @@ class RefreshProgressDialog
         const root = this.dialog?.element?.[0];
         if (!root)
             return;
-        const pct = total ? Math.round((current / total) * 100) : 0;
-        const lbl = root.querySelector(".refresh-progress-label");
+        const percent = total ? Math.round((current / total) * 100) : 0;
+        const labelEl = root.querySelector(".refresh-progress-label");
         const fill = root.querySelector(".refresh-progress-fill");
         const counts = root.querySelector(".refresh-progress-counts");
-        if (lbl)
-            lbl.textContent = this.label;
+        if (labelEl)
+            labelEl.textContent = this.label;
         if (fill)
-            fill.style.width = pct + "%";
+            fill.style.width = percent + "%";
         if (counts)
             counts.textContent = `${current} / ${total}`;
     }
@@ -105,10 +106,10 @@ class RefreshPackPicker
                 ? game.packs.filter(pack => pack.metadata.type === "Actor")
                 : [];
 
-            const savedItem = game.settings.get("lancer-npc-import", this.SETTING_ITEM) || [];
-            const savedActor = game.settings.get("lancer-npc-import", this.SETTING_ACTOR) || [];
+            const savedItem = getModuleSetting(this.SETTING_ITEM) || [];
+            const savedActor = getModuleSetting(this.SETTING_ACTOR) || [];
             const savedFolders = mode === "all"
-                ? (game.settings.get("lancer-npc-import", this.SETTING_FOLDERS) || [])
+                ? (getModuleSetting(this.SETTING_FOLDERS) || [])
                 : [];
             const itemSelected = new Set(savedItem.length ? savedItem : itemPacks.map(pack => pack.collection));
             const actorSelected = new Set(savedActor);
@@ -256,7 +257,7 @@ class RefreshPackPicker
             let lcpLabel = null;
 
             let resolved = false;
-            const dlg = new Dialog({
+            const dialog = new Dialog({
                 title: "Refresh: select compendiums",
                 content,
                 buttons: {
@@ -266,27 +267,27 @@ class RefreshPackPicker
                         callback: html =>
                         {
                             const root = html instanceof HTMLElement ? html : html[0];
-                            const itemColl = Array.from(root.querySelectorAll('[data-kind="item"] input[type="checkbox"]:checked'))
+                            const itemCollections = Array.from(root.querySelectorAll('[data-kind="item"] input[type="checkbox"]:checked'))
                                 .filter(input => input.dataset.collection)
                                 .map(input => input.dataset.collection);
-                            let actorColl = [];
+                            let actorCollections = [];
                             let folderIds = [];
                             if (mode === "all")
                             {
                                 const checked = Array.from(root.querySelectorAll('[data-kind="actor"] input[type="checkbox"]:checked'));
-                                actorColl = checked.filter(input => input.dataset.collection).map(input => input.dataset.collection);
+                                actorCollections = checked.filter(input => input.dataset.collection).map(input => input.dataset.collection);
                                 folderIds = checked.filter(input => input.dataset.folder).map(input => input.dataset.folder);
                             }
-                            game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_ITEM, itemColl);
+                            setModuleSetting(RefreshPackPicker.SETTING_ITEM, itemCollections);
                             if (mode === "all")
                             {
-                                game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_ACTOR, actorColl);
-                                game.settings.set("lancer-npc-import", RefreshPackPicker.SETTING_FOLDERS, folderIds);
+                                setModuleSetting(RefreshPackPicker.SETTING_ACTOR, actorCollections);
+                                setModuleSetting(RefreshPackPicker.SETTING_FOLDERS, folderIds);
                             }
                             resolved = true;
                             resolve({
-                                itemPacks: itemPacks.filter(pack => itemColl.includes(pack.collection)),
-                                actorPacks: actorPacks.filter(pack => actorColl.includes(pack.collection)),
+                                itemPacks: itemPacks.filter(pack => itemCollections.includes(pack.collection)),
+                                actorPacks: actorPacks.filter(pack => actorCollections.includes(pack.collection)),
                                 folderIds,
                                 lcpLids,
                                 lcpLabel
@@ -312,11 +313,11 @@ class RefreshPackPicker
                 classes: ["lancer-refresh-pack-dialog", "lancer-dialog-base", "lancer-no-title"]
             });
 
-            dlg.render(true);
+            dialog.render(true);
 
             Hooks.once("renderDialog", (app, html) =>
             {
-                if (app !== dlg)
+                if (app !== dialog)
                     return;
                 const root = html instanceof HTMLElement ? html : html[0];
                 root.querySelectorAll('[data-bulk]').forEach(btn =>
@@ -326,7 +327,7 @@ class RefreshPackPicker
                         ev.preventDefault();
                         const section = btn.closest('.refresh-pack-section');
                         const checked = btn.dataset.bulk === "all";
-                        section.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
+                        section.querySelectorAll('input[type="checkbox"]').forEach(checkbox => { checkbox.checked = checked; });
                     });
                 });
 
@@ -364,7 +365,7 @@ class RefreshPackPicker
                     }
                     catch (err)
                     {
-                        console.error("refresh: LCP load failed", err);
+                        console.error("lancer-npc-import | refresh | LCP load failed", err);
                         lcpLids = null;
                         lcpLabel = null;
                         setStatus(`Failed: ${err.message}`, false);
@@ -467,22 +468,22 @@ export class RefreshItemsDialog
             for (const actor of worldActors)
                 allActors.push({ actor, locked: false });
 
-            for (let pi = 0; pi < actorPacks.length; pi++)
+            for (let packIndex = 0; packIndex < actorPacks.length; packIndex++)
             {
-                const pack = actorPacks[pi];
-                progress.update(pi, actorPacks.length, `Loading pack: ${pack.metadata.label}`);
+                const pack = actorPacks[packIndex];
+                progress.update(packIndex, actorPacks.length, `Loading pack: ${pack.metadata.label}`);
                 await tick();
-                let docs;
+                let packActors;
                 try
                 {
-                    docs = await pack.getDocuments();
+                    packActors = await pack.getDocuments();
                 }
                 catch (err)
                 {
-                    console.warn(`refresh: failed to load actors from ${pack.collection}`, err);
+                    console.warn(`lancer-npc-import | refresh | failed to load actors from ${pack.collection}`, err);
                     continue;
                 }
-                for (const actor of docs)
+                for (const actor of packActors)
                 {
                     if (isRefreshableActor(actor))
                         allActors.push({ actor, locked: !!pack.locked });
@@ -620,9 +621,9 @@ export class RefreshItemsDialog
                     return;
                 if (row.dataset.status !== "modified")
                     return;
-                const cb = row.querySelector("input.refresh-row-cb");
-                if (cb)
-                    cb.checked = true;
+                const checkbox = row.querySelector("input.refresh-row-cb");
+                if (checkbox)
+                    checkbox.checked = true;
             });
         });
         handleClick('[data-act="uncheck-all"]', rootEl =>
@@ -631,9 +632,9 @@ export class RefreshItemsDialog
             {
                 if (row.style.display === "none")
                     return;
-                const cb = row.querySelector("input.refresh-row-cb");
-                if (cb)
-                    cb.checked = false;
+                const checkbox = row.querySelector("input.refresh-row-cb");
+                if (checkbox)
+                    checkbox.checked = false;
             });
         });
     }
@@ -711,7 +712,7 @@ export class RefreshItemsDialog
             ? `<div class="lancer-info-box refresh-locked"><i class="fas fa-lock"></i><span>Pack is locked. Unlock it to refresh actors inside.</span></div>`
             : "";
         const rows = target.items
-            .map((cls, ii) => this.#renderRow(cls, targetIndex, ii, target.locked))
+            .map((entry, rowIndex) => this.#renderRow(entry, targetIndex, rowIndex, target.locked))
             .join("");
         return `
             <div class="refresh-actor-section" data-target="${targetIndex}" data-expanded="0">
@@ -746,36 +747,36 @@ export class RefreshItemsDialog
         return parts.join(" ");
     }
 
-    #renderRow(cls, ti, ii, locked)
+    #renderRow(entry, targetIndex, rowIndex, locked)
     {
-        const checkable = ACTIONABLE.has(cls.status) && !locked;
+        const checkable = ACTIONABLE.has(entry.status) && !locked;
         const checkbox = checkable
-            ? `<input type="checkbox" class="refresh-row-cb" data-target="${ti}" data-row="${ii}">`
+            ? `<input type="checkbox" class="refresh-row-cb" data-target="${targetIndex}" data-row="${rowIndex}">`
             : `<span class="refresh-row-cb-disabled"></span>`;
 
-        const badge = `<span class="npc-status-badge ${cls.status}">${STATUS_LABELS[cls.status] || cls.status}</span>`;
-        const expanded = cls.status !== "synced";
-        const diffBlock = cls.diff?.length
-            ? `<div class="refresh-diff">${cls.diff.map(diffEntry => this.#renderDiffLine(diffEntry)).join("")}</div>`
+        const badge = `<span class="npc-status-badge ${entry.status}">${STATUS_LABELS[entry.status] || entry.status}</span>`;
+        const expanded = entry.status !== "synced";
+        const diffBlock = entry.diff?.length
+            ? `<div class="refresh-diff">${entry.diff.map(diffEntry => this.#renderDiffLine(diffEntry)).join("")}</div>`
             : "";
-        const warnBlock = cls.status === "unlinked"
+        const warnBlock = entry.status === "unlinked"
             ? `<div class="refresh-warn"><i class="fas fa-exclamation-triangle"></i> Replaces the item, changes its embedded id. Mech loadout slots may need re-linking.</div>`
             : "";
-        const missingBlock = cls.status === "missing"
-            ? `<div class="refresh-missing">No compendium entry for LID <code>${escapeHtml(cls.lid || "")}</code></div>`
+        const missingBlock = entry.status === "missing"
+            ? `<div class="refresh-missing">No compendium entry for LID <code>${escapeHtml(entry.lid || "")}</code></div>`
             : "";
         const body = (diffBlock || warnBlock || missingBlock)
             ? `<div class="refresh-row-body" ${expanded ? "" : "hidden"}>${diffBlock}${warnBlock}${missingBlock}</div>`
             : "";
 
         return `
-            <div class="refresh-row" data-status="${cls.status}" data-expanded="${expanded ? "1" : "0"}">
+            <div class="refresh-row" data-status="${entry.status}" data-expanded="${expanded ? "1" : "0"}">
                 <div class="refresh-row-summary">
                     <span class="refresh-row-toggle" data-act="toggle-row">${body ? (expanded ? "▼" : "▶") : ""}</span>
                     ${checkbox}
                     ${badge}
-                    <span class="refresh-row-name" data-act="toggle-row">${escapeHtml(cls.actorItem.name)}</span>
-                    <span class="refresh-row-type">${escapeHtml(cls.actorItem.type)}</span>
+                    <span class="refresh-row-name" data-act="toggle-row">${escapeHtml(entry.actorItem.name)}</span>
+                    <span class="refresh-row-type">${escapeHtml(entry.actorItem.type)}</span>
                 </div>
                 ${body}
             </div>
@@ -792,24 +793,24 @@ export class RefreshItemsDialog
         const root = html instanceof HTMLElement ? html : html[0];
         const overall = { updated: 0, replaced: [], failed: [], actorsTouched: 0 };
 
-        for (let ti = 0; ti < this.targets.length; ti++)
+        for (let targetIndex = 0; targetIndex < this.targets.length; targetIndex++)
         {
-            const target = this.targets[ti];
+            const target = this.targets[targetIndex];
             if (target.locked)
                 continue;
             const selections = [];
-            for (let ii = 0; ii < target.items.length; ii++)
+            for (let rowIndex = 0; rowIndex < target.items.length; rowIndex++)
             {
-                const cls = target.items[ii];
-                if (!ACTIONABLE.has(cls.status))
+                const entry = target.items[rowIndex];
+                if (!ACTIONABLE.has(entry.status))
                     continue;
-                const cb = root.querySelector(`input.refresh-row-cb[data-target="${ti}"][data-row="${ii}"]`);
-                if (!cb || !cb.checked)
+                const checkbox = root.querySelector(`input.refresh-row-cb[data-target="${targetIndex}"][data-row="${rowIndex}"]`);
+                if (!checkbox?.checked)
                     continue;
                 selections.push({
-                    actorItem: cls.actorItem,
-                    packDoc: cls.packDoc,
-                    action: cls.status === "unlinked" ? "replace" : "update"
+                    actorItem: entry.actorItem,
+                    packDoc: entry.packDoc,
+                    action: entry.status === "unlinked" ? "replace" : "update"
                 });
             }
             if (!selections.length)
@@ -837,7 +838,7 @@ export class RefreshItemsDialog
 
         if (overall.replaced.length)
         {
-            console.log("lancer-npc-import refresh - replaced items (oldId -> newId):", overall.replaced);
+            console.log("lancer-npc-import | refresh | replaced items (oldId -> newId):", overall.replaced);
         }
     }
 }
@@ -864,14 +865,6 @@ function setSectionExpanded(section, expanded)
         toggle.textContent = expanded ? "▼" : "▶";
 }
 
-function escapeHtml(value)
-{
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
 
 function formatVal(value)
 {

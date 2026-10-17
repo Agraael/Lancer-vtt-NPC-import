@@ -1,8 +1,8 @@
 {
     "id": "lancer-npc-import",
-    "title": "Lancer NPC Import",
-    "description": "Module to import Lancer NPCs into FoundryVTT",
-    "version": "1.6.0",
+    "title": "Lancer Comp/Con Sync",
+    "description": "Import and export Lancer pilots and NPCs between Comp/Con and Foundry, plus v3 LCP import and item refresh tools.",
+    "version": "2.0.0",
     "compatibility": {
         "minimum": "13",
         "verified": "13"
@@ -23,7 +23,7 @@
         "styles/lancer-npc-import.css"
     ],
     "relationships": {
-        "systems": [
+        "system": [
             {
                 "id": "lancer",
                 "type": "system",
@@ -36,8 +36,11 @@
             {
                 "id": "lancer-style-library",
                 "type": "module",
+                "url": "https://github.com/Agraael/lancer-style-library",
+                "manifest": "https://github.com/Agraael/lancer-style-library/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/lancer-style-library/releases/latest/download/module.zip",
                 "compatibility": {
-                    "minimum": "1.0.0"
+                    "minimum": "1.2.0"
                 }
             }
         ]
@@ -47,7 +50,7 @@
     ],
     "url": "",
     "manifest": "https://github.com/Agraael/Lancer-vtt-NPC-import/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/Lancer-vtt-NPC-import/releases/download/1.6.0/module.zip",
+    "download": "https://github.com/Agraael/Lancer-vtt-NPC-import/releases/download/2.0.0/module.zip",
     "license": "",
     "readme": "README.md"
 }

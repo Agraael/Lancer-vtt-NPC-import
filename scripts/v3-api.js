@@ -1,14 +1,16 @@
-// Thin V3 HTTP layer for NPC cloud import. Pilot import is now the system's job.
+// Comp/Con V3 HTTP layer: CORS proxies, endpoints, auth headers, cloud listing, pilot JSON normalization.
+
+import { getModuleSetting } from "./utils.js";
 
 export const CORS_PROXIES = [
     { name: "corsproxy.io",         wrap: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
     { name: "lasossis-lancer-cors", wrap: url => `https://lasossis-lancer-cors.m-cescutti.workers.dev/?url=${encodeURIComponent(url)}` },
 ];
 
-let _proxyIdx = 0;
+let _activeProxyIndex = 0;
 let _workerDownWarned = false;
 let _originalFetch = null;
-const WORKER_PROXY_NAME = "lasossis-lancer-cors";
+export const WORKER_PROXY_NAME = "lasossis-lancer-cors";
 
 function _maybeWarnWorkerDown(proxyName)
 {
@@ -29,14 +31,14 @@ export async function corsProxyFetch(targetUrl, init, options = {})
     let lastErr = null;
     for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++)
     {
-        const idx = (_proxyIdx + attempt) % CORS_PROXIES.length;
-        const proxy = CORS_PROXIES[idx];
+        const proxyIndex = (_activeProxyIndex + attempt) % CORS_PROXIES.length;
+        const proxy = CORS_PROXIES[proxyIndex];
         try
         {
             const resp = await fetcher.call(window, proxy.wrap(targetUrl), init);
             if (resp.status === 403 || resp.status === 429 || resp.status >= 500)
             {
-                console.warn(`[V3] CORS proxy ${proxy.name} returned ${resp.status}, trying next`);
+                console.warn(`lancer-npc-import | V3 | CORS proxy ${proxy.name} returned ${resp.status}, trying next`);
                 lastErr = new Error(`Proxy ${proxy.name} returned ${resp.status}`);
                 _maybeWarnWorkerDown(proxy.name);
                 continue;
@@ -51,31 +53,31 @@ export async function corsProxyFetch(targetUrl, init, options = {})
                 catch (parseErr)
                 {
                     const preview = (text || "").slice(0, 80);
-                    console.warn(`[V3] CORS proxy ${proxy.name} returned non-JSON body (${preview}...), trying next`);
+                    console.warn(`lancer-npc-import | V3 | CORS proxy ${proxy.name} returned non-JSON body (${preview}...), trying next`);
                     lastErr = parseErr;
                     _maybeWarnWorkerDown(proxy.name);
                     continue;
                 }
-                if (idx !== _proxyIdx)
+                if (proxyIndex !== _activeProxyIndex)
                 {
-                    console.log(`[V3] CORS proxy switched to ${proxy.name}`);
-                    _proxyIdx = idx;
+                    console.log(`lancer-npc-import | V3 | CORS proxy switched to ${proxy.name}`);
+                    _activeProxyIndex = proxyIndex;
                 }
                 return new Response(text, {
                     status: resp.status,
                     headers: { "Content-Type": "application/json" }
                 });
             }
-            if (idx !== _proxyIdx)
+            if (proxyIndex !== _activeProxyIndex)
             {
-                console.log(`[V3] CORS proxy switched to ${proxy.name}`);
-                _proxyIdx = idx;
+                console.log(`lancer-npc-import | V3 | CORS proxy switched to ${proxy.name}`);
+                _activeProxyIndex = proxyIndex;
             }
             return resp;
         }
         catch (e)
         {
-            console.warn(`[V3] CORS proxy ${proxy.name} failed:`, e?.message || e);
+            console.warn(`lancer-npc-import | V3 | CORS proxy ${proxy.name} failed:`, e?.message || e);
             lastErr = e;
             _maybeWarnWorkerDown(proxy.name);
         }
@@ -85,15 +87,8 @@ export async function corsProxyFetch(targetUrl, init, options = {})
 
 function _setting(key, fallback)
 {
-    try
-    {
-        const value = game.settings.get("lancer-npc-import", key);
-        return (typeof value === "string" && value.length > 0) ? value : fallback;
-    }
-    catch
-    {
-        return fallback;
-    }
+    const value = getModuleSetting(key);
+    return (typeof value === "string" && value.length > 0) ? value : fallback;
 }
 export function getV3ApiBase()
 {
@@ -107,36 +102,15 @@ export function getV3Cdn()
 {
     return _setting("v3Cdn", "https://ds69h3g1zxwgy.cloudfront.net").replace(/\/+$/, "");
 }
-// Kept for share-code-test diagnostic only.
-export function getV2ShareApiHosts()
-{
-    const raw = _setting("v2ShareApi", "https://api.compcon.app/share");
-    return raw.split(",").map(host => host.trim()).filter(Boolean);
-}
-export function getV2ShareApiPrimary()
-{
-    return getV2ShareApiHosts()[0] || "https://api.compcon.app/share";
-}
-export function getV2ShareApiKey()
-{
-    return _setting("v2ShareApiKey", "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf");
-}
 export function v3DebugEnabled()
 {
-    try
-    {
-        return !!game.settings.get("lancer-npc-import", "v3Debug");
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting("v3Debug", false);
 }
 export function v3Log(label, data)
 {
     if (!v3DebugEnabled())
         return;
-    console.log(`[V3-DEBUG] ${label}`, data);
+    console.log(`lancer-npc-import | V3 debug | ${label}`, data);
 }
 
 export function unwrapData(json)
@@ -146,7 +120,27 @@ export function unwrapData(json)
     return json;
 }
 
-// V3 -> V2 pilot shape, used by pilot-reserves-patch on JSON imports.
+export function latestPerUri(items)
+{
+    const byUri = new Map();
+    for (const item of items)
+    {
+        const key = item.uri || item.SortKey || item.sortkey || item.sk;
+        const kept = byUri.get(key);
+        if (!kept || (Number(item.updated) || 0) > (Number(kept.updated) || 0))
+            byUri.set(key, item);
+    }
+    return [...byUri.values()];
+}
+
+export function liveCloudItems(items, prefix)
+{
+    const wanted = prefix.toLowerCase();
+    return latestPerUri(items.filter(item => (item.SortKey || item.sortkey || item.sk || "").toLowerCase().startsWith(wanted)))
+        .filter(item => !item.deleted);
+}
+
+// V3 -> V2 pilot shape, used by the cloud pilot list and by pilot-reserves-patch on imports.
 export function normalizePilotData(pilotData)
 {
     if (!pilotData || typeof pilotData !== 'object')
@@ -159,18 +153,20 @@ export function normalizePilotData(pilotData)
 
     if (!pilotData.loadout && Array.isArray(pilotData.loadouts) && pilotData.loadouts.length)
     {
-        const idx = pilotData.active_index ?? pilotData.active_loadout_index ?? 0;
-        pilotData.loadout = pilotData.loadouts[idx] || pilotData.loadouts[0];
+        const activeIndex = pilotData.active_index ?? pilotData.active_loadout_index ?? 0;
+        pilotData.loadout = pilotData.loadouts[activeIndex] || pilotData.loadouts[0];
     }
 
-    if (Array.isArray(pilotData.core_bonuses))
+    const isV3 = "originId" in pilotData || "EXPORT_TYPE" in pilotData;
+
+    if (!isV3 && Array.isArray(pilotData.core_bonuses))
     {
-        pilotData.core_bonuses = pilotData.core_bonuses.map(cb =>
-            typeof cb === 'string' ? cb : (cb?.id || cb?.data?.id || cb)
+        pilotData.core_bonuses = pilotData.core_bonuses.map(coreBonus =>
+            typeof coreBonus === 'string' ? coreBonus : (coreBonus?.id || coreBonus?.data?.id || coreBonus)
         );
     }
 
-    if (Array.isArray(pilotData.licenses))
+    if (!isV3 && Array.isArray(pilotData.licenses))
     {
         pilotData.licenses = pilotData.licenses.map(license =>
         {
@@ -218,32 +214,44 @@ export function normalizePilotData(pilotData)
 }
 
 // Lazy import to dodge the cognito-auth -> v3-api cycle.
-export async function v3ApiFetch(path)
+export async function v3AuthHeaders()
 {
-    const { getValidJwt } = await import("./auth/cognito-auth.js");
-    const v3Base = getV3ApiBase();
+    const { getValidJwt, getUserSub } = await import("./auth/cognito-auth.js");
     const jwt = await getValidJwt();
-    const headers = { "Content-Type": "application/json", "x-api-key": getV3ApiKey() };
-    if (jwt)
-        headers["Authorization"] = jwt;
-
-    const targetUrl = `${v3Base}${path}`;
-    const resp = await corsProxyFetch(targetUrl, { method: "GET", headers }, { json: true });
-    if (!resp.ok)
-        throw new Error(`V3 API ${resp.status} ${resp.statusText}`);
-    return resp.json();
+    if (!jwt)
+        throw new Error("NOT_LOGGED_IN");
+    const userId = getUserSub();
+    if (!userId)
+        throw new Error("NO_USER_SUB");
+    return {
+        headers: {
+            "Content-Type": "application/json",
+            "x-api-key": getV3ApiKey(),
+            "Authorization": jwt
+        },
+        userId
+    };
 }
 
-export function sanitizeName(name)
+export function cdnFetch(uri)
 {
-    return (name || 'unnamed').replace(/[^a-zA-Z\d\s:]/g, " ");
+    // ?cb= busts CloudFront's per-Origin cache.
+    return fetch(`${getV3Cdn()}/${uri}?cb=${Date.now()}`, { cache: "no-store" });
 }
 
-// Compat shim for share-code-test.
-export async function getJwtTokenFromV5Auth()
+export async function fetchCloudItems()
 {
-    const { getValidJwt } = await import("./auth/cognito-auth.js");
-    return getValidJwt();
+    const { headers, userId } = await v3AuthHeaders();
+    const userUrl = `${getV3ApiBase()}/user?user_id=${encodeURIComponent(userId)}`;
+    let response = await corsProxyFetch(`${userUrl}&scope=changed&since=0`, { method: "GET", headers }, { json: true });
+    if (!response.ok)
+    {
+        response = await corsProxyFetch(`${userUrl}&scope=all`, { method: "GET", headers }, { json: true });
+        if (!response.ok)
+            throw new Error(`V3 API ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.items || data.Items || []);
 }
 
 // Route Lancer v2.12's native share-code import through our CORS proxy: it hits
@@ -270,10 +278,10 @@ export function installV3CodeFetchPatch()
             }
             catch (e)
             {
-                console.warn("[V3] CORS proxy failed for v3/code, falling back to direct:", e?.message || e);
+                console.warn("lancer-npc-import | V3 | CORS proxy failed for v3/code, falling back to direct:", e?.message || e);
             }
         }
         return _originalFetch(input, init);
     };
-    console.log("[V3] window.fetch patched: api.compcon.app/v3/code routed through CORS proxy");
+    console.log("lancer-npc-import | V3 | window.fetch patched: api.compcon.app/v3/code routed through CORS proxy");
 }

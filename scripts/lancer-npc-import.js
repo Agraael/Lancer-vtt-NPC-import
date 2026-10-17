@@ -10,6 +10,7 @@ import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
 import { isRefreshableActor } from "./refresh/refresh-core.js";
 import { COGNITO_SETTINGS_KEYS } from "./auth/cognito-auth.js";
 import { installV3CodeFetchPatch } from "./v3-api.js";
+import { MODULE_ID } from "./utils.js";
 
 export async function ImportActor()
 {
@@ -22,18 +23,18 @@ Hooks.once('init', () =>
     if (game.system?.id === 'lancer')
         installV3CodeFetchPatch();
 
-    game.settings.register("lancer-npc-import", "defaultDownloadPortrait", {
+    game.settings.register(MODULE_ID, "defaultDownloadPortrait", {
         name: "Download portraits by default",
-        hint: "If enabled, the portrait download checkbox will be checked by default in the import dialog.",
+        hint: "Ticks Save portraits by default in the Comp/Con cloud dialog.",
         scope: "client",
         config: true,
         type: Boolean,
         default: false
     });
 
-    game.settings.register("lancer-npc-import", "portraitStoragePath", {
+    game.settings.register(MODULE_ID, "portraitStoragePath", {
         name: "Portrait Storage Path",
-        hint: "The folder inside 'User Data' where portraits will be saved.",
+        hint: "Folder inside this module's folder where portraits are saved.",
         scope: "world",
         config: true,
         type: String,
@@ -41,7 +42,7 @@ Hooks.once('init', () =>
     });
 
     // Endpoint overrides, editable without code release.
-    game.settings.register("lancer-npc-import", "v3ApiBase", {
+    game.settings.register(MODULE_ID, "v3ApiBase", {
         name: "V3 API Base URL",
         hint: "Comp/Con API gateway, no trailing slash. Matches what compcon.app itself uses.",
         scope: "world",
@@ -51,7 +52,7 @@ Hooks.once('init', () =>
         requiresReload: true
     });
 
-    game.settings.register("lancer-npc-import", "v3ApiKey", {
+    game.settings.register(MODULE_ID, "v3ApiKey", {
         name: "V3 API Key",
         hint: "x-api-key header for the Comp/Con API.",
         scope: "world",
@@ -61,7 +62,7 @@ Hooks.once('init', () =>
         requiresReload: true
     });
 
-    game.settings.register("lancer-npc-import", "v3Cdn", {
+    game.settings.register(MODULE_ID, "v3Cdn", {
         name: "V3 CDN Base URL",
         hint: "CloudFront host for V3 item JSON, no trailing slash.",
         scope: "world",
@@ -71,53 +72,33 @@ Hooks.once('init', () =>
         requiresReload: true
     });
 
-    // Kept for the share-code-test diagnostic tool; not used in normal flow.
-    game.settings.register("lancer-npc-import", "v2ShareApi", {
-        name: "V2 Share API URL (diagnostic)",
-        hint: "Hosts for the legacy share API. Comma-separated. Used only by Share Code Test.",
-        scope: "world",
-        config: false,
-        type: String,
-        default: "https://api.compcon.app/share,https://ujgatmvzlg.execute-api.us-east-1.amazonaws.com/prod/share"
-    });
-
-    game.settings.register("lancer-npc-import", "v2ShareApiKey", {
-        name: "V2 Share API Key (diagnostic)",
-        hint: "x-api-key header used by Share Code Test.",
-        scope: "world",
-        config: false,
-        type: String,
-        default: "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf"
-    });
-
-    // Comp/Con sign-in token storage. Hidden from the settings UI; manipulated
-    // through the Sign In / Sign Out buttons in the NPC import dialog.
-    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.email, {
+    // Comp/Con sign-in storage, written by the Comp/Con Sign In dialog.
+    game.settings.register(MODULE_ID, COGNITO_SETTINGS_KEYS.email, {
         scope: "client", config: false, type: String, default: ""
     });
-    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.idToken, {
+    game.settings.register(MODULE_ID, COGNITO_SETTINGS_KEYS.idToken, {
         scope: "client", config: false, type: String, default: ""
     });
-    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.refreshToken, {
+    game.settings.register(MODULE_ID, COGNITO_SETTINGS_KEYS.refreshToken, {
         scope: "client", config: false, type: String, default: ""
     });
-    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.expiry, {
+    game.settings.register(MODULE_ID, COGNITO_SETTINGS_KEYS.expiry, {
         scope: "client", config: false, type: Number, default: 0
     });
-    game.settings.register("lancer-npc-import", COGNITO_SETTINGS_KEYS.sub, {
+    game.settings.register(MODULE_ID, COGNITO_SETTINGS_KEYS.sub, {
         scope: "client", config: false, type: String, default: ""
     });
 
-    game.settings.registerMenu("lancer-npc-import", "lcpDebugDiff", {
+    game.settings.registerMenu(MODULE_ID, "lcpDebugDiff", {
         name: "LCP Debug Diff",
         label: "Open LCP Diff Tool",
-        hint: "Pick two LCPs and compare what each would import (no actual import is performed).",
+        hint: "Compares what two LCPs would import, without importing.",
         icon: "fas fa-not-equal",
         type: LcpDebugDiffMenu,
         restricted: true
     });
 
-    game.settings.registerMenu("lancer-npc-import", "shareCodeTest", {
+    game.settings.registerMenu(MODULE_ID, "shareCodeTest", {
         name: "Share Code Test",
         label: "Open Share Code Test",
         hint: "Tests a v3 share code against each CORS proxy and shows the raw JSON response.",
@@ -126,16 +107,16 @@ Hooks.once('init', () =>
         restricted: true
     });
 
-    game.settings.registerMenu("lancer-npc-import", "fixTokenSizes", {
+    game.settings.registerMenu(MODULE_ID, "fixTokenSizes", {
         name: "Fix Token Sizes",
         label: "Fix Token Sizes",
-        hint: "Set each actor's prototype token size to match its Lancer size so drag-drops snap correctly. Skips manual-size actors; half-size units become 1x1.",
+        hint: "Matches each prototype token size to the actor's Lancer size (manual sizes skipped, half-size becomes 1x1).",
         icon: "fas fa-expand",
         type: FixTokenSizesMenu,
         restricted: true
     });
 
-    game.settings.register("lancer-npc-import", "v3Debug", {
+    game.settings.register(MODULE_ID, "v3Debug", {
         name: "V3 debug logging",
         hint: "Logs V3 /code response, CDN payload, unwrap/normalize steps to console.",
         scope: "client",
@@ -144,7 +125,7 @@ Hooks.once('init', () =>
         default: false
     });
 
-    game.settings.register("lancer-npc-import", "lastNotifiedVersion", {
+    game.settings.register(MODULE_ID, "lastNotifiedVersion", {
         name: "Last Notified Version",
         scope: "world",
         config: false,
@@ -152,14 +133,14 @@ Hooks.once('init', () =>
         default: ""
     });
 
-    game.settings.register("lancer-npc-import", "refreshItemPacks", {
+    game.settings.register(MODULE_ID, "refreshItemPacks", {
         scope: "client",
         config: false,
         type: Array,
         default: []
     });
 
-    game.settings.register("lancer-npc-import", "refreshActorPacks", {
+    game.settings.register(MODULE_ID, "refreshActorPacks", {
         scope: "client",
         config: false,
         type: Array,
@@ -167,7 +148,7 @@ Hooks.once('init', () =>
     });
 
     // "__nofolder__" sentinel = world actors with no folder
-    game.settings.register("lancer-npc-import", "refreshFolders", {
+    game.settings.register(MODULE_ID, "refreshFolders", {
         scope: "client",
         config: false,
         type: Array,
@@ -180,7 +161,7 @@ Hooks.once('ready', async () =>
     if (game.system.id !== 'lancer')
         return;
 
-    checkModuleUpdate('lancer-npc-import');
+    checkModuleUpdate(MODULE_ID);
     patchPilotImportReserves();
     registerV3LcpShim();
     registerSnapshotApi();
@@ -199,8 +180,8 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
         return;
 
     const importButton = $(`
-        <button class="import-npc-button" title="Import pilots or NPCs from Comp/Con or JSON files">
-            <i class="fas fa-file-import"></i> Import Actor
+        <button class="import-npc-button" title="Import or export pilots and NPCs with Comp/Con, or import JSON files">
+            <i class="fas fa-arrow-right-arrow-left"></i> Comp/Con Sync
         </button>
     `);
     importButton.click(() =>
@@ -216,9 +197,9 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
     `);
     refreshButton.click(async () =>
     {
-        const dlg = await RefreshItemsDialog.forAllActors();
-        if (dlg)
-            dlg.render(true);
+        const dialog = await RefreshItemsDialog.forAllActors();
+        if (dialog)
+            dialog.render(true);
     });
     headerActions.append(refreshButton);
 });
@@ -238,9 +219,9 @@ Hooks.on('getActorSheetHeaderButtons', (app, buttons) =>
         label: 'Refresh',
         onclick: async () =>
         {
-            const dlg = await RefreshItemsDialog.forActor(actor);
-            if (dlg)
-                dlg.render(true);
+            const dialog = await RefreshItemsDialog.forActor(actor);
+            if (dialog)
+                dialog.render(true);
         }
     });
 });

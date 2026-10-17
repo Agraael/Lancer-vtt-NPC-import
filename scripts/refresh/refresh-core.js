@@ -23,7 +23,7 @@ export async function buildLidIndex(progress = null, packs = null)
         }
         catch (err)
         {
-            console.warn(`lancer-npc-import refresh: failed to index pack ${pack.collection}`, err);
+            console.warn(`lancer-npc-import | refresh | failed to index pack ${pack.collection}`, err);
             continue;
         }
         for (const entry of entries)
@@ -102,7 +102,7 @@ export async function prefetchPackDocs(needed, progress = null, concurrency = 16
             }
             catch (err)
             {
-                console.warn(`refresh: failed to load ${key}`, err);
+                console.warn(`lancer-npc-import | refresh | failed to load ${key}`, err);
             }
             finally
             {
@@ -142,7 +142,7 @@ export async function classifyActorItems(actor, lidIndex, cache = null, lidWhite
             }
             catch (err)
             {
-                console.warn(`refresh: failed to load ${lid} from ${chosen.pack.collection}`, err);
+                console.warn(`lancer-npc-import | refresh | failed to load ${lid} from ${chosen.pack.collection}`, err);
             }
         }
         if (!packDoc)
@@ -240,12 +240,12 @@ export async function applyRefresh(actor, selections)
         }
         catch (err)
         {
-            console.error("refresh: update batch failed", err);
+            console.error("lancer-npc-import | refresh | update batch failed", err);
             report.failed.push({ kind: "update", error: err.message });
         }
     }
 
-    // delete+create changes the embedded id; mech loadout slots may need re-link
+    // Delete and create changes the embedded id, so mech loadout slots may need relinking.
     for (const replacement of replacements)
     {
         try
@@ -257,7 +257,7 @@ export async function applyRefresh(actor, selections)
         }
         catch (err)
         {
-            console.error("refresh: replacement failed", err);
+            console.error("lancer-npc-import | refresh | replacement failed", err);
             report.failed.push({ kind: "replace", name: replacement.actorItem.name, error: err.message });
         }
     }

@@ -1,7 +1,8 @@
-// Cognito REST client; replaces the Amplify Auth dropped in Lancer v2.12.0.
+// Cognito REST client. Replaces the Amplify Auth dropped in Lancer v2.12.0.
 
 import { corsProxyFetch } from "../v3-api.js";
 import { generateSrpA, computePasswordSignature } from "./srp.js";
+import { getModuleSetting, setModuleSetting } from "../utils.js";
 
 const COGNITO_REGION    = "us-east-1";
 const COGNITO_POOL_ID   = "us-east-1_AdX2iSx8s";
@@ -16,15 +17,10 @@ const SETTING_SUB           = "compconUserSub";
 
 const REFRESH_GRACE_MS = 60_000;
 
-function _getSetting(key)
-{
-    try { return game.settings.get("lancer-npc-import", key); }
-    catch { return ""; }
-}
 async function _setSetting(key, value)
 {
-    try { await game.settings.set("lancer-npc-import", key, value); }
-    catch (e) { console.warn(`[cognito-auth] could not store ${key}:`, e); }
+    try { await setModuleSetting(key, value); }
+    catch (e) { console.warn(`lancer-npc-import | sign-in | could not store ${key}:`, e); }
 }
 
 function _decodeJwtPayload(jwt)
@@ -72,7 +68,7 @@ async function _cognitoCall(target, payload)
     {
         const code = body?.__type || `HTTP ${resp.status}`;
         const msg = body?.message || resp.statusText || "Unknown error";
-        console.warn(`[cognito-auth] ${target} failed:`, { status: resp.status, body, rawText: text });
+        console.warn(`lancer-npc-import | sign-in | ${target} failed:`, { status: resp.status, body, rawText: text });
         const err = new Error(`${code}: ${msg}`);
         err.cognitoType = body?.__type || null;
         err.status = resp.status;
@@ -106,38 +102,38 @@ async function _storeAuthResult(authResult, emailIfSet)
 
 export async function login(email, password)
 {
-    const { a, A } = generateSrpA();
+    const { privateKey, publicKey } = generateSrpA();
 
     const initBody = await _cognitoCall("InitiateAuth", {
         AuthFlow: "USER_SRP_AUTH",
         ClientId: COGNITO_CLIENT_ID,
         AuthParameters: {
             USERNAME: email,
-            SRP_A: A.toString(16)
+            SRP_A: publicKey.toString(16)
         }
     });
 
     if (initBody?.ChallengeName !== "PASSWORD_VERIFIER")
         throw new Error(`Unexpected Cognito challenge "${initBody?.ChallengeName || "(none)"}".`);
 
-    const cp = initBody.ChallengeParameters || {};
+    const challengeParams = initBody.ChallengeParameters || {};
     const { signatureB64, timestamp } = await computePasswordSignature({
-        a,
-        A,
-        srpBHex: cp.SRP_B,
-        saltHex: cp.SALT,
+        privateKey,
+        publicKey,
+        srpBHex: challengeParams.SRP_B,
+        saltHex: challengeParams.SALT,
         poolId: COGNITO_POOL_ID,
-        userIdForSrp: cp.USER_ID_FOR_SRP,
+        userIdForSrp: challengeParams.USER_ID_FOR_SRP,
         password,
-        secretBlockB64: cp.SECRET_BLOCK
+        secretBlockB64: challengeParams.SECRET_BLOCK
     });
 
     const verifyBody = await _cognitoCall("RespondToAuthChallenge", {
         ClientId: COGNITO_CLIENT_ID,
         ChallengeName: "PASSWORD_VERIFIER",
         ChallengeResponses: {
-            USERNAME: cp.USERNAME,
-            PASSWORD_CLAIM_SECRET_BLOCK: cp.SECRET_BLOCK,
+            USERNAME: challengeParams.USERNAME,
+            PASSWORD_CLAIM_SECRET_BLOCK: challengeParams.SECRET_BLOCK,
             PASSWORD_CLAIM_SIGNATURE: signatureB64,
             TIMESTAMP: timestamp
         }
@@ -153,7 +149,7 @@ export async function login(email, password)
 
 export async function refresh()
 {
-    const refreshToken = _getSetting(SETTING_REFRESH_TOKEN);
+    const refreshToken = getModuleSetting(SETTING_REFRESH_TOKEN);
     if (!refreshToken)
         throw new Error("No refresh token stored. Sign in again.");
     const body = await _cognitoCall("InitiateAuth", {
@@ -161,65 +157,65 @@ export async function refresh()
         ClientId: COGNITO_CLIENT_ID,
         AuthParameters: { REFRESH_TOKEN: refreshToken }
     });
-    const ar = body?.AuthenticationResult || {};
-    if (!ar.RefreshToken)
-        ar.RefreshToken = refreshToken; // REFRESH_TOKEN_AUTH never returns one
+    const authResult = body?.AuthenticationResult || {};
+    if (!authResult.RefreshToken)
+        authResult.RefreshToken = refreshToken; // REFRESH_TOKEN_AUTH never returns one
 
-    await _storeAuthResult(ar, null);
+    await _storeAuthResult(authResult, null);
     return true;
 }
 
 export async function getValidJwt()
 {
-    const stored = _getSetting(SETTING_ID_TOKEN);
-    const expiry = Number(_getSetting(SETTING_EXPIRY) || 0);
+    const stored = getModuleSetting(SETTING_ID_TOKEN);
+    const expiry = Number(getModuleSetting(SETTING_EXPIRY) || 0);
     if (stored && expiry > Date.now() + REFRESH_GRACE_MS)
         return stored;
-    if (!_getSetting(SETTING_REFRESH_TOKEN))
+    if (!getModuleSetting(SETTING_REFRESH_TOKEN))
         return null;
     try
     {
         await refresh();
-        return _getSetting(SETTING_ID_TOKEN) || null;
+        return getModuleSetting(SETTING_ID_TOKEN) || null;
     }
     catch (e)
     {
-        console.warn("[cognito-auth] refresh failed:", e.message);
+        console.warn("lancer-npc-import | sign-in | refresh failed:", e.message);
         return null;
     }
 }
 
 export function getUserSub()
 {
-    const stored = _getSetting(SETTING_SUB);
+    const stored = getModuleSetting(SETTING_SUB);
     if (stored)
         return stored;
-    const jwt = _getSetting(SETTING_ID_TOKEN);
+    const jwt = getModuleSetting(SETTING_ID_TOKEN);
     return jwt ? (_decodeJwtPayload(jwt)?.sub || null) : null;
 }
 
 export function getEmail()
 {
-    return _getSetting(SETTING_EMAIL) || "";
+    return getModuleSetting(SETTING_EMAIL) || "";
 }
 
 export function isLoggedIn()
 {
-    return !!_getSetting(SETTING_REFRESH_TOKEN);
+    return !!getModuleSetting(SETTING_REFRESH_TOKEN);
 }
 
 export async function logout()
 {
-    const accessToken = _getSetting(SETTING_ID_TOKEN);
-    if (accessToken)
+    const idToken = getModuleSetting(SETTING_ID_TOKEN);
+    if (idToken)
     {
         try
         {
-            await _cognitoCall("GlobalSignOut", { AccessToken: accessToken });
+            await _cognitoCall("GlobalSignOut", { AccessToken: idToken });
         }
         catch (e)
         {
-            console.warn("[cognito-auth] GlobalSignOut failed:", e.message);
+            console.warn("lancer-npc-import | sign-in | GlobalSignOut failed:", e.message);
         }
     }
     await _setSetting(SETTING_EMAIL, "");

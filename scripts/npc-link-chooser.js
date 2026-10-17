@@ -68,7 +68,7 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = [])
             `;
         }
 
-        const dlg = new Dialog({
+        const dialog = new Dialog({
             title: "Link Cloud NPC",
             content: content(),
             buttons: {
@@ -119,10 +119,10 @@ export async function showLinkChooser(cloudNpc, alreadyLinked = [])
         });
 
         // Re-render when the user adds another actor.
-        dlg.render(true);
+        dialog.render(true);
         const wireAdd = () =>
         {
-            const $root = dlg.element;
+            const $root = dialog.element;
             if (!$root)
                 return;
             $root.find("#link-add-btn").off("click").on("click", () =>
