@@ -116,7 +116,7 @@ function indexBucket(arr)
     let unkeyed = 0;
     for (const item of arr)
     {
-        const key = item?.id ?? item?.lid ?? null;
+        const key = item?.id ?? item?.lid ?? item?.system?.lid ?? null;
         if (key == null)
         {
             map.set(`__unkeyed_${unkeyed++}__`, item);

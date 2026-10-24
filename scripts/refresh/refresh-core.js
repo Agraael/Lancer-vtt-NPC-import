@@ -1,4 +1,5 @@
 import { stripVolatile } from "../compendium-snapshot.js";
+import { MODULE_ID } from "../utils.js";
 
 const SUPPORTED_ACTOR_TYPES = new Set(["npc", "mech", "pilot", "deployable"]);
 
@@ -179,6 +180,10 @@ function computeDiff(actorItem, packDoc)
     const packData = stripVolatile(packDoc.toObject());
     const diffs = [];
     walkDiff("", actorData, packData, diffs);
+    const actorV3 = actorItem.flags?.[MODULE_ID]?.v3 ?? null;
+    const packV3 = packDoc.flags?.[MODULE_ID]?.v3 ?? null;
+    if (JSON.stringify(actorV3) !== JSON.stringify(packV3))
+        diffs.push({ path: "v3 data", actor: actorV3 ? "old" : "none", pack: packV3 ? "new" : "none" });
     return diffs;
 }
 
@@ -221,6 +226,13 @@ export async function applyRefresh(actor, selections)
         {
             const data = selection.packDoc.toObject();
             data._id = selection.actorItem.id;
+            const v3 = data.flags?.[MODULE_ID]?.v3;
+            if (data.flags?.[MODULE_ID])
+                delete data.flags[MODULE_ID].v3;
+            if (v3)
+                foundry.utils.setProperty(data, `flags.${MODULE_ID}.==v3`, v3);
+            else if (selection.actorItem.getFlag(MODULE_ID, "v3"))
+                foundry.utils.setProperty(data, `flags.${MODULE_ID}.-=v3`, null);
             updates.push(data);
         }
         else if (selection.action === "replace")

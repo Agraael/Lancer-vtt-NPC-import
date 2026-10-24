@@ -2,6 +2,7 @@
 // active_effects become native bonuses/actions/deployables or effect text. Eidolon layers become NPC templates.
 
 import { MODULE_ID } from "./utils.js";
+import { getV3Data } from "./v3-data.js";
 
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 
@@ -22,14 +23,48 @@ function isV3Manifest(manifest)
     return manifest?.v3 === true;
 }
 
+const V3_ONLY_FILES = new Set(["lists.json", "downtime_actions.json"]);
+const ON_HOOK_KEYS = ["on_attack", "on_hit", "on_crit", "on_miss"];
+
 function hasV3Layout(zip)
 {
     return Object.keys(zip.files).some(name =>
         /^npcc_.+\.json$/i.test(name) ||
         /^npct_.+\.json$/i.test(name) ||
         /^license_.+\.json$/i.test(name) ||
-        name === "eidolon_layers.json"
+        name === "eidolon_layers.json" ||
+        V3_ONLY_FILES.has(name)
     );
+}
+
+function hasV3Shape(value)
+{
+    if (Array.isArray(value))
+        return value.some(hasV3Shape);
+    if (!value || typeof value !== "object")
+        return false;
+    if (Array.isArray(value.active_effects))
+        return true;
+    if (ON_HOOK_KEYS.some(key => value[key] && typeof value[key] === "object"))
+        return true;
+    return Object.values(value).some(hasV3Shape);
+}
+
+async function hasV3Content(zip)
+{
+    for (const name of Object.keys(zip.files))
+    {
+        if (!/^[^/]+\.json$/i.test(name) || name === "lcp_manifest.json")
+            continue;
+        if (hasV3Shape(await readJsonIfExists(zip, name)))
+            return true;
+    }
+    return false;
+}
+
+async function isV3Pack(zip, manifest)
+{
+    return isV3Manifest(manifest) || hasV3Layout(zip) || await hasV3Content(zip);
 }
 
 function translateClassStats(cls, logDropped)
@@ -184,15 +219,17 @@ function normalizeFrequency(freq)
 }
 
 // Text with no v2 schema home. Returns "" for a name-only active_effect so no bare `**Name**` trailer is emitted.
-function renderResidualText(ae, handled)
+function renderResidualText(ae, handled, keepDataText = false)
 {
     if (!ae)
         return "";
     const meta = [];
-    if (ae.duration)
+    if (ae.duration && keepDataText)
         meta.push(`Duration: ${ae.duration}`);
     if (ae.condition && !handled.trigger)
         meta.push(`When: ${ae.condition}`);
+    if (ae.frequency && !handled.frequency && keepDataText)
+        meta.push(`Frequency: ${normalizeFrequency(ae.frequency) || ae.frequency}`);
     const detail = !handled.detail && ae.detail ? ae.detail : "";
     const renderToken = token =>
     {
@@ -206,33 +243,42 @@ function renderResidualText(ae, handled)
     };
     const renderTokens = value => (Array.isArray(value) ? value : [value]).map(renderToken).filter(Boolean).join(", ");
     const extras = [];
-    if (ae.add_status)
+    if (ae.add_status && keepDataText)
     {
         const text = renderTokens(ae.add_status); if (text)
             extras.push(`Applies status: ${text}`);
     }
-    if (ae.add_resist)
+    if (ae.add_resist && keepDataText)
     {
         const text = renderTokens(ae.add_resist); if (text)
             extras.push(`Grants resistance: ${text}`);
     }
-    if (ae.add_special)
+    if (ae.add_special && keepDataText)
     {
         const text = renderTokens(ae.add_special); if (text)
             extras.push(`Special: ${text}`);
     }
-    if (ae.remove_special)
+    if (ae.remove_special && keepDataText)
     {
         const text = renderTokens(ae.remove_special); if (text)
             extras.push(`Removes special: ${text}`);
     }
-    // Object save goes to text. A scalar save is already a bonus (liftActiveEffects).
+    if (ae.save && typeof ae.save !== "object" && keepDataText)
+        extras.push(`Save ${String(ae.save).toUpperCase()}`);
+    if (typeof ae.accuracy === "number" && ae.accuracy !== 0 && keepDataText)
+        extras.push(ae.accuracy > 0 ? `+${ae.accuracy} Accuracy` : `+${-ae.accuracy} Difficulty`);
+    if (ae.bonus_damage && keepDataText)
+    {
+        const bonusDamage = (Array.isArray(ae.bonus_damage) ? ae.bonus_damage : [ae.bonus_damage]).map(toV2Damage).filter(Boolean);
+        if (bonusDamage.length)
+            extras.push(`Bonus damage: ${bonusDamage.map(damage => `${damage.val} ${damage.type ?? ""}`.trim()).join(", ")}`);
+    }
     if (ae.save && typeof ae.save === "object")
     {
         const parts = [];
-        if (ae.save.stat)
+        if (ae.save.stat && keepDataText)
             parts.push(String(ae.save.stat).toUpperCase());
-        if (ae.save.dc !== undefined)
+        if (ae.save.dc !== undefined && keepDataText)
             parts.push(String(ae.save.dc));
         const head = parts.join(" ");
         const tail = [];
@@ -240,7 +286,8 @@ function renderResidualText(ae, handled)
             tail.push(`success: ${ae.save.on_success}`);
         if (ae.save.on_fail)
             tail.push(`fail: ${ae.save.on_fail}`);
-        extras.push(`Save${head ? ` ${head}` : ""}${tail.length ? ` (${tail.join("; ")})` : ""}`);
+        if (head || tail.length)
+            extras.push(`Save${head ? ` ${head}` : ""}${tail.length ? ` (${tail.join("; ")})` : ""}`);
     }
     // No meaningful body → don't emit a header-only trailer.
     if (!detail && !extras.length && !meta.length)
@@ -260,7 +307,7 @@ function renderResidualText(ae, handled)
 // Loose-match containment: lower-case, strip markup/punctuation, collapse whitespace.
 function textNormalize(value)
 {
-    return (value ?? "").toString().toLowerCase().replaceAll(/\*+/g, "").replaceAll(/[^\w\s]/g, " ").replaceAll(/\s+/g, " ").trim();
+    return (value ?? "").toString().toLowerCase().replaceAll(/<[^>]*>/g, " ").replaceAll(/\*+/g, "").replaceAll(/[^\w\s]/g, " ").replaceAll(/\s+/g, " ").trim();
 }
 function existingContainsBody(existing, chunk)
 {
@@ -270,17 +317,30 @@ function existingContainsBody(existing, chunk)
     const body = chunk.split(" — ").slice(1).join(" — ");
     if (!body)
         return true; // header-only, also filtered earlier
-    const existingNorm = textNormalize(existing);
-    const bodyNorm = textNormalize(body);
-    return bodyNorm.length > 12 && existingNorm.includes(bodyNorm);
+    return textContains(existing, body);
+}
+
+function textRestates(existing, text)
+{
+    const words = textNormalize(text).split(" ").filter(word => word.length > 3);
+    if (words.length < 3)
+        return false;
+    const existingStems = new Set(textNormalize(existing).split(" ").map(word => word.slice(0, 5)));
+    return words.filter(word => existingStems.has(word.slice(0, 5))).length / words.length >= (words.length < 6 ? 1 : 0.6);
+}
+
+function textContains(existing, text)
+{
+    const textNorm = textNormalize(text);
+    return textNorm.length > 12 && textNormalize(existing).includes(textNorm);
 }
 
 function aeLooksLikeAction(ae)
 {
-    return !!(ae && (ae.damage || ae.range || ae.attack || ae.accuracy !== undefined || ae.condition || ae.frequency));
+    return !!(ae && (ae.damage || ae.range || ae.attack));
 }
 
-function liftActiveEffects(item)
+function liftActiveEffects(item, textField = "effect", keepDataText = false)
 {
     const aes = item?.active_effects;
     if (!Array.isArray(aes) || aes.length === 0)
@@ -293,32 +353,34 @@ function liftActiveEffects(item)
         if (!ae)
             continue;
         const handled = {};
+        let liftedThis = false;
 
         // 1) Native arrays pass through unchanged (identical v2/v3 shapes).
-        if (Array.isArray(ae.bonuses) && ae.bonuses.length)
+        const permanentBonuses = !Array.isArray(ae.bonuses) || ae.condition || ae.duration ? [] : ae.bonuses.filter(bonus => bonus && !bonus.condition);
+        if (permanentBonuses.length)
         {
-            item.bonuses = (item.bonuses ?? []).concat(ae.bonuses);
-            lifted++;
+            item.bonuses = (item.bonuses ?? []).concat(permanentBonuses);
+            liftedThis = true;
         }
         if (Array.isArray(ae.actions) && ae.actions.length)
         {
             item.actions = (item.actions ?? []).concat(ae.actions);
-            lifted++;
+            liftedThis = true;
         }
         if (Array.isArray(ae.deployables) && ae.deployables.length)
         {
             item.deployables = (item.deployables ?? []).concat(ae.deployables);
-            lifted++;
+            liftedThis = true;
         }
         if (Array.isArray(ae.synergies) && ae.synergies.length)
         {
             item.synergies = (item.synergies ?? []).concat(ae.synergies);
-            lifted++;
+            liftedThis = true;
         }
         if (Array.isArray(ae.counters) && ae.counters.length)
         {
             item.counters = (item.counters ?? []).concat(ae.counters);
-            lifted++;
+            liftedThis = true;
         }
 
         // 2) Synthesize a v2 Action if the active_effect has action-shaped fields.
@@ -331,7 +393,7 @@ function liftActiveEffects(item)
                 frequency: normalizeFrequency(ae.frequency) || "",
                 trigger: ae.condition ? String(ae.condition) : "",
                 detail: ae.detail ?? "",
-                tech_attack: !!ae.attack,
+                tech_attack: ae.attack === "tech",
                 damage: [],
                 range: []
             };
@@ -356,48 +418,24 @@ function liftActiveEffects(item)
             item.actions = (item.actions ?? []).concat([action]);
             handled.detail = !!ae.detail;
             handled.trigger = !!ae.condition;
-            lifted++;
+            handled.frequency = !!ae.frequency;
+            liftedThis = true;
         }
 
-        // 3) Scalar bonus-shaped fields → item.bonuses[].
-        const newBonuses = [];
-        if (ae.save !== undefined && ae.save !== null && ae.save !== "")
-        {
-            // v3 save is a scalar (legacy) or {stat, dc, on_success, on_fail}. dc becomes the bonus, the rest goes to text.
-            const scalarSave = typeof ae.save === "object" ? ae.save.dc : ae.save;
-            if (scalarSave !== undefined && scalarSave !== null && scalarSave !== "")
-                newBonuses.push({ lid: "save", val: String(scalarSave) });
-        }
-        if (typeof ae.accuracy === "number" && ae.accuracy !== 0)
-        {
-            const sign = ae.accuracy > 0 ? "+" : "";
-            newBonuses.push({ lid: "attack", val: `${sign}${ae.accuracy}` });
-        }
-        if (ae.bonus_damage)
-        {
-            const bonusDamages = Array.isArray(ae.bonus_damage) ? ae.bonus_damage : [ae.bonus_damage];
-            const added_damage = bonusDamages.map(toV2Damage).filter(Boolean);
-            if (added_damage.length)
-            {
-                // added_damage attaches to a bonus. Use lid "damage" as the neutral carrier.
-                newBonuses.push({ lid: "damage", val: "0", added_damage });
-            }
-        }
-        if (newBonuses.length)
-        {
-            item.bonuses = (item.bonuses ?? []).concat(newBonuses);
+        if (liftedThis)
             lifted++;
-        }
 
         // 4) Residual unmapped text appended to effect.
-        const text = renderResidualText(ae, handled);
+        if (ae.detail && textRestates(item[textField], ae.detail))
+            continue;
+        const text = renderResidualText(ae, handled, keepDataText);
         if (text)
             textChunks.push(text);
     }
 
     if (textChunks.length)
     {
-        const existing = typeof item.effect === "string" ? item.effect : "";
+        const existing = typeof item[textField] === "string" ? item[textField] : "";
         // Skip chunks whose body is already present in the existing effect text
         // (v3 active_effects often restate the feature's main prose).
         const novel = textChunks.filter(chunk => !existingContainsBody(existing, chunk));
@@ -405,7 +443,7 @@ function liftActiveEffects(item)
         {
             // `effect` is an HTMLField: raw \n collapses to whitespace, use <br><br>.
             const block = novel.join("<br><br>");
-            item.effect = existing ? `${existing}<br><br>${block}` : block;
+            item[textField] = existing ? `${existing}<br><br>${block}` : block;
         }
     }
     return lifted;
@@ -427,7 +465,7 @@ function coerceOnHookString(value)
     if (typeof value === "object")
     {
         // Lift structured fields into the text.
-        return renderActiveEffectAsText(value) || value.detail || "";
+        return typeof value.detail === "string" && value.detail.trim() ? value.detail : renderActiveEffectAsText(value);
     }
     return String(value);
 }
@@ -446,17 +484,18 @@ function translateOnHooks(obj)
 }
 
 // Lift v3 active_effects into v2 fields, strip v3-only cosmetic flags.
-function stripV3Common(item, dropped)
+function stripV3Common(item, dropped, textField, keepDataText = false)
 {
     if (!item || typeof item !== "object")
         return;
     if (Array.isArray(item.active_effects) && item.active_effects.length)
     {
         const before = item.active_effects.length;
-        const lifted = liftActiveEffects(item);
+        const lifted = liftActiveEffects(item, textField, keepDataText);
         if (dropped)
-            dropped.push({ item: item.id ?? "?", total: before, lifted, textOnly: before - lifted });
+            dropped.push({ item: item.id ?? item.name ?? "?", total: before, lifted, textOnly: before - lifted });
     }
+    markDeprecated(item);
     for (const key of ["active_effects", "flavorDescription", "brew", "deprecated"])
     {
         if (item[key] !== undefined)
@@ -465,30 +504,10 @@ function stripV3Common(item, dropped)
 }
 
 // v3 active_effects/passive_effects arrays on core_system/traits → v2 HTMLField string.
-function mergeEffectArrayToHtml(effects)
+function mergeEffectArrayToHtml(effects, existing = "")
 {
     if (!Array.isArray(effects))
         return "";
-    const renderToken = token =>
-    {
-        if (token == null)
-            return "";
-        if (typeof token === "string")
-            return token;
-        if (typeof token === "object")
-            return token.name ?? token.lid ?? token.id ?? "";
-        return String(token);
-    };
-    const renderTokens = value => (Array.isArray(value) ? value : [value]).map(renderToken).filter(Boolean).join(", ");
-    const renderDamage = value => (Array.isArray(value) ? value : [value]).map(damageEntry =>
-    {
-        if (typeof damageEntry === "string")
-            return damageEntry;
-        if (typeof damageEntry === "object")
-            return [damageEntry.val ?? damageEntry.damage ?? "", damageEntry.type ?? ""].filter(Boolean).join(" ");
-        return String(damageEntry);
-    }).filter(Boolean).join(", ");
-
     const parts = [];
     for (const ae of effects)
     {
@@ -496,69 +515,25 @@ function mergeEffectArrayToHtml(effects)
             continue;
         const label = ae.name ? `<strong>${ae.name}</strong>` : "";
         const meta = [];
-        if (ae.frequency)
-            meta.push(ae.frequency);
-        if (ae.duration)
-            meta.push(ae.duration);
-        if (ae.target)
-            meta.push(`Target: ${ae.target}`);
+        if (ae.condition)
+            meta.push(`When: ${ae.condition}`);
         const header = label + (meta.length ? ` (${meta.join(", ")})` : "");
-        const body = ae.detail ?? "";
+        const body = ae.detail && !textRestates(existing, ae.detail) ? ae.detail : "";
         const extras = [];
-        if (ae.add_status)
+        if (ae.save && typeof ae.save === "object")
         {
-            const text = renderTokens(ae.add_status); if (text)
-                extras.push(`Applies status: ${text}`);
+            const tail = [];
+            if (ae.save.on_success)
+                tail.push(`success: ${ae.save.on_success}`);
+            if (ae.save.on_fail)
+                tail.push(`fail: ${ae.save.on_fail}`);
+            if (tail.length)
+                extras.push(`Save (${tail.join("; ")})`);
         }
-        if (ae.add_resist)
-        {
-            const text = renderTokens(ae.add_resist); if (text)
-                extras.push(`Grants resistance: ${text}`);
-        }
-        if (ae.add_special)
-        {
-            const text = renderTokens(ae.add_special); if (text)
-                extras.push(`Special: ${text}`);
-        }
-        if (ae.remove_special)
-        {
-            const text = renderTokens(ae.remove_special); if (text)
-                extras.push(`Removes special: ${text}`);
-        }
-        if (ae.damage)
-        {
-            const text = renderDamage(ae.damage); if (text)
-                extras.push(`Damage: ${text}`);
-        }
-        if (ae.bonus_damage)
-        {
-            const text = renderDamage(ae.bonus_damage); if (text)
-                extras.push(`Bonus damage: ${text}`);
-        }
-        if (ae.save !== undefined && ae.save !== null && ae.save !== "")
-        {
-            if (typeof ae.save === "object")
-            {
-                const parts = [];
-                if (ae.save.stat)
-                    parts.push(String(ae.save.stat).toUpperCase());
-                if (ae.save.dc !== undefined)
-                    parts.push(String(ae.save.dc));
-                const head = parts.join(" ");
-                const tail = [];
-                if (ae.save.on_success)
-                    tail.push(`success: ${ae.save.on_success}`);
-                if (ae.save.on_fail)
-                    tail.push(`fail: ${ae.save.on_fail}`);
-                extras.push(`Save${head ? ` ${head}` : ""}${tail.length ? ` (${tail.join("; ")})` : ""}`);
-            }
-            else
-            {
-                extras.push(`Save: ${ae.save}`);
-            }
-        }
-        const chunk = [header, body].filter(Boolean).join(" ");
         const extrasChunk = extras.length ? `<em>${extras.join(" | ")}</em>` : "";
+        if (!body && !extrasChunk && !ae.condition)
+            continue;
+        const chunk = [header, body].filter(Boolean).join(" ");
         const full = [chunk, extrasChunk].filter(Boolean).join("<br>");
         if (full)
             parts.push(`<p>${full}</p>`);
@@ -593,6 +568,8 @@ function normalizeAction(action)
     {
         action.synergy_locations = action.synergy_locations ? [action.synergy_locations] : [];
     }
+    if (action.attack === "tech")
+        action.tech_attack = true;
 }
 
 function normalizeActionsList(list)
@@ -621,12 +598,70 @@ function normalizeBonus(bonus)
     }
 }
 
+const ACCURACY_BONUS_TARGETS = {
+    hull: { locations: ["hull"], label: "HULL checks and saves" },
+    agility: { locations: ["agility"], label: "AGILITY checks and saves" },
+    systems: { locations: ["systems"], label: "SYSTEMS checks and saves" },
+    engineering: { locations: ["engineering"], label: "ENGINEERING checks and saves" },
+    check: { locations: ["hase"], label: "all checks" },
+    save: { locations: ["hase"], label: "saves" },
+    accuracy: { locations: ["skill_check"], label: "non-combat skill checks" },
+    melee: { locations: ["weapon"], weapon_types: ["Melee"], label: "melee attacks" },
+    attack: { locations: ["weapon", "tech_attack"], label: "attacks" },
+    tech_attack: { locations: ["tech_attack"], label: "tech attacks" },
+    grapple: { locations: ["grapple"], label: "Grapple" },
+    ram: { locations: ["ram"], label: "Ram" }
+};
+
+function accuracyBonusSynergy(bonus)
+{
+    const target = ACCURACY_BONUS_TARGETS[bonus?.id];
+    if (!target)
+        return null;
+    const accuracy = Number(bonus.id === "accuracy" ? bonus.val : bonus.accuracy) || 0;
+    const difficulty = Number(bonus.difficulty) || 0;
+    if (!accuracy && !difficulty)
+        return null;
+    const modifiers = [accuracy ? `+${accuracy} Accuracy` : "", difficulty ? `+${difficulty} Difficulty` : ""].filter(Boolean).join(", ");
+    const synergy = { locations: target.locations, detail: bonus.detail || `${modifiers} on ${target.label}` };
+    if (target.weapon_types)
+        synergy.weapon_types = target.weapon_types;
+    return synergy;
+}
+
+function moveAccuracyBonuses(owner, bonusKey, synergyKey)
+{
+    if (!owner || !Array.isArray(owner[bonusKey]))
+        return;
+    const kept = [];
+    for (const bonus of owner[bonusKey])
+    {
+        const synergy = accuracyBonusSynergy(bonus);
+        if (!synergy)
+        {
+            kept.push(bonus);
+            continue;
+        }
+        owner[synergyKey] = [...(Array.isArray(owner[synergyKey]) ? owner[synergyKey] : []), synergy];
+        const val = String(bonus.val ?? "0").trim();
+        if (bonus.id !== "accuracy" && val !== "" && val !== "0")
+            kept.push(bonus);
+    }
+    owner[bonusKey] = kept;
+}
+
 function normalizeBonusesList(list)
 {
     if (!Array.isArray(list))
         return;
     for (const bonus of list)
         normalizeBonus(bonus);
+}
+
+function dropConditionedBonuses(owner, bonusKey)
+{
+    if (Array.isArray(owner?.[bonusKey]))
+        owner[bonusKey] = owner[bonusKey].filter(bonus => !bonus?.condition && !DATA_BONUS_IDS.includes(bonus?.id));
 }
 
 // Strips v3-only fields and normalizes nested actions/bonuses for Lancer's .map/.toString calls.
@@ -639,24 +674,31 @@ function stripNested(item, droppedAE)
         for (const deployable of item.deployables)
             if (deployable && typeof deployable === "object")
             {
-                stripV3Common(deployable, droppedAE);
+                stripV3Common(deployable, droppedAE, "detail", true);
                 normalizeActionsList(deployable.actions);
+                dropConditionedBonuses(deployable, "bonuses");
                 normalizeBonusesList(deployable.bonuses);
+                moveAccuracyBonuses(deployable, "bonuses", "synergies");
             }
     }
     if (Array.isArray(item.actions))
     {
         for (const action of item.actions)
             if (action && typeof action === "object")
-                stripV3Common(action, droppedAE);
+                stripV3Common(action, droppedAE, "detail");
         normalizeActionsList(item.actions);
     }
+    for (const bonusKey of BONUS_LIST_KEYS)
+        dropConditionedBonuses(item, bonusKey);
     normalizeBonusesList(item.bonuses);
+    moveAccuracyBonuses(item, "bonuses", "synergies");
     // Core-system prefixed arrays (frames): active_actions / passive_actions / active_bonuses / passive_bonuses.
     normalizeActionsList(item.active_actions);
     normalizeActionsList(item.passive_actions);
     normalizeBonusesList(item.active_bonuses);
     normalizeBonusesList(item.passive_bonuses);
+    moveAccuracyBonuses(item, "active_bonuses", "active_synergies");
+    moveAccuracyBonuses(item, "passive_bonuses", "passive_synergies");
 }
 
 // Lift v3 core_system active_effects[]/passive_effects[] into the v2 core_system
@@ -675,10 +717,9 @@ function liftCoreSystemEffects(core, kind)
     {
         if (!ae)
             continue;
-        if (Array.isArray(ae.bonuses) && ae.bonuses.length)
-        {
-            core[bonusKey] = (core[bonusKey] ?? []).concat(ae.bonuses);
-        }
+        const permanentBonuses = !Array.isArray(ae.bonuses) || ae.condition || ae.duration ? [] : ae.bonuses.filter(bonus => bonus && !bonus.condition);
+        if (permanentBonuses.length)
+            core[bonusKey] = (core[bonusKey] ?? []).concat(permanentBonuses);
         if (Array.isArray(ae.actions) && ae.actions.length)
         {
             core[actionKey] = (core[actionKey] ?? []).concat(ae.actions);
@@ -697,7 +738,7 @@ function liftCoreSystemEffects(core, kind)
             core.counters = (core.counters ?? []).concat(ae.counters);
         }
     }
-    const html = mergeEffectArrayToHtml(effects);
+    const html = mergeEffectArrayToHtml(effects, core[effectKey]);
     if (html)
         core[effectKey] = (core[effectKey] || "") + html;
     delete core[key];
@@ -708,6 +749,8 @@ function translateFrame(frame, droppedAE)
     stripV3Common(frame, droppedAE);
     for (const key of ["specialty", "variant", "y_pos"])
         delete frame[key];
+    if (Array.isArray(frame.active_counters) && !frame.core_system)
+        frame.core_system = {};
     if (frame.image_url && !frame.img)
         frame.img = frame.image_url;
     delete frame.image_url;
@@ -719,6 +762,15 @@ function translateFrame(frame, droppedAE)
         liftCoreSystemEffects(frame.core_system, "passive");
         for (const key of ["flavorDescription", "brew", "deprecated"])
             delete frame.core_system[key];
+        const core = frame.core_system;
+        for (const [from, to] of [["active_deployables", "deployables"], ["active_counters", "counters"]])
+        {
+            if (Array.isArray(core[from]))
+                core[to] = [...(Array.isArray(core[to]) ? core[to] : []), ...core[from]];
+            delete core[from];
+        }
+        if (Array.isArray(frame.active_counters))
+            core.counters = [...(Array.isArray(core.counters) ? core.counters : []), ...frame.active_counters];
         flattenIntegrated(frame.core_system);
         stripNested(frame.core_system, droppedAE);
     }
@@ -726,7 +778,7 @@ function translateFrame(frame, droppedAE)
     {
         for (const trait of frame.traits)
         {
-            stripV3Common(trait, droppedAE);
+            stripV3Common(trait, droppedAE, "description");
             stripNested(trait, droppedAE);
         }
     }
@@ -773,7 +825,22 @@ function translateMechSystem(system, droppedAE)
 function translateWeaponMod(mod, droppedAE)
 {
     stripV3Common(mod, droppedAE);
+    const onHitDamage = (Array.isArray(mod.on_hit) ? mod.on_hit : [mod.on_hit])
+        .flatMap(hook => (hook && typeof hook === "object" && Array.isArray(hook.damage) ? hook.damage : []))
+        .map(toV2Damage)
+        .filter(Boolean);
+    if (onHitDamage.length)
+        mod.added_damage = [...(Array.isArray(mod.added_damage) ? mod.added_damage : []), ...onHitDamage];
     translateOnHooks(mod);
+    for (const [restricted, allowed, all] of [["restricted_types", "allowed_types", FILTER_VALUES.weapon_types], ["restricted_sizes", "allowed_sizes", FILTER_VALUES.weapon_sizes]])
+    {
+        if (Array.isArray(mod[restricted]) && mod[restricted].length && !mod[allowed]?.length)
+        {
+            const blocked = new Set(mod[restricted].map(value => String(value).toLowerCase()));
+            mod[allowed] = all.filter(value => !blocked.has(value.toLowerCase()));
+        }
+        delete mod[restricted];
+    }
     // v3 `allowed_types` / `allowed_sizes` are native in Lancer 2.x WeaponModModel
     // (lancer-c22b4371.mjs:35424-35425). Pass through unchanged.
 }
@@ -794,7 +861,7 @@ function translateTalent(talent, droppedAE)
     {
         for (const rank of talent.ranks)
         {
-            stripV3Common(rank, droppedAE);
+            stripV3Common(rank, droppedAE, "description");
             stripNested(rank, droppedAE);
         }
     }
@@ -802,18 +869,17 @@ function translateTalent(talent, droppedAE)
 
 function translateReserve(reserve, droppedAE)
 {
-    stripV3Common(reserve, droppedAE);
+    stripV3Common(reserve, droppedAE, "description");
     stripNested(reserve, droppedAE);
 }
 
 function translateBond(bond, droppedAE)
 {
     stripV3Common(bond, droppedAE);
-    if (Array.isArray(bond.powers))
-    {
-        for (const power of bond.powers)
-            stripV3Common(power, droppedAE);
-    }
+    if (!Array.isArray(bond.powers))
+        bond.powers = [];
+    for (const power of bond.powers)
+        stripV3Common(power, droppedAE);
 }
 
 function translateNpcClass(npcClass, droppedAE)
@@ -824,44 +890,8 @@ function translateNpcClass(npcClass, droppedAE)
 
 function translateNpcTemplate(template, droppedAE)
 {
-    stripV3Common(template, droppedAE);
+    stripV3Common(template, droppedAE, "description");
     stripNested(template, droppedAE);
-}
-
-function renderTierVal(value)
-{
-    if (Array.isArray(value))
-        return value.join("/");
-    if (value === null || value === undefined)
-        return "";
-    return String(value);
-}
-
-function renderRangeList(ranges)
-{
-    if (!Array.isArray(ranges) || !ranges.length)
-        return "";
-    return ranges.map(range =>
-    {
-        if (!range || typeof range !== "object")
-            return "";
-        const type = range.type ?? "";
-        const value = range.val !== undefined ? renderTierVal(range.val) : "";
-        return value !== "" ? `${type} ${value}` : type;
-    }).filter(Boolean).join(", ");
-}
-
-function renderDamageList(damages)
-{
-    if (!Array.isArray(damages) || !damages.length)
-        return "";
-    return damages.map(damage =>
-    {
-        if (!damage || typeof damage !== "object")
-            return "";
-        const value = renderTierVal(damage.val ?? damage.damage);
-        return value ? `${value} ${damage.type ?? ""}`.trim() : (damage.type ?? "");
-    }).filter(Boolean).join(" + ");
 }
 
 function renderStatusList(statuses)
@@ -881,7 +911,7 @@ function renderStatusList(statuses)
     }).filter(Boolean).join(", ");
 }
 
-function renderNpcActionsAsHtml(actions)
+function renderNpcActionsAsHtml(actions, existing = "", knownTrigger = "")
 {
     if (!Array.isArray(actions) || !actions.length)
         return "";
@@ -891,28 +921,20 @@ function renderNpcActionsAsHtml(actions)
         if (!action || typeof action !== "object")
             continue;
         const meta = [];
-        if (action.activation)
+        if (action.activation && !NPC_ACTIVATION_TAGS[String(action.activation).toLowerCase()])
             meta.push(action.activation);
-        if (action.frequency)
-            meta.push(action.frequency);
-        const range = renderRangeList(action.range);
-        if (range)
-            meta.push(range);
-        const damageText = renderDamageList(action.damage);
-        if (damageText)
-            meta.push(damageText);
         const header = `<strong>${action.name ?? "Action"}</strong>`
             + (meta.length ? ` <em>(${meta.join(", ")})</em>` : "");
         const parts = [header];
         const detail = typeof action.detail === "string" ? action.detail
             : (action.detail ? coerceOnHookString(action.detail) : "");
+        if (detail && (textContains(existing, detail) || textRestates(existing, detail)))
+            continue;
         if (detail)
             parts.push(detail);
-        if (action.trigger)
-            parts.push(`<strong>Trigger:</strong> ${typeof action.trigger === "string" ? action.trigger : coerceOnHookString(action.trigger)}`);
-        const statuses = renderStatusList(action.add_status);
-        if (statuses)
-            parts.push(`<em>Applies status:</em> ${statuses}`);
+        const trigger = action.trigger && typeof action.trigger !== "string" ? coerceOnHookString(action.trigger) : (action.trigger ?? "");
+        if (trigger && trigger !== knownTrigger && !textContains(existing, trigger))
+            parts.push(`<strong>Trigger:</strong> ${trigger}`);
         const conditions = renderStatusList(action.add_condition);
         if (conditions)
             parts.push(`<em>Applies condition:</em> ${conditions}`);
@@ -925,15 +947,29 @@ function translateNpcFeatureCommon(feature, droppedAE)
 {
     if (!feature)
         return;
+    const featureType = NPC_FEATURE_TYPES.find(type => type.toLowerCase() === String(feature.type ?? "").toLowerCase());
+    if (featureType)
+        feature.type = featureType;
+    markDeprecated(feature);
+    feature.tags = (Array.isArray(feature.tags) ? feature.tags : []).filter(tag => !V3_ONLY_NPC_TAGS.has(tag?.id));
     if (Array.isArray(feature.actions) && feature.actions.length)
     {
+        for (const action of feature.actions)
+        {
+            const activationTag = NPC_ACTIVATION_TAGS[String(action?.activation ?? "").toLowerCase()];
+            if (activationTag && feature.type !== "Reaction")
+                addTagOnce(feature, activationTag);
+            const frequency = /^(\d+)\s*\/\s*(round|turn)$/i.exec(String(action?.frequency ?? "").trim());
+            if (frequency)
+                addTagOnce(feature, `tg_${frequency[2].toLowerCase()}`, Number(frequency[1]));
+        }
         if (feature.type === "Reaction" && !feature.trigger)
         {
             const firstTrigger = feature.actions.find(action => action?.trigger)?.trigger;
             if (firstTrigger)
                 feature.trigger = typeof firstTrigger === "string" ? firstTrigger : coerceOnHookString(firstTrigger);
         }
-        const html = renderNpcActionsAsHtml(feature.actions);
+        const html = renderNpcActionsAsHtml(feature.actions, feature.effect, feature.trigger);
         if (html)
         {
             const existing = typeof feature.effect === "string" ? feature.effect : "";
@@ -972,6 +1008,11 @@ function translateNpcFeatureCommon(feature, droppedAE)
                 damageEntry.damage = [damageEntry.damage, damageEntry.damage, damageEntry.damage];
             }
         }
+    }
+    for (const key of ["attack_bonus", "accuracy"])
+    {
+        if (typeof feature[key] === "number")
+            feature[key] = [feature[key], feature[key], feature[key]];
     }
     // Weapon-type NPC features must have damage and range as arrays: unpackNpcFeature
     // iterates them directly (npc_feature.ts:162). Some v3 utility weapons omit these.
@@ -1038,6 +1079,242 @@ function classifyLicenseChild(entry)
     return "systems";
 }
 
+const SYNERGY_LOCATIONS = new Set(["any", "active_effects", "rest", "core_power", "weapon", "system", "deployable", "drone", "move", "boost", "other", "ram", "grapple", "tech_attack", "hp", "armor", "repair", "overshield", "burn", "structure", "heat", "stress", "overcharge", "skill_check", "overwatch", "skirmish", "barrage", "improvised_attack", "disengage", "stabilize", "tech", "lock_on", "bolster", "hase", "hull", "agility", "systems", "engineering", "brace", "cascade", "pilot_weapon", "mount"]);
+const SYNERGY_LOCATION_ALIASES = { attack: ["weapon", "tech_attack"], weapons: ["weapon"], quick_tech: ["tech"], full_tech: ["tech"] };
+const FILTER_VALUES = {
+    damage_types: ["Burn", "Energy", "Explosive", "Heat", "Kinetic", "Variable"],
+    range_types: ["Blast", "Burst", "Cone", "Line", "Range", "Thrown", "Threat"],
+    weapon_types: ["CQB", "Cannon", "Launcher", "Melee", "Nexus", "Rifle"],
+    weapon_sizes: ["Auxiliary", "Heavy", "Main", "Superheavy"]
+};
+
+const NPC_FEATURE_TYPES = ["Trait", "System", "Reaction", "Weapon", "Tech"];
+const NPC_ACTIVATION_TAGS = { quick: "tg_quick_action", full: "tg_full_action", free: "tg_free_action", protocol: "tg_protocol", reaction: "tg_reaction" };
+const V3_ONLY_NPC_TAGS = new Set(["tg_npc_system", "tg_npc_trait"]);
+const DEPLOYABLE_NUMBER_KEYS = ["armor", "edef", "evasion", "heatcap", "save", "size", "speed"];
+
+function addTagOnce(feature, id, val)
+{
+    if (feature.tags.some(tag => tag?.id === id))
+        return;
+    feature.tags.push(val === undefined ? { id } : { id, val });
+}
+
+function markDeprecated(item)
+{
+    if (item.deprecated && typeof item.name === "string" && !item.name.startsWith("[Deprecated]"))
+        item.name = `[Deprecated] ${item.name}`;
+}
+
+function normalizeFilterList(key, values)
+{
+    const list = (Array.isArray(values) ? values : [values]).filter(value => value !== undefined && value !== null && value !== "");
+    if (list.some(value => String(value).toLowerCase() === "any"))
+        return [];
+    return list.map(value => FILTER_VALUES[key].find(option => option.toLowerCase() === String(value).toLowerCase()) ?? value);
+}
+
+function normalizeSynergyLocations(locations)
+{
+    const raw = (Array.isArray(locations) ? locations : [locations])
+        .flatMap(location => String(location ?? "").split(","))
+        .map(location => location.trim().toLowerCase())
+        .filter(Boolean);
+    const mapped = [...new Set(raw.flatMap(location => SYNERGY_LOCATION_ALIASES[location] ?? [location]))]
+        .filter(location => SYNERGY_LOCATIONS.has(location));
+    return mapped.length || !raw.length ? mapped : ["any"];
+}
+
+function normalizeV3Shapes(value)
+{
+    if (Array.isArray(value))
+    {
+        for (const entry of value)
+            normalizeV3Shapes(entry);
+        return value;
+    }
+    if (!value || typeof value !== "object")
+        return value;
+    if (value.actions && typeof value.actions === "object" && !Array.isArray(value.actions))
+        value.actions = [value.actions];
+    for (const deployable of Array.isArray(value.deployables) ? value.deployables : [])
+    {
+        for (const key of DEPLOYABLE_NUMBER_KEYS)
+        {
+            if (typeof deployable?.[key] === "string" && Number.isNaN(Number(deployable[key])))
+                delete deployable[key];
+        }
+    }
+    if (value.locations !== undefined && value.detail !== undefined)
+        value.locations = normalizeSynergyLocations(value.locations);
+    for (const key of Object.keys(FILTER_VALUES))
+    {
+        if (value[key] !== undefined)
+            value[key] = normalizeFilterList(key, value[key]);
+    }
+    for (const child of Object.values(value))
+        normalizeV3Shapes(child);
+    return value;
+}
+
+const PURE_ACTION_FIELDS = ["add_status", "add_resist", "add_special", "remove_special", "add_other", "save", "condition", "bonus_damage", "accuracy", "attack_bonus", "tech_accuracy", "tech_attack_bonus", "can_crit", "target_defense"];
+const PURE_NPC_ACTION_FIELDS = ["name", "activation", "frequency", "range", "damage", ...PURE_ACTION_FIELDS];
+const PURE_EFFECT_FIELDS = ["name", "condition", "frequency", "duration", "target", "damage", "range", "attack", ...PURE_ACTION_FIELDS];
+const PURE_DAMAGE_FIELDS = ["ap", "aoe", "target", "save", "save_half", "irreducible", "overkill", "reliable", "bonus", "override", "attack"];
+const PURE_RANGE_FIELDS = ["min", "bonus", "override"];
+const NESTED_ACTION_KEYS = ["active_effects", "passive_effects", "sub_actions"];
+const DIRECT_EFFECT_KEYS = ["add_status", "add_resist", "add_special", "remove_special", "add_other"];
+const PURE_DIRECT_FIELDS = ["name", "activation", "condition", "frequency", "duration", "target", "save", "attack", ...DIRECT_EFFECT_KEYS];
+const ACTION_LIST_KEYS = ["actions", "sub_actions", "active_actions", "passive_actions"];
+const BONUS_LIST_KEYS = ["bonuses", "active_bonuses", "passive_bonuses"];
+const PURE_BONUS_FIELDS = ["id", "val", "accuracy", "difficulty", "damage_types", "range_types", "weapon_types", "weapon_sizes", "overwrite", "replace", "condition", "max"];
+
+const DATA_BONUS_IDS = ["immunity", "resistance"];
+
+function isPureBonus(bonus)
+{
+    return !!bonus && typeof bonus === "object" && !!(bonus.condition || Number(bonus.accuracy) || Number(bonus.difficulty) || DATA_BONUS_IDS.includes(bonus.id));
+}
+
+function pickFields(source, fields)
+{
+    const picked = {};
+    for (const field of fields)
+    {
+        const value = source?.[field];
+        if (value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && !value.length))
+            picked[field] = value;
+    }
+    return picked;
+}
+
+function addPureData(out, path, data)
+{
+    if (Object.keys(data).some(key => key !== "name"))
+        out[path] = data;
+}
+
+function effectPureData(effect)
+{
+    const picked = pickFields(effect, PURE_EFFECT_FIELDS);
+    const bonuses = Array.isArray(effect?.bonuses) ? effect.bonuses.filter(bonus => bonus && (effect.condition || effect.duration || bonus.condition)) : [];
+    if (bonuses.length)
+        picked.bonuses = bonuses;
+    return picked;
+}
+
+function hookPureData(hook)
+{
+    const picked = pickFields(hook, PURE_EFFECT_FIELDS);
+    if (Array.isArray(hook?.bonuses) && hook.bonuses.length)
+        picked.bonuses = hook.bonuses;
+    return picked;
+}
+
+function collectDamagePureData(list, path, out)
+{
+    if (!Array.isArray(list))
+        return;
+    list.forEach((entry, index) => addPureData(out, `${path}.${index}`, pickFields(entry, PURE_DAMAGE_FIELDS)));
+}
+
+function collectRangePureData(list, path, out)
+{
+    if (!Array.isArray(list))
+        return;
+    list.forEach((entry, index) => addPureData(out, `${path}.${index}`, pickFields(entry, PURE_RANGE_FIELDS)));
+}
+
+function collectPureData(value, path, npcFeature, out)
+{
+    if (Array.isArray(value))
+    {
+        value.forEach((entry, index) => collectPureData(entry, path ? `${path}.${index}` : String(index), npcFeature, out));
+        return out;
+    }
+    if (!value || typeof value !== "object")
+        return out;
+    if ((path === "" || /^traits\.\d+$/.test(path)) && Object.keys(pickFields(value, DIRECT_EFFECT_KEYS)).length)
+        addPureData(out, path, pickFields(value, PURE_DIRECT_FIELDS));
+    for (const [key, child] of Object.entries(value))
+    {
+        const childPath = path ? `${path}.${key}` : key;
+        if ((key === "active_effects" || key === "passive_effects") && Array.isArray(child))
+        {
+            child.forEach((effect, index) => addPureData(out, `${childPath}.${index}`, effectPureData(effect)));
+        }
+        else if (ACTION_LIST_KEYS.includes(key) && Array.isArray(child))
+        {
+            child.forEach((action, index) =>
+            {
+                const actionPath = `${childPath}.${index}`;
+                const data = pickFields(action, npcFeature ? PURE_NPC_ACTION_FIELDS : PURE_ACTION_FIELDS);
+                if (action?.attack && action.attack !== "tech")
+                    data.attack = action.attack;
+                addPureData(out, actionPath, data);
+                collectDamagePureData(action?.damage, `${actionPath}.damage`, out);
+                if (!npcFeature)
+                    collectRangePureData(action?.range, `${actionPath}.range`, out);
+                collectPureData(pickFields(action, NESTED_ACTION_KEYS), actionPath, npcFeature, out);
+            });
+        }
+        else if (ON_HOOK_KEYS.includes(key) && child && typeof child === "object")
+        {
+            const hooks = Array.isArray(child) ? child : [child];
+            hooks.forEach((hook, index) =>
+            {
+                const hookPath = Array.isArray(child) ? `${childPath}.${index}` : childPath;
+                addPureData(out, hookPath, hookPureData(hook));
+                collectDamagePureData(hook?.damage, `${hookPath}.damage`, out);
+            });
+        }
+        else if (BONUS_LIST_KEYS.includes(key) && Array.isArray(child))
+        {
+            child.forEach((bonus, index) =>
+            {
+                if (isPureBonus(bonus))
+                    addPureData(out, `${childPath}.${index}`, { bonuses: [pickFields(bonus, PURE_BONUS_FIELDS)] });
+            });
+        }
+        else if (key === "damage" && Array.isArray(child))
+        {
+            collectDamagePureData(child, childPath, out);
+        }
+        else if (key === "range" && Array.isArray(child))
+        {
+            collectRangePureData(child, childPath, out);
+        }
+        else
+        {
+            collectPureData(child, childPath, npcFeature, out);
+        }
+    }
+    return out;
+}
+
+async function collectPackPureData(zip)
+{
+    const pureData = {};
+    for (const name of Object.keys(zip.files))
+    {
+        if (!/^[^/]+\.json$/i.test(name) || name === "lcp_manifest.json" || name === "eidolon_layers.json")
+            continue;
+        const entries = await readJsonIfExists(zip, name);
+        if (!Array.isArray(entries))
+            continue;
+        const npcFile = /^npc/i.test(name);
+        for (const entry of entries)
+        {
+            if (!entry || typeof entry.id !== "string")
+                continue;
+            const data = collectPureData(entry, "", npcFile, {});
+            if (Object.keys(data).length)
+                pureData[entry.id] = data;
+        }
+    }
+    return pureData;
+}
+
 async function readJsonIfExists(zip, name)
 {
     const file = zip.file(name);
@@ -1045,7 +1322,7 @@ async function readJsonIfExists(zip, name)
         return null;
     try
     {
-        return JSON.parse(await file.async("string"));
+        return normalizeV3Shapes(JSON.parse((await file.async("string")).replace(/^﻿/, "")));
     }
     catch (e)
     {
@@ -1093,10 +1370,11 @@ export async function translateV3LcpBlob(inputBlob)
     if (!manifest)
         throw new Error("No lcp_manifest.json in LCP");
 
-    const isV3 = isV3Manifest(manifest) || hasV3Layout(inZip);
+    const isV3 = await isV3Pack(inZip, manifest);
     if (!isV3)
         return { blob: null, manifest, summary: { alreadyV2: true } };
 
+    const pureData = await collectPackPureData(inZip);
     const droppedEffects = [];
     const droppedLayers = [];
     const outZip = new JSZip();
@@ -1392,11 +1670,6 @@ export async function translateV3LcpBlob(inputBlob)
                     // Eidolon layer features are always available (v3 has no "optional"),
                     // so force base: true to list them under Base Features.
                     feat.base = true;
-                    // Pad scalar attack_bonus / accuracy to tier-array shape v2 expects.
-                    if (typeof feat.attack_bonus === "number")
-                        feat.attack_bonus = [feat.attack_bonus, feat.attack_bonus, feat.attack_bonus];
-                    if (typeof feat.accuracy === "number")
-                        feat.accuracy = [feat.accuracy, feat.accuracy, feat.accuracy];
                     // System/Trait/Reaction/Tech features carry prose in actions[].detail, not
                     // `effect`: fold it in and emit tg_*_action activation tags for the badge.
                     const activationTagMap = { Quick: "tg_quick_action", Full: "tg_full_action", Free: "tg_free_action", Protocol: "tg_protocol", Reaction: "tg_reaction" };
@@ -1519,6 +1792,7 @@ export async function translateV3LcpBlob(inputBlob)
     return {
         blob: outBlob,
         manifest: outManifest,
+        pureData,
         summary: {
             alreadyV2: false,
             classes: allClasses.length,
@@ -1655,7 +1929,7 @@ async function detectV3File(file)
         const JSZip = await getJSZip();
         const zip = await JSZip.loadAsync(file);
         const manifest = await readJsonIfExists(zip, "lcp_manifest.json");
-        return isV3Manifest(manifest) || hasV3Layout(zip);
+        return isV3Pack(zip, manifest);
     }
     catch (e)
     {
@@ -1740,7 +2014,7 @@ function renderV3Summary(root, anchor, summary)
         if (count > 0)
             rows.push([count, label]);
     }
-    const droppedAe = (summary.droppedActiveEffects?.length ?? 0) + (summary.droppedItemActiveEffects?.length ?? 0);
+    const droppedAe = sumActiveEffects(summary.droppedActiveEffects ?? []).total + sumActiveEffects(summary.droppedItemActiveEffects ?? []).total;
     const droppedLayers = summary.droppedEidolonLayers?.length ?? 0;
     el.innerHTML = rows.map(([count, label]) =>
         `<li style="display: flex; align-items: center; gap: 8px; margin: 2px 0;">
@@ -1804,11 +2078,34 @@ async function sortEidolonContentIntoFolder(summary)
     await moveToEidolonFolder(featurePack ?? itemsPack, featureLids);
 }
 
+async function importLcpDowntime(file)
+{
+    const importer = game.modules.get("lancer-automations")?.api?.importDowntimeActionsJson;
+    if (!importer)
+        return;
+    try
+    {
+        const JSZip = await getJSZip();
+        const zip = await JSZip.loadAsync(file);
+        const v3 = await readJsonIfExists(zip, "downtime_actions.json");
+        const actions = await readJsonIfExists(zip, "actions.json");
+        const entries = Array.isArray(v3) && v3.length
+            ? v3
+            : (Array.isArray(actions) ? actions.filter(entry => entry?.activation === "Downtime") : []);
+        if (entries.length)
+            await importer(JSON.stringify(entries));
+    }
+    catch (e)
+    {
+        console.warn("lancer-npc-import | v3-lcp | downtime import failed", e);
+    }
+}
+
 async function translateSelectedV3(file)
 {
     try
     {
-        const { blob, manifest, summary } = await getOrTranslate(file);
+        const { blob, manifest, summary, pureData } = await getOrTranslate(file);
         if (summary.alreadyV2)
         {
             ui.notifications.info(`"${manifest.name}" is already v2. Nothing to translate.`);
@@ -1822,8 +2119,10 @@ async function translateSelectedV3(file)
         const arrayBuf = await blob.arrayBuffer();
         const contentPack = await api.parseContentPack(arrayBuf);
         let lastPercent = -1;
+        let createdCount = 0;
         const progress = (done, total) =>
         {
+            createdCount = done;
             if (!total)
                 return;
             const percent = Math.floor((done / total) * 100);
@@ -1833,11 +2132,48 @@ async function translateSelectedV3(file)
                 lastPercent = percent;
             }
         };
-        await api.importCP(contentPack, progress);
+        const importErrors = [];
+        const originalConsoleError = console.error;
+        console.error = (...args) =>
+        {
+            importErrors.push(...args.filter(arg => arg instanceof Error));
+            originalConsoleError.apply(console, args);
+        };
+        const pack = `${manifest.name ?? ""} ${manifest.version ?? ""}`.trim();
+        const flagFor = pure => ({ pack, entries: Object.entries(pure).map(([path, data]) => ({ path, data })) });
+        const stampCreate = (document, data) =>
+        {
+            const pure = pureData?.[data?.system?.lid ?? document.system?.lid];
+            if (pure)
+                document.updateSource({ [`flags.${MODULE_ID}.v3`]: flagFor(pure) });
+        };
+        const stampUpdate = (document, changes) =>
+        {
+            const pure = pureData?.[document.system?.lid];
+            if (pure)
+                foundry.utils.setProperty(changes, `flags.${MODULE_ID}.==v3`, flagFor(pure));
+            else if (document.getFlag(MODULE_ID, "v3"))
+                foundry.utils.setProperty(changes, `flags.${MODULE_ID}.-=v3`, null);
+        };
+        const createHookId = Hooks.on("preCreateItem", stampCreate);
+        const updateHookId = Hooks.on("preUpdateItem", stampUpdate);
+        try
+        {
+            await api.importCP(contentPack, progress);
+        }
+        finally
+        {
+            console.error = originalConsoleError;
+            Hooks.off("preCreateItem", createHookId);
+            Hooks.off("preUpdateItem", updateHookId);
+        }
+        if (importErrors.length && !createdCount)
+            throw importErrors[0];
 
         // Post-import: move eidolon content into a dedicated "Eidolons" subfolder in
         // each pack so GMs don't confuse layer templates / features with regular NPC content.
         await sortEidolonContentIntoFolder(summary);
+        await importLcpDowntime(file);
 
         const notes = [];
         const npcEffects = sumActiveEffects(summary.droppedActiveEffects);
@@ -1848,11 +2184,13 @@ async function translateSelectedV3(file)
             notes.push(`Item active_effects: ${itemEffects.lifted} lifted, ${itemEffects.textOnly} text-only`);
         if (summary.droppedEidolonLayers.length)
             notes.push(`${summary.droppedEidolonLayers.length} eidolon layers dropped`);
+        if (importErrors.length)
+            notes.push(`${importErrors.length} import errors, see console`);
         const itemCounts = itemCountText(summary);
         const message = `Imported "${manifest.name}" (${summary.classes} classes, ${summary.features} features, ${summary.templates} templates`
             + (itemCounts ? `; ${itemCounts}` : "") + ")"
             + (notes.length ? `. ${notes.join("; ")}.` : ".");
-        ui.notifications.info(message);
+        ui.notifications[importErrors.length ? "warn" : "info"](message);
         console.log("lancer-npc-import | v3-lcp | import complete", summary);
 
         // Refresh the Compendium Manager so the installed/current column reflects the new import.
@@ -2025,6 +2363,15 @@ function wireLcpManager(_app, html)
     };
     attachInputListener();
 
+    root.addEventListener("click", event =>
+    {
+        if (!event.target.closest?.("button.lcp-import:not(.lni-translate-v3-btn)"))
+            return;
+        const file = root.querySelector('input[type="file"]')?.files?.[0];
+        if (file)
+            importLcpDowntime(file);
+    });
+
     const observer = new MutationObserver(() =>
     {
         if (_muting)
@@ -2051,6 +2398,7 @@ export function registerV3LcpShim()
         mod.api = mod.api || {};
         mod.api.translateV3LcpBlob = translateV3LcpBlob;
         mod.api.pickAndTranslateV3Lcp = pickAndTranslateV3Lcp;
+        mod.api.getV3Data = getV3Data;
     }
     console.log("lancer-npc-import | v3-lcp | registered");
 }

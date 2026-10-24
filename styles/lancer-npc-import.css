@@ -2717,3 +2717,208 @@
     flex: 0 0 auto;
     width: auto;
 }
+
+.npci-v3-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.desc-text + .npci-v3-row,
+.desc-text ~ .npci-v3-row {
+    margin-inline: 6px;
+}
+
+.npci-v3-row .compact-tag {
+    white-space: nowrap;
+}
+
+.npci-v3-row .npci-v3-ctl {
+    margin-left: 5px;
+    font-size: 10px;
+    color: inherit;
+    cursor: pointer;
+}
+
+.npci-v3-row .npci-v3-add {
+    padding: 0 7px;
+    cursor: pointer;
+}
+
+.npci-v3-editor .window-content {
+    padding: 8px;
+}
+
+.npci-v3-editor form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.npci-v3-editor .npci-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+}
+
+.npci-v3-editor .npci-head .major {
+    flex: none;
+}
+
+.npci-v3-editor .npci-source {
+    margin-left: auto;
+    font-family: "Signika", sans-serif;
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: none;
+    opacity: 0.85;
+}
+
+.npci-v3-editor .npci-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.npci-v3-editor .npci-section {
+    margin-bottom: 6px;
+    padding: 1px 10px;
+    font-size: 12px;
+}
+
+.npci-v3-editor .npci-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+}
+
+.npci-v3-editor .npci-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.npci-v3-editor .npci-field.wide {
+    grid-column: 1 / -1;
+}
+
+.npci-v3-editor .npci-label {
+    font-family: "Signika", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0.8;
+}
+
+.npci-v3-editor .npci-control {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    min-height: 28px;
+}
+
+.npci-v3-editor .npci-control > select,
+.npci-v3-editor .npci-control > input[type="text"] {
+    width: 100%;
+    height: 28px;
+    margin: 0;
+    color: inherit;
+}
+
+.npci-v3-editor .npci-toggle {
+    position: relative;
+    display: inline-flex;
+    cursor: pointer;
+}
+
+.npci-v3-editor .npci-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.npci-v3-editor .npci-toggle span {
+    display: inline-block;
+    padding: 3px 10px;
+    border: 1px solid var(--primary-color, #991e2a);
+    border-radius: 12px;
+    font-family: "Signika", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary-color, #991e2a);
+}
+
+.npci-v3-editor .npci-toggle input:checked + span {
+    background: var(--primary-color, #991e2a);
+    color: #fff;
+}
+
+.npci-v3-editor .npci-toggle input:focus-visible + span {
+    outline: 2px solid #e0645a;
+    outline-offset: 1px;
+}
+
+.npci-v3-editor .npci-kinds {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.npci-v3-editor .npci-kind {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    margin: 0;
+    padding: 0 6px;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.35);
+    color: inherit;
+    font-family: "Signika", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.1;
+    text-align: left;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.npci-v3-editor .npci-kind i {
+    flex: none;
+    width: 18px;
+    font-size: 16px;
+    text-align: center;
+}
+
+.npci-v3-editor .npci-kind.active {
+    border-color: var(--primary-color, #991e2a);
+    background: var(--primary-color, #991e2a);
+    color: #fff;
+}
+
+.npci-v3-editor .npci-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.npci-v3-editor .npci-buttons button {
+    height: 32px;
+    margin: 0;
+}
+
+.npci-v3-row .npci-v3-icon {
+    flex: none;
+    width: 1.3em;
+    height: 1.3em;
+    margin: 0 2px;
+    border: none;
+}

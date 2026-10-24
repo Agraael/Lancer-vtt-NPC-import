@@ -1,5 +1,6 @@
 import { checkModuleUpdate } from "./version-check.js";
 import { registerV3LcpShim } from "./v3-lcp-shim.js";
+import { registerV3Display, registerV3ChatSteps } from "./v3-display.js";
 import { registerSnapshotApi } from "./compendium-snapshot.js";
 import { patchPilotImportReserves } from "./pilot-reserves-patch.js";
 import { ActorImportDialog } from "./npc-import-ui.js";
@@ -156,6 +157,8 @@ Hooks.once('init', () =>
     });
 });
 
+Hooks.on('lancer.registerFlows', (flowSteps, flows) => registerV3ChatSteps(flowSteps, flows));
+
 Hooks.once('ready', async () =>
 {
     if (game.system.id !== 'lancer')
@@ -164,6 +167,7 @@ Hooks.once('ready', async () =>
     checkModuleUpdate(MODULE_ID);
     patchPilotImportReserves();
     registerV3LcpShim();
+    registerV3Display();
     registerSnapshotApi();
 });
 

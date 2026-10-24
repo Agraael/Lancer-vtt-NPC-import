@@ -2,7 +2,7 @@
     "id": "lancer-npc-import",
     "title": "Lancer Comp/Con Sync",
     "description": "Import and export Lancer pilots and NPCs between Comp/Con and Foundry, plus v3 LCP import and item refresh tools.",
-    "version": "2.0.0",
+    "version": "2.0.5",
     "compatibility": {
         "minimum": "13",
         "verified": "13"
@@ -50,7 +50,7 @@
     ],
     "url": "",
     "manifest": "https://github.com/Agraael/Lancer-vtt-NPC-import/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/Lancer-vtt-NPC-import/releases/download/2.0.0/module.zip",
+    "download": "https://github.com/Agraael/Lancer-vtt-NPC-import/releases/download/2.0.5/module.zip",
     "license": "",
     "readme": "README.md"
 }
