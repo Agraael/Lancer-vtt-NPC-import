@@ -1,8 +1,12 @@
 // Wraps Lancer's pilot JSON import (_onPilotJsonParsed): active loadout only, then reserves,
 // organizations, bond, mech item state and a resource refill. Also holds the organization helpers.
 
-import { unwrapData, normalizePilotData } from "./v3-api.js";
+import { unwrapData, normalizePilotData, cdnFetch } from "./v3-api.js";
 import { trimText, sameJson } from "./utils.js";
+
+const V3_SHARE_CODE = /^[A-Z0-9]{12}$/;
+const SHARE_CODE_URL = "https://api.compcon.app/v3/code";
+const SHARE_CODE_API_KEY = "fcFvjjrnQy2hypelJQi4X9dRI55r5KuI4bC07Maf";
 
 export function patchPilotImportReserves()
 {
@@ -43,7 +47,44 @@ export function patchPilotImportReserves()
         await _backfillSkillDetail(this.actor, pilotData);
         await _refillResources(this.actor);
     };
+    const origListeners = PilotSheet.prototype.activateListeners;
+    PilotSheet.prototype.activateListeners = function (html)
+    {
+        origListeners.call(this, html);
+        if (!this.options.editable || !this.actor.isOwner || !V3_SHARE_CODE.test(this.actor.system?.cloud_id ?? ""))
+            return;
+        html.find('.cloud-control[data-action*="download"]').off("click").on("click", async event =>
+        {
+            event.stopPropagation();
+            const code = this.actor.system.cloud_id;
+            ui.notifications.info("Importing character from V3 share code...");
+            let pilotJson;
+            try
+            {
+                pilotJson = await _fetchPilotByShareCode(code);
+            }
+            catch (error)
+            {
+                ui.notifications.error("Error importing from V3 share code.");
+                console.error(`lancer-npc-import | Failed import with V3 share code ${code}:`, error);
+                return;
+            }
+            await this._onPilotJsonParsed(pilotJson);
+        });
+    };
     console.log('lancer-npc-import | Patched pilot import to include reserves & organizations');
+}
+
+async function _fetchPilotByShareCode(code)
+{
+    const response = await fetch(`${SHARE_CODE_URL}?codes=${encodeURIComponent(JSON.stringify([code]))}&scope=items`, { headers: { "x-api-key": SHARE_CODE_API_KEY } });
+    const uri = (await response.json())?.[0]?.uri;
+    if (!uri)
+        throw new Error(`No pilot found for share code ${code}`);
+    const pilot = await cdnFetch(uri);
+    if (!pilot.ok)
+        throw new Error(`CDN ${pilot.status}`);
+    return pilot.text();
 }
 
 const _MECH_STAT_MAP = [

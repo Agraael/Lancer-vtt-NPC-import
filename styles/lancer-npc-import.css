@@ -2747,6 +2747,35 @@
     cursor: pointer;
 }
 
+.npci-v3-row .npci-v3-replaced {
+    opacity: 0.42;
+}
+
+.npci-v3-row .npci-v3-la-mark {
+    flex: none;
+    margin-right: 3px;
+    padding-right: 4px;
+    border-right: 1px solid currentColor;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.82em;
+    letter-spacing: 0.04em;
+}
+
+.npci-v3-row .npci-v3-la[data-item-uuid] {
+    cursor: pointer;
+}
+
+.npci-v3-row .npci-v3-replaced > span {
+    text-decoration: line-through;
+}
+
+.npci-v3-meta {
+    display: block;
+    margin-top: 3px;
+    color: #8b8b90;
+    font-size: 0.92em;
+}
+
 .npci-v3-editor .window-content {
     padding: 8px;
 }
@@ -2865,12 +2894,6 @@
     outline-offset: 1px;
 }
 
-.npci-v3-editor .npci-kinds {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
-}
-
 .npci-v3-editor .npci-kind {
     display: flex;
     align-items: center;
@@ -2902,6 +2925,129 @@
     border-color: var(--primary-color, #991e2a);
     background: var(--primary-color, #991e2a);
     color: #fff;
+}
+
+.npci-v3-editor .npci-kindrows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.npci-v3-editor .npci-kindrow {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.npci-v3-editor .npci-kindgrid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+
+.npci-v3-editor .npci-kindgrid .npci-kind {
+    gap: 4px;
+    padding: 0 4px;
+}
+
+.npci-v3-editor .npci-cats {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+
+.npci-v3-editor .npci-cats .npci-kind {
+    position: relative;
+    justify-content: center;
+    height: 26px;
+    text-align: center;
+}
+
+.npci-v3-editor .npci-cats input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.npci-v3-editor .npci-cats input:focus-visible + span {
+    outline: 2px solid #e0645a;
+    outline-offset: 2px;
+}
+
+.npci-v3-editor .npci-desc {
+    grid-column: 1 / -1;
+    margin-top: -2px;
+    font-size: 12px;
+    line-height: 1.35;
+    opacity: 0.72;
+}
+
+.npci-v3-editor .npci-hint {
+    grid-column: 1 / -1;
+    margin-top: -2px;
+    font-size: 11px;
+    line-height: 1.35;
+    opacity: 0.65;
+}
+
+.npci-v3-editor .npci-weapons {
+    gap: 4px;
+}
+
+.npci-v3-editor .npci-weapon-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.npci-v3-editor .npci-weapon-rows[hidden] {
+    display: none;
+}
+
+.npci-v3-editor .npci-chosen {
+    display: inline-block;
+    padding: 3px 10px;
+    border: 1px solid var(--primary-color, #991e2a);
+    border-radius: 12px;
+    background: var(--primary-color, #991e2a);
+    color: #fff;
+    font-family: "Signika", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.npci-v3-editor .npci-allnote {
+    margin-right: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.72;
+}
+
+.npci-v3-editor .npci-limit span {
+    border-style: dashed;
+}
+
+.npci-v3-editor .npci-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.25);
+}
+
+.npci-v3-editor .npci-preview[hidden] {
+    display: none;
+}
+
+.npci-v3-editor .npci-preview-chips .compact-tag-row {
+    margin: 0;
+}
+
+.npci-v3-editor .npci-preview-chips .npci-v3-add {
+    display: none;
 }
 
 .npci-v3-editor .npci-buttons {

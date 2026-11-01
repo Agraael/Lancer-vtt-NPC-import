@@ -629,7 +629,12 @@ function accuracyBonusSynergy(bonus)
     return synergy;
 }
 
-function moveAccuracyBonuses(owner, bonusKey, synergyKey)
+function isAccuracyRecord(bonus)
+{
+    return !!bonus && bonus.id !== "accuracy" && !!(Number(bonus.accuracy) || Number(bonus.difficulty));
+}
+
+function moveAccuracyBonuses(owner, bonusKey, synergyKey, dataOwned = false)
 {
     if (!owner || !Array.isArray(owner[bonusKey]))
         return;
@@ -642,7 +647,8 @@ function moveAccuracyBonuses(owner, bonusKey, synergyKey)
             kept.push(bonus);
             continue;
         }
-        owner[synergyKey] = [...(Array.isArray(owner[synergyKey]) ? owner[synergyKey] : []), synergy];
+        if (!(dataOwned && isAccuracyRecord(bonus)))
+            owner[synergyKey] = [...(Array.isArray(owner[synergyKey]) ? owner[synergyKey] : []), synergy];
         const val = String(bonus.val ?? "0").trim();
         if (bonus.id !== "accuracy" && val !== "" && val !== "0")
             kept.push(bonus);
@@ -661,7 +667,7 @@ function normalizeBonusesList(list)
 function dropConditionedBonuses(owner, bonusKey)
 {
     if (Array.isArray(owner?.[bonusKey]))
-        owner[bonusKey] = owner[bonusKey].filter(bonus => !bonus?.condition && !DATA_BONUS_IDS.includes(bonus?.id));
+        owner[bonusKey] = owner[bonusKey].filter(bonus => !bonus?.condition && !isDataBonus(bonus));
 }
 
 // Strips v3-only fields and normalizes nested actions/bonuses for Lancer's .map/.toString calls.
@@ -691,14 +697,14 @@ function stripNested(item, droppedAE)
     for (const bonusKey of BONUS_LIST_KEYS)
         dropConditionedBonuses(item, bonusKey);
     normalizeBonusesList(item.bonuses);
-    moveAccuracyBonuses(item, "bonuses", "synergies");
+    moveAccuracyBonuses(item, "bonuses", "synergies", true);
     // Core-system prefixed arrays (frames): active_actions / passive_actions / active_bonuses / passive_bonuses.
     normalizeActionsList(item.active_actions);
     normalizeActionsList(item.passive_actions);
     normalizeBonusesList(item.active_bonuses);
     normalizeBonusesList(item.passive_bonuses);
-    moveAccuracyBonuses(item, "active_bonuses", "active_synergies");
-    moveAccuracyBonuses(item, "passive_bonuses", "passive_synergies");
+    moveAccuracyBonuses(item, "active_bonuses", "active_synergies", true);
+    moveAccuracyBonuses(item, "passive_bonuses", "passive_synergies", true);
 }
 
 // Lift v3 core_system active_effects[]/passive_effects[] into the v2 core_system
@@ -1159,21 +1165,29 @@ function normalizeV3Shapes(value)
 
 const PURE_ACTION_FIELDS = ["add_status", "add_resist", "add_special", "remove_special", "add_other", "save", "condition", "bonus_damage", "accuracy", "attack_bonus", "tech_accuracy", "tech_attack_bonus", "can_crit", "target_defense"];
 const PURE_NPC_ACTION_FIELDS = ["name", "activation", "frequency", "range", "damage", ...PURE_ACTION_FIELDS];
-const PURE_EFFECT_FIELDS = ["name", "condition", "frequency", "duration", "target", "damage", "range", "attack", ...PURE_ACTION_FIELDS];
+const PURE_EFFECT_FIELDS = ["name", "pilot", "mech", "condition", "frequency", "duration", "target", "damage", "range", "attack", ...PURE_ACTION_FIELDS];
 const PURE_DAMAGE_FIELDS = ["ap", "aoe", "target", "save", "save_half", "irreducible", "overkill", "reliable", "bonus", "override", "attack"];
 const PURE_RANGE_FIELDS = ["min", "bonus", "override"];
 const NESTED_ACTION_KEYS = ["active_effects", "passive_effects", "sub_actions"];
 const DIRECT_EFFECT_KEYS = ["add_status", "add_resist", "add_special", "remove_special", "add_other"];
-const PURE_DIRECT_FIELDS = ["name", "activation", "condition", "frequency", "duration", "target", "save", "attack", ...DIRECT_EFFECT_KEYS];
+const PURE_DIRECT_FIELDS = ["name", "pilot", "mech", "activation", "condition", "frequency", "duration", "target", "save", "attack", ...DIRECT_EFFECT_KEYS];
+const QUALIFIER_FIELDS = ["name", "pilot", "mech"];
 const ACTION_LIST_KEYS = ["actions", "sub_actions", "active_actions", "passive_actions"];
 const BONUS_LIST_KEYS = ["bonuses", "active_bonuses", "passive_bonuses"];
 const PURE_BONUS_FIELDS = ["id", "val", "accuracy", "difficulty", "damage_types", "range_types", "weapon_types", "weapon_sizes", "overwrite", "replace", "condition", "max"];
 
-const DATA_BONUS_IDS = ["immunity", "resistance"];
+const DATA_BONUS_IDS = ["immunity", "resistance", "threat", "knockback", "boost", "activations", "heat_cap", "thrown", "min_range", "extra_action"];
+const FLAT_BONUS_IDS = ["attack", "grapple", "ram"];
+
+function isDataBonus(bonus)
+{
+    const val = String(bonus?.val ?? "").trim();
+    return DATA_BONUS_IDS.includes(bonus?.id) || (FLAT_BONUS_IDS.includes(bonus?.id) && val !== "" && val !== "0");
+}
 
 function isPureBonus(bonus)
 {
-    return !!bonus && typeof bonus === "object" && !!(bonus.condition || Number(bonus.accuracy) || Number(bonus.difficulty) || DATA_BONUS_IDS.includes(bonus.id));
+    return !!bonus && typeof bonus === "object" && !!(bonus.condition || Number(bonus.accuracy) || Number(bonus.difficulty) || isDataBonus(bonus));
 }
 
 function pickFields(source, fields)
@@ -1190,14 +1204,14 @@ function pickFields(source, fields)
 
 function addPureData(out, path, data)
 {
-    if (Object.keys(data).some(key => key !== "name"))
+    if (Object.keys(data).some(key => !QUALIFIER_FIELDS.includes(key)))
         out[path] = data;
 }
 
 function effectPureData(effect)
 {
     const picked = pickFields(effect, PURE_EFFECT_FIELDS);
-    const bonuses = Array.isArray(effect?.bonuses) ? effect.bonuses.filter(bonus => bonus && (effect.condition || effect.duration || bonus.condition)) : [];
+    const bonuses = Array.isArray(effect?.bonuses) ? effect.bonuses.filter(bonus => bonus && (effect.condition || effect.duration || bonus.condition || isAccuracyRecord(bonus))) : [];
     if (bonuses.length)
         picked.bonuses = bonuses;
     return picked;
@@ -1236,6 +1250,8 @@ function collectPureData(value, path, npcFeature, out)
         return out;
     if ((path === "" || /^traits\.\d+$/.test(path)) && Object.keys(pickFields(value, DIRECT_EFFECT_KEYS)).length)
         addPureData(out, path, pickFields(value, PURE_DIRECT_FIELDS));
+    if ((path === "" || /^profiles\.\d+$/.test(path)) && Object.keys(pickFields(value, ["bonus_damage"])).length)
+        out[path] = { ...(out[path] ?? {}), bonus_damage: value.bonus_damage };
     for (const [key, child] of Object.entries(value))
     {
         const childPath = path ? `${path}.${key}` : key;

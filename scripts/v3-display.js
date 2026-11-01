@@ -1,6 +1,7 @@
 import { getV3Data } from "./v3-data.js";
 import { MODULE_ID, escapeHtml } from "./utils.js";
 import { V3DataEditor, deleteValue } from "./v3-editor.js";
+import { bonusValueChip } from "./v3-bonus-ids.js";
 
 const ROW_CLASS = "npci-v3-row";
 const HOOK_KEYS = ["on_attack", "on_hit", "on_crit", "on_miss"];
@@ -231,6 +232,63 @@ function otherChip(other)
     return { icon: "mdi mdi-plus-box", title: text, text: withDetails(text, ...common.details), tip: sentences(tips[other.type] ?? `${escapeHtml(label)}: ${escapeHtml(value ?? "")}.`, common.tip) };
 }
 
+const ACCURACY_SKILLS = ["hull", "agility", "systems", "engineering"];
+const ACCURACY_SCOPES = {
+    attack: "attacks",
+    ranged: "ranged attacks",
+    melee: "melee attacks",
+    tech_attack: "tech attacks",
+    grapple: "Grapple",
+    ram: "Ram",
+    save: "saves",
+    check: "checks",
+    ...Object.fromEntries(ACCURACY_SKILLS.flatMap(skill => [
+        [skill, `${capitalize(skill)} checks and saves`],
+        [`${skill}_check`, `${capitalize(skill)} checks`],
+        [`${skill}_save`, `${capitalize(skill)} saves`]
+    ]))
+};
+
+function conditionLabel(expression)
+{
+    return game.modules.get("lancer-automations")?.api?.v3ConditionLabel?.(expression) || expression;
+}
+
+function conditionTip(bonus)
+{
+    return bonus.condition ? `Only while ${escapeHtml(conditionLabel(bonus.condition))}.` : null;
+}
+
+function isReplaced(item, path)
+{
+    return !!game.modules.get("lancer-automations")?.api?.isV3DataReplaced?.(item, path);
+}
+
+const LA_PLACEMENT = { type: "box", key: "effect" };
+
+function laChips(item)
+{
+    const chips = game.modules.get("lancer-automations")?.api?.getItemAttachmentChips?.(item) ?? [];
+    const uuid = item.isOwner ? item.uuid : null;
+    return chips.map(chip => ({ ...chip, la: true, uuid }));
+}
+
+function accuracyChip(bonus)
+{
+    const net = (Number(bonus.accuracy) || 0) - (Number(bonus.difficulty) || 0);
+    if (!net || bonus.id === "accuracy")
+        return null;
+    const kind = net > 0 ? "Accuracy" : "Difficulty";
+    const filters = [...(Array.isArray(bonus.weapon_sizes) ? bonus.weapon_sizes : []), ...typeList(bonus)];
+    const scope = `${ACCURACY_SCOPES[bonus.id] ?? bonus.id}${filters.length ? ` (${filters.join(", ")})` : ""}`;
+    return {
+        icon: net > 0 ? "cci cci-accuracy" : "cci cci-difficulty",
+        text: `+${Math.abs(net)} ${kind} · ${scope}`,
+        tip: sentences(`Adds ${Math.abs(net)} ${kind} to ${escapeHtml(scope)}.`, conditionTip(bonus)),
+        conditional: !!bonus.condition
+    };
+}
+
 function typeList(source)
 {
     return Object.entries(source ?? {}).filter(([key, value]) => key.endsWith("_types") && Array.isArray(value)).flatMap(([, value]) => value);
@@ -341,11 +399,12 @@ function chipsFor(entry, item)
     {
         const types = [...bonus.weaponSizes, ...bonus.weaponTypes];
         const when = bonus.hitType && bonus.hitType !== "hit" ? ` on ${bonus.hitType}` : "";
+        const damageType = bonus.type ? ` ${bonus.type}` : "";
         push({
             icon: "cci cci-variable",
-            text: `+${valueText(bonus.val)} bonus damage${when}${types.length ? ` (${types.join(", ")})` : ""}`,
+            text: `+${valueText(bonus.val)}${damageType} bonus damage${when}${types.length ? ` (${types.join(", ")})` : ""}`,
             tip: sentences(
-                bonus.detail ? escapeHtml(bonus.detail) : `Adds ${escapeHtml(valueText(bonus.val))} bonus damage${when ? escapeHtml(when) : " on hit"}.`,
+                bonus.detail ? escapeHtml(bonus.detail) : `Adds ${escapeHtml(valueText(bonus.val))}${escapeHtml(damageType)} bonus damage${when ? escapeHtml(when) : " on hit"}.`,
                 types.length ? `Only for ${escapeHtml(types.join(", "))} weapons.` : null
             )
         }, ref("bonus_damage", { index: bonus.index }));
@@ -368,10 +427,14 @@ function chipsFor(entry, item)
         push({ icon: "mdi mdi-bullseye-arrow", text: `${entry.techAttackBonus > 0 ? "+" : ""}${entry.techAttackBonus} tech Attack`, tip: `Adds ${entry.techAttackBonus} to the tech attack roll.` }, ref("attack", { key: "tech_attack_bonus" }));
     entry.bonuses.forEach((bonus, index) =>
     {
-        if (!bonus?.id || !hasValue(bonus.val))
+        if (!bonus?.id)
             return;
-        const label = `${Number(bonus.val) >= 0 ? "+" : ""}${valueText(bonus.val)} ${capitalize(bonus.id).toLowerCase()}${typesText(bonus)}`;
-        push({ icon: "mdi mdi-plus-box", text: label, tip: `${escapeHtml(label)} while this effect is active.` }, ref("bonus", { index }));
+        const accuracy = accuracyChip(bonus);
+        if (accuracy)
+            push(accuracy, ref("bonus", { index }));
+        const chip = bonusValueChip(bonus);
+        if (chip)
+            push({ ...chip, text: `${chip.text}${typesText(bonus)}`, tip: sentences(chip.tip, conditionTip(bonus)), conditional: !!bonus.condition }, ref("bonus", { index }));
     });
     const duration = durationText(entry.duration);
     if (duration)
@@ -469,12 +532,10 @@ function addBox(ctx, surface, key)
     return at(box);
 }
 
-function namedGroup(root, name)
+function collapseBox(root, collapseId)
 {
-    if (!name)
-        return null;
-    const group = [...root.querySelectorAll(".la-collapsegroup")].find(element => element.querySelector(".la-summary .la-terminaltext")?.textContent.trim() === name);
-    return group ? (group.querySelector(".la-effectbox") ?? group) : null;
+    const wrapper = root.querySelector(`[data-la-collapse-id="${collapseId}"]`);
+    return wrapper ? (wrapper.querySelector(".la-effectbox") ?? wrapper.querySelector(".la-collapsecontent") ?? wrapper) : null;
 }
 
 const NATIVE_ACTOR = {
@@ -515,8 +576,8 @@ const ALT_ACTOR = {
         const group = card.querySelector(`[data-rank="${placement.index}"]`)?.closest(".la-collapsegroup");
         return group ? (group.querySelector(".la-effectbox:not([data-path])") ?? group) : null;
     })),
-    trait: (ctx, placement) => at(namedGroup(ctx.root, ctx.item.system?.traits?.[placement.index]?.name)),
-    core: ctx => at(ctx.item.type === "frame" ? namedGroup(ctx.root, ctx.item.system?.core_system?.name) : null),
+    trait: (ctx, placement) => at(collapseBox(ctx.root, `${ctx.item.parent?.uuid}_${ctx.item.id}_trait_${placement.index}`)),
+    core: (ctx, placement) => at(ctx.item.type === "frame" ? collapseBox(ctx.root, `${ctx.item.parent?.uuid}.${ctx.item.id}.${placement.passive ? "passive" : "activePower"}`) : null),
     fallback: ctx => at(firstOf(ctx.cards, card => card.querySelector(".la-collapsecontent") ?? card))
 };
 
@@ -569,15 +630,31 @@ function buildRow(chips, alt, tooltipClass = null, editing = null)
     {
         const tag = document.createElement("div");
         tag.className = alt ? "la-flexrow la-bckg-primary la-text-header -bordersround -small -bordersoff -padding0-l -padding1-r -aligncenter -gap0" : "compact-tag flexrow";
-        if (chip.tip && alt)
+        if (chip.replaced)
+            tag.classList.add("npci-v3-replaced");
+        if (chip.la)
         {
-            tag.dataset.tooltip = `<div class="la-bckg-primary -fontface-stylized -fontsize4 -upper -padding0">${escapeHtml(chip.title ?? chip.text)}</div><div class="la-tooltip__content -fontface-neutral">${chip.tip}</div>`;
+            tag.classList.add("npci-v3-la");
+            if (chip.uuid)
+                tag.dataset.itemUuid = chip.uuid;
+        }
+        let meta = null;
+        if (chip.replaced)
+            meta = "Replaced by automation.";
+        else if (chip.la && chip.origin === "hand")
+            meta = "Added by hand.";
+        else if (chip.la && chip.origin === "automation")
+            meta = "Added by automation.";
+        const tip = meta ? `${chip.tip ?? ""}<span class="npci-v3-meta">${meta}</span>` : chip.tip;
+        if (tip && alt)
+        {
+            tag.dataset.tooltip = `<div class="la-bckg-primary -fontface-stylized -fontsize4 -upper -padding0">${escapeHtml(chip.title ?? chip.text)}</div><div class="la-tooltip__content -fontface-neutral">${tip}</div>`;
             tag.dataset.tooltipClass = tooltipClass ?? "clipped-bot la-tooltip";
             tag.dataset.tooltipDirection = "DOWN";
         }
-        else if (chip.tip)
+        else if (tip)
         {
-            tag.dataset.tooltip = chip.tip;
+            tag.dataset.tooltip = chip.la && chip.title && chip.title !== chip.text ? `<strong>${escapeHtml(chip.title)}</strong><br>${tip}` : tip;
         }
         let icon;
         if (chip.img)
@@ -597,7 +674,28 @@ function buildRow(chips, alt, tooltipClass = null, editing = null)
             label.className = "-fontsizesmall";
         else
             label.style.margin = "3px";
+        if (chip.la)
+        {
+            const mark = document.createElement("span");
+            mark.className = "npci-v3-la-mark";
+            mark.textContent = "L.A";
+            tag.append(mark);
+        }
         tag.append(icon, " ", label);
+        if (chip.la && chip.origin === "automation")
+        {
+            const gear = document.createElement("i");
+            gear.className = alt ? "fas fa-gear -fontsize1" : "fas fa-gear i--light";
+            gear.style.marginRight = "3px";
+            tag.append(gear);
+        }
+        if (chip.conditional)
+        {
+            const condition = document.createElement("i");
+            condition.className = alt ? "fas fa-code-branch -fontsize1" : "fas fa-code-branch i--light";
+            condition.style.marginRight = "3px";
+            tag.append(condition);
+        }
         if (editing && chip.ref)
             tag.append(control("fas fa-edit npci-v3-ctl", () => editing.edit(chip.ref)), control("fas fa-trash npci-v3-ctl", () => editing.remove(chip.ref)));
         row.append(tag);
@@ -643,9 +741,25 @@ function chipGroups(item)
         const key = JSON.stringify(placement);
         if (!groups.has(key))
             groups.set(key, { placement, chips: [] });
-        groups.get(key).chips.push(...chips);
+        const replaced = isReplaced(item, entry.path);
+        groups.get(key).chips.push(...chips.map(chip => (replaced ? { ...chip, replaced } : chip)));
     }
     return [...groups.values()];
+}
+
+function displayGroups(item)
+{
+    const groups = chipGroups(item);
+    const chips = laChips(item);
+    if (!chips.length)
+        return groups;
+    const key = JSON.stringify(LA_PLACEMENT);
+    const group = groups.find(entry => JSON.stringify(entry.placement) === key);
+    if (group)
+        group.chips.push(...chips);
+    else
+        groups.push({ placement: LA_PLACEMENT, chips });
+    return groups;
 }
 
 const BOX_NAMES = { effect: "Effect", on_hit: "On hit", on_crit: "On crit", on_attack: "On attack", on_miss: "On miss" };
@@ -666,7 +780,7 @@ function placementLabel(item, placement)
 
 export function getV3ChipRows(item)
 {
-    return chipGroups(item).map(({ placement, chips }) => ({ placement, label: placementLabel(item, placement), html: buildRow(chips, false).outerHTML }));
+    return displayGroups(item).map(({ placement, chips }) => ({ placement, label: placementLabel(item, placement), html: buildRow(chips, false).outerHTML, la: chips.some(chip => chip.la) }));
 }
 
 function newPathFor(item, placement)
@@ -728,23 +842,34 @@ function itemPlacements(root)
     return placements;
 }
 
+function previewChips(item, entries, ref)
+{
+    const preview = { flags: { [MODULE_ID]: { v3: { entries } } }, actor: item.actor, type: item.type, system: item.system, name: item.name, id: item.id, uuid: item.uuid };
+    const entry = getV3Data(preview).find(candidate => candidate.path === ref.path);
+    if (!entry)
+        return "";
+    const chips = chipsFor(entry, preview).filter(chip => chip.ref?.kind === ref.kind && (ref.self ? chip.ref.self : (ref.index === undefined || chip.ref.index === ref.index)));
+    return chips.length ? buildRow(chips, false).outerHTML : "";
+}
+
 function editingFor(item, placement)
 {
     const label = placementLabel(item, placement);
+    const options = { preview: (entries, ref) => previewChips(item, entries, ref) };
     return {
-        edit: ref => new V3DataEditor(item, { ...ref, label }).render(true),
+        edit: ref => new V3DataEditor(item, { ...ref, label }, options).render(true),
         remove: ref => deleteValue(item, ref),
-        add: () => new V3DataEditor(item, { path: newPathFor(item, placement), kind: "status", isNew: true, label }).render(true)
+        add: () => new V3DataEditor(item, { path: newPathFor(item, placement), kind: "status", isNew: true, label }, options).render(true)
     };
 }
 
-function decorate(root, items, surface, editable = false)
+function decorate(root, items, surface, editable = false, withLA = true)
 {
     root.querySelectorAll(`.${ROW_CLASS}`).forEach(row => row.remove());
     const tooltipClass = surface.alt ? root.querySelector("[data-tooltip-class*='la-tooltip']")?.dataset.tooltipClass ?? null : null;
     for (const item of items)
     {
-        const groups = chipGroups(item);
+        const groups = withLA ? displayGroups(item) : chipGroups(item);
         const ctx = { root, item, cards: surface === ITEM_SHEET ? [root] : cardsFor(root, item.uuid) };
         const rendered = new Set();
         for (const { placement, chips } of groups)
@@ -834,7 +959,7 @@ function appendChatChips(state, kind)
         {
             const holder = document.createElement("div");
             holder.innerHTML = data.html;
-            decorate(holder, [item], NATIVE_ACTOR);
+            decorate(holder, [item], NATIVE_ACTOR, false, false);
             data.html = holder.innerHTML;
         }
         return true;
@@ -892,6 +1017,15 @@ export function registerV3Display()
         mod.api = mod.api || {};
         mod.api.getV3ChipRows = getV3ChipRows;
     }
+    document.addEventListener("click", event =>
+    {
+        const chip = event.target instanceof Element ? event.target.closest(".npci-v3-la[data-item-uuid]") : null;
+        if (!chip)
+            return;
+        event.preventDefault();
+        event.stopPropagation();
+        game.modules.get("lancer-automations")?.api?.openItemLaMenu?.(fromUuidSync(chip.dataset.itemUuid));
+    }, true);
     Hooks.on("renderActorSheet", (app, html) =>
     {
         const root = rootOf(html);

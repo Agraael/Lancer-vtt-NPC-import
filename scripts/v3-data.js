@@ -187,6 +187,7 @@ function normalizeBonusDamage(value, tier)
 {
     return asList(value).map((entry, index) => ({ entry: typeof entry === "object" ? entry : { val: entry }, index })).filter(({ entry }) => entry && hasValue(entry.val)).map(({ entry, index }) => ({
         val: resolveTier(entry.val, tier),
+        type: entry.type ? capitalize(entry.type) : null,
         detail: entry.detail ?? null,
         weaponTypes: asList(entry.weapon_types),
         weaponSizes: asList(entry.weapon_sizes),
@@ -255,6 +256,8 @@ function normalizeEntry(path, data, tier)
         path,
         ...location,
         name: data.name ?? null,
+        pilot: !!data.pilot,
+        mech: !!data.mech,
         activation: data.activation ?? null,
         attack: data.attack ?? null,
         condition: data.condition ?? null,
