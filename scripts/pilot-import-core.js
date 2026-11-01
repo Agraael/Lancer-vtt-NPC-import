@@ -2,7 +2,9 @@
 
 import { windowLog } from "./sync-log.js";
 import { isOrgReserve, orgFromItem, orgLabel, matchOrgs } from "./pilot-reserves-patch.js";
-import { trimText, clampRank, frameLicenseId, reserveKey } from "./utils.js";
+import { trimText, clampRank, frameLicenseId, reserveKey, actorLock, canEditActor, MODULE_ID } from "./utils.js";
+
+const TEMP_PILOT_QUERY = `${MODULE_ID}.tempPilot`;
 
 export function findExistingPilotByCloudId(cloudId)
 {
@@ -587,15 +589,53 @@ async function _setPilotLink(mechs, pilotUuid)
         await mech.update({ "system.pilot": pilotUuid });
 }
 
-async function _importMechsOnly(pilotActor, payload)
+async function _tempPilotQuery({ action, uuid, userId })
 {
+    const actor = await fromUuid(uuid);
+    if (action === "delete")
+    {
+        if (actor?.getFlag(MODULE_ID, "tempPilot"))
+            await actor.delete();
+        return true;
+    }
+    if (actor?.type !== "pilot")
+        throw new Error("pilot not found");
+    const ownership = foundry.utils.deepClone(actor.ownership);
+    ownership[userId] = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
     const temp = await Actor.create({
         type: "pilot",
-        name: `${pilotActor.name} (import)`,
-        folder: pilotActor.folder?.id ?? null,
-        ownership: foundry.utils.deepClone(pilotActor.ownership)
+        name: `${actor.name} (import)`,
+        folder: actor.folder?.id ?? null,
+        ownership,
+        flags: { [MODULE_ID]: { tempPilot: true } }
     });
-    const targets = payload.mechs.map(mech => findExistingMechByLid(mech.id)[0]).filter(Boolean);
+    return temp.uuid;
+}
+
+export function registerTempPilotQuery()
+{
+    CONFIG.queries[TEMP_PILOT_QUERY] = _tempPilotQuery;
+}
+
+export function canImportMechsOnly()
+{
+    return !!(game.user?.isGM || game.users?.activeGM);
+}
+
+async function _tempPilot(action, uuid)
+{
+    const data = { action, uuid, userId: game.user.id };
+    if (game.user.isGM)
+        return _tempPilotQuery(data);
+    if (!game.users.activeGM)
+        throw new Error("importing mechs without their pilot needs a GM online");
+    return game.users.activeGM.query(TEMP_PILOT_QUERY, data);
+}
+
+async function _importMechsOnly(pilotActor, payload)
+{
+    const temp = await fromUuid(await _tempPilot("create", pilotActor.uuid));
+    const targets = payload.mechs.map(mech => findExistingMechByLid(mech.id)[0]).filter(canEditActor);
     try
     {
         await _setPilotLink(targets, temp.uuid);
@@ -603,8 +643,8 @@ async function _importMechsOnly(pilotActor, payload)
     }
     finally
     {
-        await _setPilotLink(game.actors.filter(actor => _isMech(actor) && _mechLinksTo(actor, temp)), pilotActor.uuid);
-        await temp.delete();
+        await _setPilotLink(game.actors.filter(actor => _isMech(actor) && _mechLinksTo(actor, temp) && canEditActor(actor)), pilotActor.uuid);
+        await _tempPilot("delete", temp.uuid);
     }
 }
 
@@ -623,10 +663,13 @@ export async function importOnePilot(pilotJson, { updateExisting = true, mechIds
         payload = { ...pilotJson, mechs: pilotJson.mechs.filter(mech => mechIdsFilter.has(mech.id)) };
     }
 
+    if (!includePilot && !actor)
+        throw new Error("the pilot is not in Foundry, import it with its mechs");
+    const lock = actorLock(actor);
+    if (lock)
+        throw new Error(lock);
     if (!includePilot)
     {
-        if (!actor)
-            throw new Error("the pilot is not in Foundry, import it with its mechs");
         await _importMechsOnly(actor, payload);
         return { actor, updated: true };
     }
@@ -642,7 +685,7 @@ export async function importOnePilot(pilotJson, { updateExisting = true, mechIds
 
     const payloadLids = new Set((payload.mechs || []).map(mech => mech.id));
     const kept = wasUpdate
-        ? game.actors.filter(candidate => _isMech(candidate) && _mechLinksTo(candidate, actor) && !payloadLids.has(candidate.system?.lid))
+        ? game.actors.filter(candidate => _isMech(candidate) && _mechLinksTo(candidate, actor) && !payloadLids.has(candidate.system?.lid) && canEditActor(candidate))
         : [];
     await _setPilotLink(kept, null);
     try

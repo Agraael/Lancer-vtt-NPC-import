@@ -8,13 +8,14 @@ import {
     cloudMechSystems,
     skillNameKey,
     cloudBondClocks,
-    actorBond
+    actorBond,
+    canImportMechsOnly
 } from "./pilot-import-core.js";
 import { pilotFromV3Json } from "./pilot-import-compcon.js";
 import { setRunMark } from "./sync-log.js";
 import { mechArt, actorArt } from "./frame-art.js";
 import { isOrgReserve, orgFromItem, orgLabel } from "./pilot-reserves-patch.js";
-import { escapeHtml, trimText, MODULE_ID } from "./utils.js";
+import { escapeHtml, trimText, MODULE_ID, actorLock, LOCK_TIPS } from "./utils.js";
 
 const STATUS_LABELS = { loss: "Loses progress", mod: "Changed", new: "New", ok: "Up to date" };
 const WORDS = {
@@ -820,7 +821,7 @@ function _mechMissing(mech, known)
     return lids.filter(lid => !known.has(lid)).length;
 }
 
-function _mechCard(mech, result, mechIndex, checked, moves, open, known, exporting = false)
+function _mechCard(mech, result, mechIndex, checked, moves, open, known, exporting = false, lock = "")
 {
     const statusKey = _mechStatusKey(result);
     const art = mechArt(mech, result.existing);
@@ -836,6 +837,8 @@ function _mechCard(mech, result, mechIndex, checked, moves, open, known, exporti
     let pickTitle = result.existing ? "Update this mech from Comp/Con. Unticked, it stays as it is." : "Create this mech from Comp/Con";
     if (exporting)
         pickTitle = result.existing ? "Update this mech in Comp/Con. Unticked, it stays as it is." : "Not in Foundry. It stays as it is in Comp/Con.";
+    if (lock)
+        pickTitle = LOCK_TIPS[lock];
     const words = exporting ? WORDS.export : WORDS.import;
 
     const statLine = _mechStats(mech)
@@ -859,7 +862,7 @@ function _mechCard(mech, result, mechIndex, checked, moves, open, known, exporti
         <div class="lancer-list-item cc-mech${open ? " cc-open" : ""}" data-st="${statusKey}">
             <span class="cc-stripe"></span>
             <label class="cc-mech-pick" title="${pickTitle}">
-                <input type="checkbox" class="mech-checkbox" data-mech="${mechIndex}"${checked ? " checked" : ""}${exporting && !result.existing ? " disabled" : ""}>
+                <input type="checkbox" class="mech-checkbox" data-mech="${mechIndex}"${checked ? " checked" : ""}${lock || (exporting && !result.existing) ? " disabled" : ""}>
                 <span>${exporting ? "Export" : "Import"}</span>
             </label>
             <span class="cc-art cc-mech-toggle" data-mech="${mechIndex}">${art ? `<img src="${escapeHtml(art)}" alt="">` : `<i class="cci cci-frame"></i>`}</span>
@@ -868,7 +871,7 @@ function _mechCard(mech, result, mechIndex, checked, moves, open, known, exporti
                 <div class="cc-mech-frame">${_icon(ICON.frame)}${_chip(known, mech.frame || mech.frameData?.id, "", "", escapeHtml(_frameLabel(mech)))}${_missingMark(known, mech.frame || mech.frameData?.id)}</div>
                 <div class="cc-mech-sum">${summary}</div>
             </div>
-            <span class="cc-pill" data-st="${statusKey}">${STATUS_LABELS[statusKey]}</span>
+            ${lock ? `<span class="cc-pill" data-st="lock" title="${escapeHtml(LOCK_TIPS[lock])}">${escapeHtml(lock)}</span>` : `<span class="cc-pill" data-st="${statusKey}">${STATUS_LABELS[statusKey]}</span>`}
             <i class="fas fa-chevron-down cc-caret cc-mech-toggle" data-mech="${mechIndex}"></i>
             ${moves ? `<div class="cc-mech-note">Moves from ${escapeHtml(moves)} to the new copy if ticked.</div>` : ""}
             ${details}
@@ -899,6 +902,8 @@ function _dossier(entry, options)
     if (player)
         tags.push(`<span class="cc-tag">Player: ${escapeHtml(player)}</span>`);
     tags.push(`<span class="cc-pill" data-st="${statusKey}">${STATUS_LABELS[statusKey]}${cmp.count > 1 ? ` ×${cmp.count}` : ""}</span>`);
+    if (options.pilotLock)
+        tags.push(`<span class="cc-pill" data-st="lock">${escapeHtml(options.pilotLock)}</span>`);
 
     const skills = Array.isArray(json.mechSkills) ? json.mechSkills : [];
     const hase = HASE.map(([field, label, key], i) =>
@@ -909,7 +914,7 @@ function _dossier(entry, options)
         return `<span${change ? ` class="cc-stat-changed"` : ""}><b class="cc-stat-lab">${_icon(ICON[key])}${label}</b>${escapeHtml(value)}${was}</span>`;
     }).join("");
 
-    let body = "";
+    let body = options.pilotLock ? `<div class="cc-info" data-st="lock"><i class="fas fa-lock"></i> ${escapeHtml(LOCK_TIPS[options.pilotLock])}</div>` : "";
     const warnings = [];
     const levelDown = changes.find(change => change.field === "Level" && change.effect === "down");
     if (levelDown && exporting)
@@ -962,7 +967,7 @@ function _dossier(entry, options)
     const mechs = (cmp.mechResults || []).map((result, mechIndex) =>
     {
         const moves = copy && result.existing ? (entry.actor?.name || "the Foundry pilot") : "";
-        return _mechCard(pilot.mechs[mechIndex] || {}, result, mechIndex, mechPicked.has(mechIndex), moves, options.openMechs.has(mechIndex), options.known, exporting);
+        return _mechCard(pilot.mechs[mechIndex] || {}, result, mechIndex, mechPicked.has(mechIndex), moves, options.openMechs.has(mechIndex), options.known, exporting, options.mechLock(mechIndex));
     }).join("");
     body += `<div class="cc-sec"><h5>Mechs</h5>${mechs || `<div class="cc-info">No mechs in this save.</div>`}</div>`;
 
@@ -1070,7 +1075,39 @@ export function buildPilotSelectionPanel(pilots, knownLids = null)
 
     function _canSplit(entry)
     {
-        return (_exporting() || state.update) && !!entry.actor;
+        return (_exporting() || (state.update && canImportMechsOnly())) && !!entry.actor;
+    }
+
+    function _pilotLock(entry)
+    {
+        return actorLock(_exporting() || state.update ? entry.actor : null);
+    }
+
+    function _mechLock(entry, mechIndex)
+    {
+        const existing = entry.cmp.mechResults?.[mechIndex]?.existing || null;
+        if (_exporting() && !existing)
+            return _pilotLock(entry);
+        return _pilotLock(entry) || actorLock(existing);
+    }
+
+    function _pruneLocked()
+    {
+        for (const entry of entries)
+        {
+            if (_pilotLock(entry))
+            {
+                state.pilots.delete(entry.index);
+                state.mechs.delete(entry.index);
+                continue;
+            }
+            const picked = state.mechs.get(entry.index);
+            for (const mechIndex of picked || [])
+            {
+                if (_mechLock(entry, mechIndex))
+                    picked.delete(mechIndex);
+            }
+        }
     }
 
     function _unexportableMechs(entry)
@@ -1114,7 +1151,7 @@ export function buildPilotSelectionPanel(pilots, knownLids = null)
         {
             const entry = entries.find(item => item.index === state.focus);
             $detail.html(entry
-                ? _dossier(entry, { pilots: state.pilots, mechs: state.mechs, update: state.update, mode: state.mode, openMechs: state.openMechs.get(entry.index) || new Set(), known: knownLids })
+                ? _dossier(entry, { pilots: state.pilots, mechs: state.mechs, update: state.update, mode: state.mode, openMechs: state.openMechs.get(entry.index) || new Set(), known: knownLids, pilotLock: _pilotLock(entry), mechLock: mechIndex => _mechLock(entry, mechIndex) })
                 : `<div class="cc-info">No pilot selected.</div>`);
             if (shownFocus !== state.focus)
             {
@@ -1139,9 +1176,12 @@ export function buildPilotSelectionPanel(pilots, knownLids = null)
                 $row.toggleClass("lancer-hidden", !_shown(entry))
                     .toggleClass("selected", _picked(entry))
                     .toggleClass("cc-focus", entry.index === state.focus);
+                const lock = _pilotLock(entry);
                 $row.find(".pilot-checkbox")
                     .prop("checked", pilotPicked)
-                    .prop("indeterminate", !pilotPicked && _mechSet(entry.index).size > 0);
+                    .prop("indeterminate", !pilotPicked && _mechSet(entry.index).size > 0)
+                    .prop("disabled", !!lock)
+                    .attr("title", lock ? LOCK_TIPS[lock] : null);
             }
             const pool = entries.filter(_inMode);
             for (const key of FILTERS)
@@ -1160,6 +1200,7 @@ export function buildPilotSelectionPanel(pilots, knownLids = null)
 
         function render()
         {
+            _pruneLocked();
             renderList();
             renderDetail();
         }

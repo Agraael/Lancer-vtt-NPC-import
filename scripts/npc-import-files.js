@@ -275,6 +275,10 @@ export async function selectAndImportFiles(customTierMode, updateExisting = true
                     }
                     pilotsToImport.push({ name: raw.name, json: raw });
                 }
+                else if (kind === "npc" && !game.user?.isGM)
+                {
+                    ui.notifications.warn(`Skipped ${file.name}: only the GM imports NPCs`);
+                }
                 else if (kind === "npc")
                 {
                     const npcData = normalizeNpcData(raw);

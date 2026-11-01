@@ -11,6 +11,7 @@ import { RefreshItemsDialog } from "./refresh/refresh-ui.js";
 import { isRefreshableActor } from "./refresh/refresh-core.js";
 import { COGNITO_SETTINGS_KEYS } from "./auth/cognito-auth.js";
 import { installV3CodeFetchPatch } from "./v3-api.js";
+import { registerTempPilotQuery } from "./pilot-import-core.js";
 import { MODULE_ID } from "./utils.js";
 
 export async function ImportActor()
@@ -22,7 +23,10 @@ export const ImportNPC = ImportActor;
 Hooks.once('init', () =>
 {
     if (game.system?.id === 'lancer')
+    {
         installV3CodeFetchPatch();
+        registerTempPilotQuery();
+    }
 
     game.settings.register(MODULE_ID, "defaultDownloadPortrait", {
         name: "Download portraits by default",
@@ -175,8 +179,6 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
 {
     if (game.system.id !== 'lancer')
         return;
-    if (!game.user?.isGM)
-        return;
 
     const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
     const headerActions = html.find('.header-actions.action-buttons');
@@ -184,7 +186,7 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
         return;
 
     const importButton = $(`
-        <button class="import-npc-button" title="Import or export pilots and NPCs with Comp/Con, or import JSON files">
+        <button class="import-npc-button" title="${game.user?.isGM ? "Import or export pilots and NPCs with Comp/Con, or import JSON files" : "Import or export your pilots with Comp/Con, or import JSON files"}">
             <i class="fas fa-arrow-right-arrow-left"></i> Comp/Con Sync
         </button>
     `);
@@ -193,6 +195,8 @@ Hooks.on('renderActorDirectory', (_app, htmlOrEl) =>
         ImportActor();
     });
     headerActions.append(importButton);
+    if (!game.user?.isGM)
+        return;
 
     const refreshButton = $(`
         <button class="refresh-actors-button" title="Refresh actor items from compendium LCPs">

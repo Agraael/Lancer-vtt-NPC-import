@@ -3,7 +3,7 @@ import { buildPilotPatch } from "./pilot-export-core.js";
 import { buildNpcPatch, markCustomClass, missingNpcLids } from "./npc-export-core.js";
 import { pilotRunScope } from "../pilot-import-core.js";
 import { windowLog } from "../sync-log.js";
-import { cloudSortKey } from "../utils.js";
+import { cloudSortKey, canEditActor, LOCKS } from "../utils.js";
 
 function _findCloudItem(items, key, id)
 {
@@ -73,6 +73,8 @@ export async function exportSelectedPilots(selection, syncLog = windowLog("Expor
     {
         if (!entry.actor)
             throw new Error("No Foundry pilot linked to this Comp/Con pilot");
+        if (!canEditActor(entry.actor))
+            throw new Error(LOCKS.owner);
         const item = _findCloudItem(items, entry.pilot?.key, entry.pilot?.id);
         const outcome = await patchCloudFile(item, (json, now) => buildPilotPatch(json, entry.actor, now, {
             includePilot: entry.includePilot !== false,

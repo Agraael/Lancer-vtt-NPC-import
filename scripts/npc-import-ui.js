@@ -1,7 +1,7 @@
 // Source picker and the NPC panel of the Comp/Con cloud dialog.
 
 import { corsProxyFetch } from "./v3-api.js";
-import { importFromFiles, selectActorMappings } from "./npc-import-files.js";
+import { importFromFiles, selectActorMappings, selectAndImportFiles } from "./npc-import-files.js";
 import { importFromCompCon, npcFromV3Json } from "./npc-import-compcon.js";
 import { setRunMark } from "./sync-log.js";
 import {
@@ -42,6 +42,7 @@ export class ActorImportDialog extends Dialog
     constructor()
     {
         const loggedIn = isLoggedIn();
+        const isGM = !!game.user?.isGM;
         const cloudCardClass = loggedIn ? "lancer-item-card" : "lancer-item-card lancer-item-card--disabled";
         const cloudCardTitle = loggedIn ? "" : 'title="Sign in to use the Comp/Con cloud"';
 
@@ -51,7 +52,7 @@ export class ActorImportDialog extends Dialog
                 <div class="lancer-dialog-base">
                     <div class="lancer-dialog-header">
                         <div class="lancer-dialog-title">COMP/CON SYNC // SOURCE SELECTION</div>
-                        <div class="lancer-dialog-subtitle">Pilots and NPCs, JSON or Comp/Con cloud</div>
+                        <div class="lancer-dialog-subtitle">${isGM ? "Pilots and NPCs" : "Pilots"}, JSON or Comp/Con cloud</div>
                     </div>
                     <div class="compcon-auth-row">${_loginStatusHtml()}</div>
                     <div class="lancer-items-grid">
@@ -59,21 +60,21 @@ export class ActorImportDialog extends Dialog
                             <div class="lancer-item-icon"><i class="fas fa-file-upload"></i></div>
                             <div class="lancer-item-content">
                                 <div class="lancer-item-name">Import from JSON File(s)</div>
-                                <div class="lancer-item-details">Auto-detects pilot or NPC per file</div>
+                                <div class="lancer-item-details">${isGM ? "Auto-detects pilot or NPC per file" : "Pilot files"}</div>
                             </div>
                         </div>
                         <div class="${cloudCardClass}" data-action="compcon" ${cloudCardTitle}>
                             <div class="lancer-item-icon"><i class="mdi mdi-cloud-sync"></i></div>
                             <div class="lancer-item-content">
                                 <div class="lancer-item-name">Comp/Con Cloud</div>
-                                <div class="lancer-item-details">Import or export pilots and NPCs</div>
+                                <div class="lancer-item-details">${isGM ? "Import or export pilots and NPCs" : "Import or export your pilots"}</div>
                             </div>
                         </div>
                     </div>
-                    <div class="lancer-info-box">
+                    ${isGM ? `<div class="lancer-info-box">
                         <i class="fas fa-info-circle"></i>
                         <span><strong>Note:</strong> Custom tier NPCs will have their class modified with custom stats. Choose scaling mode when importing.</span>
-                    </div>
+                    </div>` : ""}
                 </div>
             `,
             buttons: {},
@@ -111,7 +112,10 @@ export class ActorImportDialog extends Dialog
 
             if (action === 'files')
             {
-                await importFromFiles();
+                if (game.user?.isGM)
+                    await importFromFiles();
+                else
+                    await selectAndImportFiles("scaled");
             }
             else if (action === 'compcon')
             {

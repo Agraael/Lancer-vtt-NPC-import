@@ -1530,8 +1530,10 @@
     --cc-mod: #FF9800;
     --cc-loss: #d32f2f;
     --cc-unl: #9C27B0;
+    --cc-lock: #6b6b6b;
 }
 
+.cc-panel [data-st="lock"] { --cc-st: var(--cc-lock); }
 .cc-panel [data-st="new"]  { --cc-st: var(--cc-new); }
 .cc-panel [data-st="ok"]   { --cc-st: var(--cc-ok); }
 .cc-panel [data-st="mod"]  { --cc-st: var(--cc-mod); }

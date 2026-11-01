@@ -23,6 +23,11 @@ function _railHtml(mode)
         <span class="cc-rail-dst">${exporting ? cloud : foundry} <b>UPDATED</b></span>`;
 }
 
+function _countText(pilotCount, npcCount)
+{
+    return game.user.isGM ? `${pilotCount} pilot(s) · ${npcCount} NPC(s)` : `${pilotCount} pilot(s)`;
+}
+
 async function _ensureLoggedIn()
 {
     if (isLoggedIn())
@@ -98,7 +103,7 @@ class CloudActorImportDialog extends Dialog
                 <div class="lancer-dialog-header cc-sync-head">
                     <div class="cc-sync-titles">
                         <div class="lancer-dialog-title">COMP/CON IMPORT</div>
-                        <div class="lancer-dialog-subtitle">${pilots.length} pilot(s) · ${npcs.length} NPC(s)</div>
+                        <div class="lancer-dialog-subtitle">${_countText(pilots.length, npcs.length)}</div>
                     </div>
                     <div class="cc-rail">${_railHtml("import")}</div>
                 </div>
@@ -106,9 +111,9 @@ class CloudActorImportDialog extends Dialog
                     <button type="button" class="cloud-import-tab active" data-tab="pilots">
                         <i class="fas fa-user-astronaut"></i> Pilots <span class="cloud-tab-count">${pilots.length}</span>
                     </button>
-                    <button type="button" class="cloud-import-tab" data-tab="npcs">
+                    ${game.user.isGM ? `<button type="button" class="cloud-import-tab" data-tab="npcs">
                         <i class="fas fa-robot"></i> NPCs <span class="cloud-tab-count">${npcs.length}</span>
-                    </button>
+                    </button>` : ""}
                     <div class="cc-sync-mode">
                         <button type="button" class="active" data-mode="import"><i class="fas fa-download"></i> Import</button>
                         <button type="button" data-mode="export"><i class="fas fa-upload"></i> Export</button>
@@ -244,7 +249,7 @@ class CloudActorImportDialog extends Dialog
             return;
         const pilotCount = this._pilotPanel.size();
         const npcCount = this._npcPanel.size();
-        html.find(".cc-sync-head .lancer-dialog-subtitle").text(`${pilotCount} pilot(s) · ${npcCount} NPC(s)`);
+        html.find(".cc-sync-head .lancer-dialog-subtitle").text(_countText(pilotCount, npcCount));
         html.find(".cloud-import-tab[data-tab='pilots'] .cloud-tab-count").text(pilotCount);
         html.find(".cloud-import-tab[data-tab='npcs'] .cloud-tab-count").text(npcCount);
     }
@@ -314,7 +319,7 @@ export async function openCloudActorImport()
         const cloudItems = fetchCloudItems();
         const [pilots, npcs, knownLids] = await Promise.all([
             fetchPilotsViaV3API(loader.pilotProgress, cloudItems),
-            fetchNPCsViaV3API(loader.npcProgress, cloudItems),
+            game.user.isGM ? fetchNPCsViaV3API(loader.npcProgress, cloudItems) : [],
             collectKnownLids().catch(error =>
             {
                 console.warn("lancer-npc-import | could not index compendium LIDs", error);
@@ -324,7 +329,7 @@ export async function openCloudActorImport()
         loader.close();
         if (pilots.length === 0 && npcs.length === 0)
         {
-            ui.notifications.warn("No pilots or NPCs found in Comp/Con cloud");
+            ui.notifications.warn(game.user.isGM ? "No pilots or NPCs found in Comp/Con cloud" : "No pilots found in Comp/Con cloud");
             return;
         }
         new CloudActorImportDialog(pilots, npcs, knownLids).render(true);

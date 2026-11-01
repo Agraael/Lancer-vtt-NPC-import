@@ -51,3 +51,30 @@ export function cloudSortKey(item)
 {
     return item?.sortkey || item?.SortKey || item?.sk || "";
 }
+
+export const LOCKS = {
+    owner: "Not yours",
+    create: "Needs Create Actors"
+};
+
+export const LOCK_TIPS = {
+    [LOCKS.owner]: "You don't own this actor in Foundry. Ask your GM for ownership.",
+    [LOCKS.create]: "This creates a new actor, which needs the Create Actors permission. Ask your GM for it, or to import it."
+};
+
+export function canEditActor(actor)
+{
+    return !!actor?.isOwner;
+}
+
+export function canCreateActors()
+{
+    return !!game.user?.can("ACTOR_CREATE");
+}
+
+export function actorLock(actor)
+{
+    if (actor)
+        return canEditActor(actor) ? "" : LOCKS.owner;
+    return canCreateActors() ? "" : LOCKS.create;
+}

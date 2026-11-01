@@ -2,7 +2,7 @@
 // organizations, bond, mech item state and a resource refill. Also holds the organization helpers.
 
 import { unwrapData, normalizePilotData, cdnFetch } from "./v3-api.js";
-import { trimText, sameJson } from "./utils.js";
+import { trimText, sameJson, actorLock, canEditActor } from "./utils.js";
 
 const V3_SHARE_CODE = /^[A-Z0-9]{12}$/;
 const SHARE_CODE_URL = "https://api.compcon.app/v3/code";
@@ -28,6 +28,8 @@ export function patchPilotImportReserves()
                 pilotData = JSON.parse(fileData);
                 pilotData = unwrapData(pilotData);
                 normalizePilotData(pilotData);
+                if (Array.isArray(pilotData.mechs))
+                    pilotData.mechs = pilotData.mechs.filter(_isImportableMech);
                 _preserveMechCurrentStats(pilotData);
                 const activeOnly = Array.isArray(pilotData.loadouts) && pilotData.loadouts.length > 1 && pilotData.loadout;
                 normalizedFileData = JSON.stringify(activeOnly ? { ...pilotData, loadouts: [pilotData.loadout] } : pilotData);
@@ -85,6 +87,15 @@ async function _fetchPilotByShareCode(code)
     if (!pilot.ok)
         throw new Error(`CDN ${pilot.status}`);
     return pilot.text();
+}
+
+function _isImportableMech(mechData)
+{
+    const existing = game.actors?.find(actor => typeof actor.is_mech === "function" && actor.is_mech() && actor.system?.lid === mechData?.id);
+    const lock = actorLock(existing);
+    if (lock)
+        ui.notifications.warn(`Skipped mech "${mechData?.name || mechData?.id}": ${lock}. Ask your GM.`, { permanent: true });
+    return !lock;
 }
 
 const _MECH_STAT_MAP = [
@@ -155,7 +166,7 @@ async function _backfillMechItemState(pilot, pilotData)
             continue;
         const candidates = game.actors.filter(actor => typeof actor.is_mech === "function" && actor.is_mech() && actor.system?.lid === mechData.id);
         const mech = candidates.find(actor => actor.system?.pilot?.value === pilot || actor.system?.pilot?.value?.id === pilot.id) || candidates[0];
-        if (!mech)
+        if (!canEditActor(mech))
             continue;
         const updates = [];
         const apply = (item, entry, withProfile) =>
@@ -545,6 +556,8 @@ export async function _refillResources(pilot)
 
     const refillOne = async (actor) =>
     {
+        if (!canEditActor(actor))
+            return;
         const update = {};
         const sys = actor.system;
         const fillKeys = ['hp', 'structure', 'stress', 'repairs'];
